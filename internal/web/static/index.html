@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Packet Node Console</title><link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/bbs.css"></head>
+<body>
+<header><div><span class="eyebrow">PACKET RADIO CONTROL PLANE</span><h1>Packet Node Console</h1></div><div class="node"><i></i><span id="nodeCall">—</span><small id="uptime">uruchamianie…</small></div></header>
+<nav><button id="navTerminal" class="active">Terminal</button><button id="navMailbox">Poczta BBS</button><button disabled>Monitor</button><button disabled>MHeard</button><button disabled>Sessions</button><button disabled>Ports</button><button disabled>Konfiguracja</button></nav>
+<main id="terminalView">
+  <aside>
+    <section><label>Rodzaj połączenia</label><div class="segmented"><button id="modeBBS" class="active">Lokalny BBS</button><button id="modeTelnet">Telnet</button><button id="modeTNC">TNC / Radio</button></div></section>
+    <section id="bbsFields"><p class="hint">Połącz się z BBS-em tego serwera. Następnie wpisz swój znak w terminalu.</p></section>
+    <section id="telnetFields" hidden><label for="host">Adres BBS</label><input id="host" value="127.0.0.1" autocomplete="off"><label for="port">Port TCP</label><input id="port" type="number" min="1" max="65535" value="23"></section>
+    <section id="tncFields" hidden><label for="tncPort">Port Packet Radio</label><select id="tncPort"></select><label for="target">Znak docelowy</label><input id="target" placeholder="SP5BBS-8" maxlength="9" autocomplete="off"><p class="hint">Połączenie przez wybrany port KISS i sesję AX.25.</p></section>
+    <button id="connect" class="primary">Połącz</button><button id="disconnect" class="secondary" disabled>Rozłącz</button>
+    <div class="status"><span id="statusDot"></span><div><small>STATUS</small><strong id="status">GOTOWY</strong></div></div>
+  </aside>
+  <section class="terminal-panel"><div class="terminal-head"><div><span>LIVE TERMINAL</span><strong id="sessionLabel">Lokalny BBS — gotowy</strong></div><button id="clear">Wyczyść ekran</button></div><pre id="screen" tabindex="0" aria-label="Wyjście terminala"></pre><form id="sendForm"><span>&gt;</span><input id="command" autocomplete="off" placeholder="Wpisz tekst i naciśnij Enter" disabled><button disabled>Wyślij</button></form></section>
+</main>
+<section id="mailboxView" class="mailbox" hidden>
+  <div class="mailbar"><div><label for="mailCall">Twój znak</label><input id="mailCall" placeholder="SP5ABC" maxlength="9"></div><button id="mailLogin" class="primary">Otwórz skrzynkę</button><button id="mailPrivate" class="tab active">Prywatne</button><button id="mailBulletins" class="tab">Biuletyny</button><button id="mailCompose" class="primary">Nowa wiadomość</button></div>
+  <div id="mailNotice" class="notice">Podaj znak, aby otworzyć skrzynkę.</div>
+  <div class="mailgrid"><div class="message-list"><table><thead><tr><th>ID</th><th>Typ</th><th>Od</th><th>Do</th><th>Temat</th><th>Data</th></tr></thead><tbody id="messageRows"></tbody></table></div><article id="messageView"><p>Wybierz wiadomość z listy.</p></article></div>
+  <form id="composeForm" class="compose" hidden><h2>Nowa wiadomość</h2><label for="messageType">Typ</label><select id="messageType"><option value="P">Prywatna</option><option value="B">Biuletyn</option></select><label for="messageTo">Adresat / dział</label><input id="messageTo" placeholder="SQ9XYZ"><label for="messageSubject">Temat</label><input id="messageSubject" maxlength="120"><label for="messageBody">Treść</label><textarea id="messageBody" rows="9" maxlength="60000"></textarea><div><button type="submit" class="primary">Wyślij</button><button type="button" id="composeCancel" class="secondary">Anuluj</button></div></form>
+</section>
+<footer><span>LOCAL WEB UI</span><span>BBS + KISS + AX.25</span><span id="terminalCall">TERMINAL —</span></footer>
+<script src="/app.js"></script></body></html>

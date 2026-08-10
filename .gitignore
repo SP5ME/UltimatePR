@@ -1,0 +1,47 @@
+# Reference source repositories (local laboratory only)
+/Zródał/
+/Źródła/
+
+# Build
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Runtime
+/data/
+/logs/
+/backup/
+*.log
+*.pid
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local configuration and secrets
+config.yaml
+config.yml
+.env
+.env.*
+!.env.example
+/secrets/
+*.key
+*.pem
+
+# IDE / OS / temporary
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+/tmp/
+*.tmp
+*.bak
+.docx_qa/
+.docx_pdf/
+

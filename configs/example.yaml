@@ -1,0 +1,25 @@
+server:
+  callsign: SP5ABC
+  ssid: 7
+
+web:
+  listen: "127.0.0.1:8080"
+
+ports:
+  - id: radio-2m
+    type: kiss-tcp
+    host: 127.0.0.1
+    port: 8001
+    channel: 0
+    max_frame_bytes: 4096
+    reconnect_seconds: 5
+
+terminal:
+  callsign: SP5ABC
+  ssid: 9
+
+bbs:
+  enabled: true
+  listen: "127.0.0.1:8023"
+  database: "data/bbs.json"
+  title: "Modern Packet BBS"
