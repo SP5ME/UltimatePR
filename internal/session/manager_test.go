@@ -101,3 +101,32 @@ func TestConnectTimeout(t *testing.T) {
 		t.Fatalf("err=%v state=%s", err, m.State())
 	}
 }
+
+func TestConnectIncludesDigipeaterPath(t *testing.T) {
+	m, sent := testManager(t)
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1", "DIGI1-2", "DIGI2-3") }()
+	f, err := ax25.Decode(<-sent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Digipeaters) != 2 || f.Digipeaters[0].String() != "DIGI1-2" || f.Digipeaters[1].String() != "DIGI2-3" {
+		t.Fatalf("digipeaters=%v", f.Digipeaters)
+	}
+	m.Handle("radio", response(ax25.TypeUA, 0))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKeepAliveUsesSupervisoryFrame(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.KeepAlive(ctx, 5*time.Millisecond)
+	f, err := ax25.Decode(<-sent)
+	if err != nil || f.Type != ax25.TypeRR || !f.PollFinal || len(f.Payload) != 0 {
+		t.Fatalf("keepalive=%#v err=%v", f, err)
+	}
+}

@@ -7,15 +7,34 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/packet-radio/modernbbs/internal/language"
 )
 
 type Server struct {
-	Listen, Title, Node string
-	Store               *Store
-	Log                 *slog.Logger
+	Listen, Title, Node, Address, Language string
+	Store                                  *Store
+	Log                                    *slog.Logger
+	OnMessage                              func()
+	chatMu                                 sync.Mutex
+	chat                                   map[*chatClient]struct{}
+}
+
+type chatClient struct {
+	call string
+	w    io.Writer
+	mu   sync.Mutex
+}
+
+func (c *chatClient) send(text string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, _ = io.WriteString(c.w, text)
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -43,6 +62,57 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Serve(r io.Reader, w io.Writer) {
 	in := bufio.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
+	lang := language.Normalize(s.Language)
+	fmt.Fprintf(w, "\r\n%s [%s] ModernBBS %s\r\n%s", s.Title, s.Node, BuildVersion, language.T(lang, "callsign"))
+	if !in.Scan() {
+		return
+	}
+	call, err := normalizeCall(in.Text())
+	if err != nil {
+		fmt.Fprint(w, language.T(lang, "invalid_call"))
+		return
+	}
+	if err = s.Store.Register(call); err != nil {
+		fmt.Fprint(w, language.T(lang, "db_error"))
+		return
+	}
+	s.ServeSessionLanguage(call, lang, in, w)
+}
+
+// ServeAX25 serves a station whose identity was obtained from the connected
+// AX.25 link. No additional text callsign prompt is used on radio links.
+func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
+	in := bufio.NewScanner(r)
+	in.Buffer(make([]byte, 1024), 64*1024)
+	lang := language.Normalize(s.Language)
+	fmt.Fprintf(w, "\r\n%s [%s] ModernBBS %s\r\n", s.Title, s.Node, BuildVersion)
+	s.ServeSessionLanguage(call, lang, in, w)
+}
+
+func (s *Server) ServeSession(call string, in *bufio.Scanner, w io.Writer) {
+	s.ServeSessionLanguage(call, s.Language, in, w)
+}
+func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io.Writer) {
+	lang = language.Normalize(lang)
+	call, err := normalizeCall(call)
+	if err != nil {
+		fmt.Fprint(w, language.T(lang, "invalid_call"))
+		return
+	}
+	if err = s.Store.Register(call); err != nil {
+		fmt.Fprint(w, language.T(lang, "db_error"))
+		return
+	}
+	if saved := s.Store.Language(call); saved != "" {
+		lang = language.Normalize(saved)
+	}
+	profile, exists := s.Store.Profile(call)
+	if !exists || !profile.Completed {
+		profile = s.registerProfile(call, lang, profile, in, w)
+	}
+	profile.LastSeen = time.Now().UTC()
+	_ = s.Store.SaveProfile(profile)
+	fmt.Fprintf(w, language.T(lang, "hello_bbs"), call)
 	line := func(prompt string) (string, bool) {
 		fmt.Fprint(w, prompt)
 		if !in.Scan() {
@@ -50,20 +120,6 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 		}
 		return strings.TrimSpace(in.Text()), true
 	}
-	fmt.Fprintf(w, "\r\n%s [%s]\r\nCallsign: ", s.Title, s.Node)
-	if !in.Scan() {
-		return
-	}
-	call, err := normalizeCall(in.Text())
-	if err != nil {
-		fmt.Fprint(w, "Invalid callsign.\r\n")
-		return
-	}
-	if err = s.Store.Register(call); err != nil {
-		fmt.Fprintln(w, "Database error.")
-		return
-	}
-	fmt.Fprintf(w, "Hello %s. Type H for help.\r\n", call)
 	for {
 		raw, ok := line(s.Node + "> ")
 		if !ok {
@@ -76,30 +132,99 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 		cmd := strings.ToUpper(f[0])
 		switch cmd {
 		case "H", "HELP", "?":
-			fmt.Fprint(w, "H help | L private list | LB bulletins | R <id> read | S <call> send | SB <topic> bulletin | K <id> delete | B bye\r\n")
+			fmt.Fprint(w, language.T(lang, "bbs_help"))
+		case "I", "INFO":
+			fmt.Fprintf(w, "%s [%s] %s\r\n", s.Title, s.Node, s.Address)
+		case "PROFILE":
+			s.printProfile(w, profile)
+		case "NAME":
+			if len(f) < 2 {
+				fmt.Fprintf(w, "Name: %s\r\n", profile.Name)
+				continue
+			}
+			profile.Name = strings.Join(f[1:], " ")
+			_ = s.Store.SaveProfile(profile)
+			fmt.Fprint(w, "OK\r\n")
+		case "HOMEBBS":
+			if len(f) < 2 {
+				fmt.Fprintf(w, "Home BBS: %s\r\n", profile.HomeBBS)
+				continue
+			}
+			profile.HomeBBS = strings.ToUpper(f[1])
+			if e := s.Store.SaveProfile(profile); e != nil {
+				fmt.Fprintf(w, "Error: %v\r\n", e)
+			} else {
+				fmt.Fprint(w, "OK\r\n")
+			}
+		case "QTH":
+			if len(f) < 2 {
+				fmt.Fprintf(w, "QTH: %s\r\n", profile.QTH)
+				continue
+			}
+			profile.QTH = strings.Join(f[1:], " ")
+			_ = s.Store.SaveProfile(profile)
+			fmt.Fprint(w, "OK\r\n")
+		case "LOC", "LOCATOR":
+			if len(f) < 2 {
+				fmt.Fprintf(w, "Locator: %s\r\n", profile.Locator)
+				continue
+			}
+			profile.Locator = strings.ToUpper(f[1])
+			_ = s.Store.SaveProfile(profile)
+			fmt.Fprint(w, "OK\r\n")
+		case "C", "T", "TALK", "CONV", "CONVERS":
+			s.convers(call, in, w, lang)
+		case "LANG", "LANGUAGE":
+			if len(f) < 2 || (strings.ToUpper(f[1]) != "PL" && strings.ToUpper(f[1]) != "EN") {
+				fmt.Fprint(w, language.T(lang, "lang_usage"))
+				continue
+			}
+			lang = language.Normalize(f[1])
+			_ = s.Store.SetLanguage(call, lang)
+			profile.Language = lang
+			_ = s.Store.SaveProfile(profile)
+			fmt.Fprint(w, language.T(lang, "lang_set"))
 		case "L", "LM":
-			s.printList(w, call, false)
+			s.printList(w, call, false, lang)
+		case "N", "NEW", "RN":
+			ms := s.Store.ListNew(call)
+			if len(ms) == 0 {
+				fmt.Fprint(w, language.T(lang, "no_new"))
+			} else {
+				s.printMessages(w, call, ms)
+			}
+		case "LS":
+			ms := s.Store.ListSent(call)
+			if len(ms) == 0 {
+				fmt.Fprint(w, language.T(lang, "no_messages"))
+			} else {
+				s.printMessages(w, call, ms)
+			}
 		case "LB":
-			s.printList(w, call, true)
+			s.printList(w, call, true, lang)
 		case "R", "READ":
 			if len(f) < 2 {
-				fmt.Fprint(w, "Usage: R <id>\r\n")
+				fmt.Fprint(w, language.T(lang, "usage_read"))
 				continue
 			}
 			id, e := strconv.ParseInt(f[1], 10, 64)
 			if e != nil {
-				fmt.Fprint(w, "Invalid id.\r\n")
+				fmt.Fprint(w, language.T(lang, "invalid_id"))
 				continue
 			}
 			m, e := s.Store.Read(call, id)
 			if e != nil {
-				fmt.Fprintf(w, "Error: %v\r\n", e)
+				fmt.Fprintf(w, language.T(lang, "error"), e)
 			} else {
-				fmt.Fprintf(w, "#%d %s from %s to %s %s\r\n%s\r\n", m.ID, m.Type, m.From, m.To, m.Subject, m.Body)
+				to := m.To
+				if m.At != "" {
+					to += "@" + m.At
+				}
+				fmt.Fprintf(w, "#%d %s from %s to %s BID %s %s\r\n%s\r\n", m.ID, m.Type, m.From, to, m.BID, m.Subject, m.Body)
 			}
 		case "K", "KILL":
 			if len(f) < 2 {
-				fmt.Fprint(w, "Usage: K <id>\r\n")
+				fmt.Fprint(w, language.T(lang, "usage_kill"))
 				continue
 			}
 			id, e := strconv.ParseInt(f[1], 10, 64)
@@ -107,47 +232,210 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 				e = s.Store.Delete(call, id)
 			}
 			if e != nil {
-				fmt.Fprintf(w, "Error: %v\r\n", e)
+				fmt.Fprintf(w, language.T(lang, "error"), e)
 			} else {
-				fmt.Fprint(w, "Deleted.\r\n")
+				fmt.Fprint(w, language.T(lang, "deleted"))
 			}
-		case "S", "SEND":
+		case "S", "SP", "SEND":
 			if len(f) < 2 {
-				fmt.Fprint(w, "Usage: S <callsign>\r\n")
+				fmt.Fprint(w, language.T(lang, "usage_send"))
 				continue
 			}
-			s.compose(in, w, call, "P", strings.ToUpper(f[1]))
+			to := strings.ToUpper(f[1])
+			if !strings.Contains(to, "@") {
+				to = s.Store.AddressFor(to)
+			}
+			s.compose(in, w, call, "P", to, lang)
+		case "RE", "REPLY":
+			if len(f) < 2 {
+				fmt.Fprint(w, language.T(lang, "usage_reply"))
+				continue
+			}
+			id, e := strconv.ParseInt(f[1], 10, 64)
+			if e != nil {
+				fmt.Fprint(w, language.T(lang, "invalid_id"))
+				continue
+			}
+			m, e := s.Store.Read(call, id)
+			if e != nil {
+				fmt.Fprintf(w, language.T(lang, "error"), e)
+				continue
+			}
+			s.composePreset(in, w, call, m.From, fmt.Sprintf(language.T(lang, "reply_subject"), m.Subject), lang)
+		case "FS", "FSTATUS":
+			if len(f) < 2 {
+				fmt.Fprint(w, language.T(lang, "usage_forward"))
+				continue
+			}
+			id, e := strconv.ParseInt(f[1], 10, 64)
+			if e != nil {
+				fmt.Fprint(w, language.T(lang, "invalid_id"))
+				continue
+			}
+			m, e := s.Store.Read(call, id)
+			if e != nil {
+				fmt.Fprintf(w, language.T(lang, "error"), e)
+				continue
+			}
+			if len(m.Forward) == 0 {
+				fmt.Fprint(w, language.T(lang, "forward_none"))
+				continue
+			}
+			for peer, st := range m.Forward {
+				fmt.Fprintf(w, language.T(lang, "forward_line"), peer, st.Status, st.Attempts, st.LastError)
+			}
 		case "SB":
 			to := "ALL"
 			if len(f) > 1 {
 				to = strings.ToUpper(f[1])
 			}
-			s.compose(in, w, call, "B", to)
+			s.compose(in, w, call, "B", to, lang)
 		case "B", "BYE", "Q", "QUIT":
 			fmt.Fprint(w, "73!\r\n")
 			return
 		default:
-			fmt.Fprint(w, "Unknown command. Type H.\r\n")
+			fmt.Fprint(w, language.T(lang, "unknown"))
 		}
 	}
 }
-func (s *Server) printList(w io.Writer, call string, b bool) {
-	ms := s.Store.List(call, b)
-	if len(ms) == 0 {
-		fmt.Fprint(w, "No messages.\r\n")
-		return
+
+func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Scanner, w io.Writer) UserProfile {
+	p.Callsign = call
+	if language.Normalize(lang) == "pl" {
+		fmt.Fprint(w, "Pierwsze polaczenie - konfiguracja profilu.\r\nImie: ")
+	} else {
+		fmt.Fprint(w, "First connection - profile setup.\r\nName: ")
 	}
-	for _, m := range ms {
-		fmt.Fprintf(w, "%5d %-1s %-9s %-9s %s\r\n", m.ID, m.Type, m.From, m.To, m.Subject)
+	if in.Scan() {
+		p.Name = strings.TrimSpace(in.Text())
+	}
+	if p.Name == "" {
+		p.Name = call
+	}
+	if language.Normalize(lang) == "pl" {
+		fmt.Fprintf(w, "Domyslny BBS [%s]: ", s.Address)
+	} else {
+		fmt.Fprintf(w, "Home BBS [%s]: ", s.Address)
+	}
+	if in.Scan() {
+		p.HomeBBS = strings.ToUpper(strings.TrimSpace(in.Text()))
+	}
+	if p.HomeBBS == "" {
+		p.HomeBBS = strings.ToUpper(strings.TrimSpace(s.Address))
+		if p.HomeBBS == "" {
+			p.HomeBBS = s.Node
+		}
+	}
+	if language.Normalize(lang) == "pl" {
+		fmt.Fprint(w, "QTH (opcjonalnie): ")
+	} else {
+		fmt.Fprint(w, "QTH (optional): ")
+	}
+	if in.Scan() {
+		p.QTH = strings.TrimSpace(in.Text())
+	}
+	if language.Normalize(lang) == "pl" {
+		fmt.Fprint(w, "Locator (opcjonalnie): ")
+	} else {
+		fmt.Fprint(w, "Locator (optional): ")
+	}
+	if in.Scan() {
+		p.Locator = strings.ToUpper(strings.TrimSpace(in.Text()))
+	}
+	p.Language, p.Completed = language.Normalize(lang), true
+	if err := s.Store.SaveProfile(p); err != nil {
+		p.Completed = false
+		fmt.Fprintf(w, "Error: %v\r\n", err)
+	} else if language.Normalize(lang) == "pl" {
+		fmt.Fprint(w, "Profil zapisany.\r\n")
+	} else {
+		fmt.Fprint(w, "Profile saved.\r\n")
+	}
+	return p
+}
+func (s *Server) printProfile(w io.Writer, p UserProfile) {
+	fmt.Fprintf(w, "Call: %s\r\nName: %s\r\nHome BBS: %s\r\nQTH: %s\r\nLocator: %s\r\nLanguage: %s\r\n", p.Callsign, p.Name, p.HomeBBS, p.QTH, p.Locator, strings.ToUpper(p.Language))
+}
+func (s *Server) convers(call string, in *bufio.Scanner, w io.Writer, lang string) {
+	c := &chatClient{call: call, w: w}
+	s.chatMu.Lock()
+	if s.chat == nil {
+		s.chat = map[*chatClient]struct{}{}
+	}
+	s.chat[c] = struct{}{}
+	s.chatMu.Unlock()
+	s.chatBroadcast("* " + call + " joined CONV\r\n")
+	defer func() {
+		s.chatMu.Lock()
+		delete(s.chat, c)
+		s.chatMu.Unlock()
+		s.chatBroadcast("* " + call + " left CONV\r\n")
+	}()
+	c.send("CONV: /WHO users, /EX leave\r\n")
+	for {
+		c.send("conv> ")
+		if !in.Scan() {
+			return
+		}
+		text := strings.TrimSpace(in.Text())
+		if strings.EqualFold(text, "/EX") || strings.EqualFold(text, "/EXIT") {
+			return
+		}
+		if strings.EqualFold(text, "/WHO") {
+			s.chatMu.Lock()
+			var calls []string
+			for x := range s.chat {
+				calls = append(calls, x.call)
+			}
+			s.chatMu.Unlock()
+			sort.Strings(calls)
+			c.send("Users: " + strings.Join(calls, ", ") + "\r\n")
+			continue
+		}
+		if text != "" {
+			s.chatBroadcast("[" + call + "] " + language.ASCII(text) + "\r\n")
+		}
 	}
 }
-func (s *Server) compose(in *bufio.Scanner, w io.Writer, from, kind, to string) {
-	fmt.Fprint(w, "Subject: ")
+func (s *Server) chatBroadcast(text string) {
+	s.chatMu.Lock()
+	all := make([]*chatClient, 0, len(s.chat))
+	for c := range s.chat {
+		all = append(all, c)
+	}
+	s.chatMu.Unlock()
+	for _, c := range all {
+		c.send(text)
+	}
+}
+func (s *Server) printList(w io.Writer, call string, b bool, lang string) {
+	ms := s.Store.List(call, b)
+	if len(ms) == 0 {
+		fmt.Fprint(w, language.T(lang, "no_messages"))
+		return
+	}
+	s.printMessages(w, call, ms)
+}
+func (s *Server) printMessages(w io.Writer, call string, ms []Message) {
+	for _, m := range ms {
+		mark := "R"
+		if !m.IsRead(call) && m.To == strings.ToUpper(call) {
+			mark = "N"
+		}
+		to := m.To
+		if m.At != "" {
+			to += "@" + m.At
+		}
+		fmt.Fprintf(w, "%5d %s %-1s %-9s %-20s %s\r\n", m.ID, mark, m.Type, m.From, to, m.Subject)
+	}
+}
+func (s *Server) compose(in *bufio.Scanner, w io.Writer, from, kind, to, lang string) {
+	fmt.Fprint(w, language.T(lang, "subject"))
 	if !in.Scan() {
 		return
 	}
 	sub := strings.TrimSpace(in.Text())
-	fmt.Fprint(w, "Enter text, finish with /EX on a separate line.\r\n")
+	fmt.Fprint(w, language.T(lang, "body"))
 	var lines []string
 	for in.Scan() {
 		if strings.EqualFold(strings.TrimSpace(in.Text()), "/EX") {
@@ -157,8 +445,32 @@ func (s *Server) compose(in *bufio.Scanner, w io.Writer, from, kind, to string) 
 	}
 	m, e := s.Store.Send(kind, from, to, sub, strings.Join(lines, "\r\n"))
 	if e != nil {
-		fmt.Fprintf(w, "Error: %v\r\n", e)
+		fmt.Fprintf(w, language.T(lang, "error"), e)
 		return
 	}
-	fmt.Fprintf(w, "Message #%d saved.\r\n", m.ID)
+	if s.OnMessage != nil {
+		s.OnMessage()
+	}
+	fmt.Fprintf(w, language.T(lang, "saved"), m.ID)
+}
+
+func (s *Server) composePreset(in *bufio.Scanner, w io.Writer, from, to, subject, lang string) {
+	fmt.Fprintf(w, "%s%s\r\n", language.T(lang, "subject"), subject)
+	fmt.Fprint(w, language.T(lang, "body"))
+	var lines []string
+	for in.Scan() {
+		if strings.EqualFold(strings.TrimSpace(in.Text()), "/EX") {
+			break
+		}
+		lines = append(lines, in.Text())
+	}
+	m, e := s.Store.Send("P", from, to, subject, strings.Join(lines, "\r\n"))
+	if e != nil {
+		fmt.Fprintf(w, language.T(lang, "error"), e)
+		return
+	}
+	if s.OnMessage != nil {
+		s.OnMessage()
+	}
+	fmt.Fprintf(w, language.T(lang, "saved"), m.ID)
 }

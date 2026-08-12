@@ -1,0 +1,273 @@
+MODERN PACKET RADIO BBS — INSTRUKCJA UŻYTKOWNIKA I ADMINISTRATORA
+Wersja robocza, aktualizowana wraz z rozwojem programu
+Ostatnia aktualizacja: 12.08.2026
+
+WAŻNE DLA ROZWOJU
+Ten plik jest żywą instrukcją projektu. Każda nowa lub zmieniona funkcja
+widoczna dla użytkownika musi zostać opisana równocześnie tutaj oraz w
+docs/USER-MANUAL-EN.txt. Wersje PL i EN muszą opisywać ten sam stan programu.
+
+1. PRZEZNACZENIE
+
+Modern Packet Radio BBS jest niezależnym serwerem Packet Radio. Łączy funkcje:
+- noda AX.25, czyli punktu dostępowego i routera;
+- BBS, czyli skrzynki pocztowej z forwardingiem;
+- terminala AX.25 i Telnet w przeglądarce;
+- transportów KISS TCP oraz AXUDP;
+- MHeard, monitora ramek, beaconu i historii rozmów.
+
+Projekt jest inspirowany zachowaniem popularnych rozwiązań, takich jak LinBPQ
+i URONode, ale kod jest niezależną implementacją. Celem jest zgodność z AX.25
+oraz protokołami wymiany poczty używanymi przez istniejące BBS-y.
+
+2. WYMAGANIA I URUCHOMIENIE
+
+Wymagane jest Go 1.24 lub nowsze. Na Windows najprościej uruchomić:
+
+  H:\BBS Serwer\run-test-windows.cmd
+
+Skrypt buduje aktualny program i otwiera widoczne okno PowerShell. Zatrzymanie:
+
+  Ctrl+C
+
+Domyślne adresy:
+- panel WWW: http://127.0.0.1:8080
+- NODE Telnet: 127.0.0.1:8010
+- BBS Telnet: 127.0.0.1:8023
+- forwarding BBS: 127.0.0.1:7300
+- TNC KISS TCP: 127.0.0.1:8001
+
+Ręczne uruchomienie:
+
+  go run ./cmd/server -config configs/example.yaml
+
+Testy przed użyciem:
+
+  go test ./...
+  go vet ./...
+
+3. ZNAKI I SSID
+
+Zaleca się różne SSID dla usług korzystających z jednego znaku bazowego:
+
+  terminal operatora: SP5ME       (SSID 0)
+  NODE:              SP5ME-7
+  BBS:               SP5ME-8
+
+SSID 0 jest zapisywane i wyświetlane bez końcówki „-0”. Rozdzielenie znaków
+pozwala serwerowi jednoznacznie kierować przychodzące sesje AX.25.
+
+4. PANEL WWW I STATUS
+
+Nagłówek pokazuje rzeczywisty stan:
+- znak NODE i etykietę NODE;
+- znak BBS i etykietę BBS;
+- transporty, np. KISS TCP RADIO-2M;
+- zielona dioda: usługa/port działa;
+- czerwona dioda: usługa jest wyłączona lub port rozłączony.
+
+Główne przyciski:
+- Terminal — terminal wielosesyjny;
+- Beacon — natychmiastowe wysłanie beaconu AX.25 UI;
+- Monitor — podgląd ramek RX/TX (funkcja będzie rozwijana);
+- Dźwięk — włącza lub wyłącza powiadomienia stacji operatora. Połączenie
+  radiowe AX.25 skierowane do znaku Terminala otwiera sesję przychodzącą i
+  uruchamia trzy krótkie tony, a odebrany w niej tekst jeden ton. Połączenia
+  kierowane do znaków NODE i BBS są bezgłośne. Przeglądarka wymaga kliknięcia
+  na stronie, zanim pozwoli odtwarzać dźwięk. Ustawienie jest zapamiętywane
+  w danej przeglądarce.
+- Konfiguracja — formularze wszystkich ustawień.
+
+5. TERMINAL WIELOSESYJNY
+
+Obszar rozmowy pokazuje wyłącznie tekst wysłany i odebrany. Komunikaty
+techniczne aplikacji nie tworzą dymków. Bieżący stan jest widoczny w nagłówku
+terminala: Gotowy, Łączenie, Połączono, Wysyłanie, Rozłączanie albo Błąd.
+
+Dostępne typy połączeń:
+- Lokalny BBS — połączenie z BBS-em tego serwera;
+- Telnet — połączenie TCP z podanym hostem i portem;
+- TNC / Radio — połączenie AX.25 przez wybrany port.
+
+Domyślnie wybrany jest tryb TNC / Radio. „Lokalny BBS” zestawia bezpośrednie
+połączenie TCP z nasłuchem BBS skonfigurowanym w tej samej aplikacji. Nie
+wykorzystuje TNC, kanału radiowego ani zewnętrznego serwera Telnet.
+
+Nie trzeba przełączać terminala na „Lokalny BBS”. Jeżeli w trybie TNC / Radio
+operator jako cel poda dokładny znak własnego BBS (np. SP5ME-8), serwer
+automatycznie kieruje połączenie do lokalnego BBS. Port radiowy i DIGI są wtedy
+pomijane, a do TNC nie jest wysyłana żadna ramka. Pozostałe znaki są obsługiwane
+normalnie przez TNC. Wielkość liter nie ma znaczenia, natomiast SSID ma.
+
+Dla TNC należy podać:
+- dwuklik na stacji w MHeard rozpoczyna nową sesję przez ostatnio słyszany port;
+- jeśli sesja z tym znakiem już trwa, dwuklik przełącza na jej kartę zamiast
+  zestawiać drugie połączenie;
+- karta znika po rozłączeniu, a odebrany tekst w nieaktywnej sesji oznacza ją
+  migającą czerwoną ramką do czasu otwarcia rozmowy;
+- pojedyncze kliknięcie Historii pokazuje rozmowę, a dwuklik wpisu radiowego
+  ponawia połączenie z zapisanym znakiem, portem i trasą DIGI;
+- port, np. radio-2m;
+- znak docelowy, np. SR5DDD;
+- opcjonalną trasę DIGI/VIA.
+
+Przykłady trasy:
+
+  SR5XYZ-7
+  SR5XYZ-7, SR5ABC-3
+
+Znaki DIGI można rozdzielać przecinkiem, spacją lub średnikiem. Są one
+kodowane w polu adresowym każdej ramki AX.25, a nie w treści rozmowy.
+
+Przycisk „Nowa sesja” tworzy niezależną kartę. Można jednocześnie utrzymywać
+kilka sesji Telnet/BBS/AX.25 i przełączać je w dolnym pasku. Każda sesja AX.25
+ma niezależne numery sekwencyjne, potwierdzenia i stan łącza, ale wszystkie
+dzielą jedno radio i kolejkę KISS.
+
+Terminal wyświetla odebrane wypowiedzi po lewej, a tekst operatora po prawej.
+Każda z trzech kolumn — historia, rozmowa i MHeard — przewija się niezależnie.
+
+6. ZAMYKANIE STRONY I PODTRZYMANIE
+
+Zamknięcie strony lub utrata jej WebSocketu kończy wyłącznie sesje utworzone
+przez tę stronę:
+- AX.25 jest zamykane przez DISC/UA (maks. 10 s oczekiwania);
+- Telnet jest zamykany przez TCP;
+- NODE, BBS, forwarding i sesje innych użytkowników działają dalej.
+
+Aktywna sesja AX.25 wysyła nadzorczą ramkę RR Poll co 5 minut. Nie zawiera ona
+tekstu i służy podtrzymaniu łącza. Telnet korzysta z TCP keepalive i nie ma
+sztucznego 90-sekundowego limitu ciszy.
+
+7. HISTORIA ROZMÓW
+
+Lewy panel zawiera tylko połączenia faktycznie zestawione:
+- AX.25 dopiero po odpowiedzi UA;
+- Telnet po połączeniu TCP;
+- lokalny BBS po otwarciu jego portu.
+
+Nie zapisuje nieudanych prób, beaconów, MHeard, monitora ani forwardingu B2F.
+Kliknięcie historii otwiera rozmowę tylko do odczytu. Domyślne limity:
+- 100 stacji;
+- 10 sesji na stację;
+- 50 linii na stację;
+- 5 MB łącznie;
+- 90 dni retencji;
+- plik data/history.json.
+
+8. MHEARD I MONITOR
+
+Przy każdym znaku w MHeard i Historii znajduje się dioda aktywności:
+- zielona — ostatnia aktywność była mniej niż 15 minut temu;
+- żółta — od 15 do 45 minut temu;
+- czerwona — ponad 45 minut temu.
+Kolory zielony i żółty są przeliczane lokalnie co 30 sekund. Po przejściu na
+czerwony wpis nie jest dalej przeliczany; nowe odebranie lub rozmowa ustawia
+nowy czas aktywności i ponownie uruchamia cykl.
+Historia i MHeard współdzielą najnowszy czas aktywności dla tego samego pełnego
+znaku (łącznie z SSID), dlatego jego kolor jest jednakowy w obu panelach.
+
+MHeard jest aktualizowany z faktycznie odebranych ramek. Pokazuje znak, port,
+czas ostatniego odbioru i liczbę ramek. Najnowsze stacje są na górze.
+
+Monitor pokazuje czas, RX/TX, port, źródło, cel, typ i długość ramki. Obecna
+wersja jest podstawowa i będzie rozwijana.
+
+9. TNC, KISS TCP I RADIO
+
+Program TNC (np. Direwolf) powinien udostępniać serwer KISS TCP. ModernBBS jest
+klientem i domyślnie łączy się z 127.0.0.1:8001. Jeden TNC i jedno radio mogą
+obsługiwać terminal, NODE, BBS i forwarding. Ramki są rozdzielane według portu,
+znaku lokalnego i zdalnego; wszystkie usługi współdzielą przepustowość kanału.
+
+10. BEACON
+
+Beacon jest ramką AX.25 UI z PID F0. Przycisk Beacon wysyła go natychmiast.
+Automat konfiguruje się w sekcji Stacja:
+- port;
+- cel, domyślnie BEACON;
+- tekst;
+- interwał w minutach, domyślnie 10;
+- włącznik automatycznego wysyłania.
+
+11. NODE
+
+NODE nasłuchuje przez Telnet i pod własnym znakiem AX.25. Typowe polecenia:
+
+  HELP, INFO, NODES, ROUTES, PORTS, SERVICES, MHEARD, USERS, C BBS, BYE
+
+Polecenia nie rozróżniają wielkich i małych liter. C BBS otwiera lokalny BBS.
+
+12. BBS
+
+Przy pierwszym wejściu BBS tworzy trwały profil i pyta o imię, Home BBS, QTH
+i locator. Enter przy Home BBS zatwierdza adres lokalnego BBS. PROFILE pokazuje
+profil; NAME, HOMEBBS, QTH, LOC i LANG zmieniają jego pola. Jeśli `S ZNAK` nie
+zawiera `@BBS`, znany Home BBS odbiorcy jest dodawany automatycznie. Jawny
+adres wpisany przez nadawcę ma zawsze pierwszeństwo.
+
+CONV (także C, T i TALK) otwiera lokalną rozmowę na żywo. `/WHO` wyświetla
+uczestników, a `/EX` opuszcza pokój. Tekst CONV nie jest pocztą, nie trafia do
+bazy wiadomości i nie jest forwardowany do innych BBS-ów.
+
+BBS przyjmuje połączenia Telnet oraz AX.25. W sesji radiowej znak użytkownika
+pochodzi z nagłówka AX.25. Najważniejsze polecenia:
+
+  H                 pomoc
+  I                 informacje
+  L / LM            lista wiadomości
+  LN / N            nowe wiadomości
+  LS                wysłane
+  LB                biuletyny
+  R <id>            odczyt
+  RE <id>           odpowiedź
+  S / SP <znak>     wiadomość prywatna
+  SB <obszar>       biuletyn
+  FS <id>           stan forwardingu
+  K <id>            usunięcie
+  LANG PL / EN      język sesji
+  B                 powrót/wyjście
+
+Treść wiadomości kończy linia /EX. Polecenia i /EX nie rozróżniają wielkości
+liter. Tekst protokołowy i radiowy jest wysyłany bez polskich znaków.
+
+13. FORWARDING BBS
+
+Forwarding obsługuje wymianę B2F/FBB z LZHUF. Partner może być osiągany przez
+Telnet (często port 7300) albo przez node. Konfiguracja określa znak partnera,
+transport, host/port lub via_node, harmonogram, trasy prywatne oraz obszary
+biuletynów. Domyślny interwał automatycznego forwardingu wynosi 5 minut.
+
+Nie należy włączać partnera zewnętrznego bez potwierdzonych parametrów, znaków,
+tras i zgody administratora drugiego BBS-u.
+
+14. KONFIGURACJA I RESTART
+
+Formularze są podzielone na Stacja, NODE, BBS i TNC/Radio. „Sprawdź i zapisz”:
+1. waliduje ustawienia;
+2. zapisuje configs/example.yaml;
+3. żąda kontrolowanego restartu;
+4. skrypt Windows uruchamia serwer ponownie;
+5. strona czeka i odświeża się automatycznie.
+
+Ctrl+C zatrzymuje program bez restartu.
+
+15. PLIKI DANYCH I KOPIE
+
+Najważniejsze pliki:
+- configs/example.yaml — konfiguracja;
+- data/bbs.json — wiadomości i użytkownicy BBS;
+- data/history.json — ograniczona historia rozmów;
+- .runtime/ — pliki wykonywalne i logi testowe.
+
+Przed większą zmianą konfiguracji warto wykonać kopię katalogu data i pliku
+configs/example.yaml. Nie należy edytować plików danych podczas pracy serwera.
+
+16. OGRANICZENIA WERSJI ROBOCZEJ
+
+- AX.25 modulo 8 i jedno niepotwierdzone I-frame na sesję;
+- podstawowy monitor;
+- wymagane są dalsze testy wielu sesji na rzeczywistym kanale radiowym;
+- raw AXIP (IP protocol 93) nie jest tym samym co AXUDP i nie jest jeszcze
+  traktowany jako gotowy transport;
+- przed pracą bez nadzoru wymagane są testy z używanym TNC i radiem.

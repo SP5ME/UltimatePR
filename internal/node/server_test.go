@@ -1,0 +1,33 @@
+package node
+
+import (
+	"bytes"
+	"io"
+	"log/slog"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/packet-radio/modernbbs/internal/bbs"
+)
+
+func TestNodeEntersBBSAndReturns(t *testing.T) {
+	store, err := bbs.Open(filepath.Join(t.TempDir(), "bbs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.SaveProfile(bbs.UserProfile{Callsign: "SP5AAA", Name: "Test", HomeBBS: "SP5ABC-8", Language: "en", Completed: true}); err != nil {
+		t.Fatal(err)
+	}
+	mail := &bbs.Server{Title: "Test BBS", Node: "SP5ABC-8", Language: "en", Store: store, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	router := New(nil, nil, []Service{{Name: "BBS", Callsign: "SP5ABC-8", Command: "BBS", Enabled: true}})
+	srv := &Server{Callsign: "SP5ABC-7", Alias: "SP5ND", Language: "en", Router: router, BBS: mail, Ports: []string{"radio-2m"}}
+	var out bytes.Buffer
+	srv.Serve(strings.NewReader("SP5AAA\nSERVICES\nC BBS\nL\nB\nPORTS\nBYE\n"), &out)
+	text := out.String()
+	for _, want := range []string{"SP5ND:SP5ABC-7 NODE", "SP5ABC-8", "Hello SP5AAA", "Returned to node", "radio-2m", "73!"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q:\n%s", want, text)
+		}
+	}
+}

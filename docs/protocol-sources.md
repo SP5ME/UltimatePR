@@ -48,7 +48,15 @@ target and public format are documented.
 
 ## FBB forwarding
 
-Deferred beyond milestone one. `pyBBS` FWD1 is explicitly not treated as FBB.
-The future implementation must document the exact FBB proposal, block and
-compression specifications used by interoperability tests.
+The direct BBS forwarding port implements open B2F with SID capability
+negotiation, `FC` proposal blocks, `F>` checksums, `FS` selection, LZHUF
+compression and `FF`/`FQ` reverse-forwarding turns. The implementation uses
+the MIT-licensed `wl2k-go` protocol and codec package and is adapted to the
+ModernBBS store and routing layer. Primary specifications:
 
+- https://www.f6fbb.org/protocole.html
+- https://www.winlink.org/B2F
+
+`pyBBS` FWD1 is explicitly not treated as FBB. Classical ASCII/B0/B1 fallback,
+secure `;PQ`/`;PR` login and cross-implementation LinBPQ transcripts remain
+explicit interoperability gates before external-network release.

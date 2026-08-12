@@ -44,4 +44,4 @@ Thumbs.db
 *.bak
 .docx_qa/
 .docx_pdf/
-
+.runtime/

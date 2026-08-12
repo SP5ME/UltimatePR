@@ -1,0 +1,8 @@
+# test log
+getenv GOTMPDIR
+open C:\Users\MIKI-S~1\AppData\Local\Temp\TestOnlyConnectedConversationReceivesLines1869275800\001\history.json
+stat C:\Users\MIKI-S~1\AppData\Local\Temp\TestOnlyConnectedConversationReceivesLines1869275800\001
+open C:\Users\MIKI-S~1\AppData\Local\Temp\TestOnlyConnectedConversationReceivesLines1869275800\001\history.json.tmp
+stat C:\Users\MIKI-S~1\AppData\Local\Temp\TestOnlyConnectedConversationReceivesLines1869275800\001
+open C:\Users\MIKI-S~1\AppData\Local\Temp\TestOnlyConnectedConversationReceivesLines1869275800\001\history.json.tmp
+open C:\Users\MIKI-S~1\AppData\Local\Temp

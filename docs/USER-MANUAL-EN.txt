@@ -1,0 +1,229 @@
+MODERN PACKET RADIO BBS — USER AND ADMINISTRATOR MANUAL
+Working version, maintained as the software evolves
+Last updated: 2026-08-12
+
+DEVELOPMENT REQUIREMENT
+This is a living project manual. Every new or changed user-facing function
+must be documented here and in docs/INSTRUKCJA-PL.txt in the same change. The
+Polish and English manuals must describe the same software state.
+
+1. PURPOSE
+
+Modern Packet Radio BBS is an independent Packet Radio server combining:
+- an AX.25 node/access point and router;
+- a mailbox BBS with mail forwarding;
+- a browser-based multi-session AX.25 and Telnet terminal;
+- KISS TCP and AXUDP transports;
+- MHeard, frame monitor, beacon and conversation history.
+
+The project studies the observable behaviour of established systems such as
+LinBPQ and URONode, but is an independent implementation. Its goal is AX.25
+and BBS mail interoperability with existing amateur-radio systems.
+
+2. REQUIREMENTS AND STARTUP
+
+Go 1.24 or newer is required. On Windows, start:
+
+  H:\BBS Serwer\run-test-windows.cmd
+
+The script builds the current code and keeps a visible PowerShell window.
+Stop it with Ctrl+C.
+
+Default endpoints:
+- Web UI: http://127.0.0.1:8080
+- NODE Telnet: 127.0.0.1:8010
+- BBS Telnet: 127.0.0.1:8023
+- BBS forwarding: 127.0.0.1:7300
+- TNC KISS TCP: 127.0.0.1:8001
+
+Manual start and verification:
+
+  go run ./cmd/server -config configs/example.yaml
+  go test ./...
+  go vet ./...
+
+3. CALLSIGNS AND SSIDS
+
+Use distinct SSIDs for services sharing one base callsign:
+
+  operator terminal: SP5ME       (SSID 0)
+  NODE:              SP5ME-7
+  BBS:               SP5ME-8
+
+SSID 0 is displayed without “-0”. Separate service addresses let the server
+route incoming AX.25 sessions unambiguously.
+
+4. WEB UI AND STATUS
+
+The header reports actual NODE, BBS and transport state. Green means running
+or connected; red means disabled or disconnected. Main controls are Terminal,
+Beacon, Monitor and Configuration.
+The Sound switch controls operator-station notifications only. An inbound AX.25
+radio connection addressed to the Terminal callsign opens an incoming session
+and plays three short tones; received text in it plays one tone. Connections
+addressed to NODE and BBS callsigns remain silent. Browsers require one
+interaction with the page before audio playback is allowed. The choice is
+remembered in that browser.
+
+5. MULTI-SESSION TERMINAL
+
+The conversation area contains sent and received text only. Application status
+messages do not create chat bubbles. The terminal header reports Ready,
+Connecting, Connected, Sending, Disconnecting, or an error.
+
+Connection modes are Local BBS, Telnet and TNC/Radio. TNC/Radio is selected by
+default. Local BBS connects directly over TCP to this
+application's configured BBS listener; it does not use TNC, radio, or an
+external Telnet server.
+
+The operator does not have to switch away from TNC/Radio. If the destination
+is the exact callsign of this application's BBS, the server automatically
+routes the session to the local BBS. The selected radio port and DIGI path are
+ignored and no frame is sent to the TNC. Other callsigns still use the TNC.
+Callsign matching is case-insensitive, while SSID remains significant.
+Radio connections need a port, destination callsign and optional DIGI/VIA
+path. Double-click an MHeard
+entry to connect through its last-heard port. Click History to read it, or
+double-click a radio entry to reconnect with its saved callsign, port and DIGI.
+If that callsign already has an active session, double-click selects its tab.
+Disconnected tabs disappear. New text in a background session makes its tab
+flash red until that conversation is opened.
+Examples:
+
+  SR5XYZ-7
+  SR5XYZ-7, SR5ABC-3
+
+Commas, spaces or semicolons may separate digipeaters. The path is encoded in
+the AX.25 address field of every link frame, not in user text.
+
+“New session” creates an independent tab. Several Telnet, BBS and AX.25 links
+may coexist. AX.25 sessions have independent link state and sequence numbers,
+while sharing the same radio and KISS transmit queue.
+
+Received text appears on the left and operator text on the right. Conversation
+history, the current conversation and MHeard scroll independently.
+
+6. PAGE CLOSURE AND LINK KEEPALIVE
+
+Closing a page ends only terminal sessions owned by that page. AX.25 performs
+a DISC/UA close with a 10-second maximum wait; Telnet closes its TCP socket.
+NODE, BBS, forwarding, other users and other browser sessions are unaffected.
+
+Established AX.25 terminal links send a supervisory RR Poll every 5 minutes.
+It carries no user text. Telnet uses TCP keepalive and has no artificial
+90-second read-idle timeout.
+
+7. CONVERSATION HISTORY
+
+History contains successful connections only: AX.25 after UA, Telnet after a
+successful TCP connection, and Local BBS after opening its listener. Failed
+attempts, beacons, MHeard, monitor data and B2F forwarding are excluded.
+
+Default limits are 100 stations, 10 sessions per station, 50 lines per
+station, 5 MB total and 90-day retention. Data is stored in data/history.json.
+Selecting a history item opens a read-only conversation view.
+
+8. MHEARD AND MONITOR
+
+Each callsign in MHeard and History has an activity LED: green means activity
+less than 15 minutes ago, yellow means 15–45 minutes, and red means more than
+45 minutes. Green and yellow states are recalculated locally every 30 seconds.
+Once red, an entry is no longer timed until newly received activity supplies a
+fresh timestamp.
+History and MHeard share the newest activity timestamp for the same complete
+callsign (including SSID), so its LED color is consistent in both panels.
+
+MHeard is populated from received frames and displays callsign, port, last
+heard time and frame count, newest first. Monitor displays time, RX/TX, port,
+source, destination, frame type and size. The monitor is currently basic.
+
+9. TNC, KISS TCP AND RADIO
+
+A TNC program such as Direwolf exposes a KISS TCP server. ModernBBS connects
+as a client, by default to 127.0.0.1:8001. One TNC/radio can serve terminal,
+NODE, BBS and forwarding. Services share channel capacity but are separated by
+port and local/remote AX.25 addresses.
+
+10. BEACON
+
+Beacon is an AX.25 UI frame with PID F0. The Beacon button sends it immediately.
+Station configuration contains port, destination (default BEACON), text,
+automatic enable and an interval in minutes (default 10).
+
+11. NODE
+
+NODE accepts Telnet and incoming AX.25 sessions. Common commands are:
+
+  HELP, INFO, NODES, ROUTES, PORTS, SERVICES, MHEARD, USERS, C BBS, BYE
+
+Commands are case-insensitive. C BBS opens the local mailbox.
+
+12. BBS
+
+On first access the BBS creates a persistent profile and asks for name, Home
+BBS, QTH and locator. Enter accepts the local BBS as Home BBS. PROFILE displays
+the record; NAME, HOMEBBS, QTH, LOC and LANG update it. When `S CALL` has no
+explicit `@BBS`, a known recipient Home BBS is appended automatically. An
+explicit address always wins.
+
+CONV (also C, T or TALK) enters a local live chat. `/WHO` lists participants
+and `/EX` leaves. CONV text is not BBS mail, is not stored as a message and is
+not forwarded to other BBS systems.
+
+BBS accepts Telnet and AX.25. For radio sessions the user identity is taken
+from the AX.25 source address. Commands are case-insensitive:
+
+  H                 help
+  I                 information
+  L / LM            message list
+  LN / N            new messages
+  LS                sent messages
+  LB                bulletins
+  R <id>            read
+  RE <id>           reply
+  S / SP <call>     private message
+  SB <area>         bulletin
+  FS <id>           forwarding status
+  K <id>            delete
+  LANG PL / EN      session language
+  B                 return/leave
+
+Terminate message text with /EX on a separate line. Radio and protocol text is
+sent without Polish national characters.
+
+13. BBS FORWARDING
+
+Forwarding implements B2F/FBB exchange with LZHUF. A peer may be reached by
+Telnet (commonly port 7300) or through a node. Configure the peer callsign,
+transport, endpoint/via node, schedule, private routes and bulletin scopes.
+The default automatic forwarding interval is 5 minutes.
+
+Do not enable an external peer without confirmed parameters, routing and the
+remote BBS administrator's approval.
+
+14. CONFIGURATION AND RESTART
+
+Forms are divided into Station, NODE, BBS and TNC/Radio. “Validate and save”
+validates the model, writes configs/example.yaml, requests a controlled exit,
+and lets the Windows launcher restart the process. The page waits for the API
+and reloads automatically. Ctrl+C stops without restart.
+
+15. DATA FILES AND BACKUPS
+
+Important files:
+- configs/example.yaml — configuration;
+- data/bbs.json — BBS mail and users;
+- data/history.json — bounded conversation history;
+- .runtime/ — test executables and logs.
+
+Back up configuration and data before major changes. Do not edit data files
+while the server is running.
+
+16. CURRENT DEVELOPMENT LIMITATIONS
+
+- AX.25 modulo 8 with one outstanding I frame per session;
+- basic frame monitor;
+- real-radio multi-session stress testing is still required;
+- raw AXIP (IP protocol 93) is distinct from AXUDP and is not yet considered a
+  production-ready transport;
+- unattended operation requires validation with the actual TNC and radio.

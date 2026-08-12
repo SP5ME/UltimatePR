@@ -49,3 +49,18 @@ func TestBulletinVisibleToEveryone(t *testing.T) {
 		t.Fatalf("got %d", len(got))
 	}
 }
+
+func TestUserLanguagePersists(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "bbs.json")
+	s, _ := Open(p)
+	if err := s.SetLanguage("SP5AAA", "en"); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Language("sp5aaa"); got != "en" {
+		t.Fatalf("language=%q", got)
+	}
+}

@@ -28,19 +28,20 @@ type Event struct {
 type Sender func(context.Context, []byte) error
 
 type Manager struct {
-	mu      sync.Mutex
-	local   ax25.Address
-	state   State
-	port    string
-	remote  ax25.Address
-	ports   map[string]Sender
-	vs, vr  uint8
-	control chan ax25.Type
-	ack     chan uint8
-	subs    map[chan Event]struct{}
-	t1      time.Duration
-	n2      int
-	paclen  int
+	mu          sync.Mutex
+	local       ax25.Address
+	state       State
+	port        string
+	remote      ax25.Address
+	digipeaters []ax25.Address
+	ports       map[string]Sender
+	vs, vr      uint8
+	control     chan ax25.Type
+	ack         chan uint8
+	subs        map[chan Event]struct{}
+	t1          time.Duration
+	n2          int
+	paclen      int
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
@@ -81,7 +82,7 @@ func (m *Manager) setState(s State, msg string) {
 }
 func (m *Manager) State() State { m.mu.Lock(); defer m.mu.Unlock(); return m.state }
 
-func (m *Manager) Connect(ctx context.Context, port, target string) error {
+func (m *Manager) Connect(ctx context.Context, port, target string, via ...string) error {
 	send, ok := m.ports[port]
 	if !ok {
 		return fmt.Errorf("unknown port %q", port)
@@ -90,6 +91,20 @@ func (m *Manager) Connect(ctx context.Context, port, target string) error {
 	if err != nil {
 		return err
 	}
+	digis := make([]ax25.Address, 0, len(via))
+	for _, call := range via {
+		if call == "" {
+			continue
+		}
+		digi, parseErr := ax25.ParseAddress(call)
+		if parseErr != nil {
+			return fmt.Errorf("invalid digipeater %q: %w", call, parseErr)
+		}
+		digis = append(digis, digi)
+	}
+	if len(digis) > 8 {
+		return errors.New("AX.25 allows at most 8 digipeaters")
+	}
 	m.mu.Lock()
 	if m.state != Disconnected {
 		m.mu.Unlock()
@@ -97,11 +112,12 @@ func (m *Manager) Connect(ctx context.Context, port, target string) error {
 	}
 	m.port = port
 	m.remote = remote
+	m.digipeaters = digis
 	m.vs = 0
 	m.vr = 0
 	m.drain()
 	m.mu.Unlock()
-	m.setState(AwaitingConnection, "Wysyłanie SABM")
+	m.setState(AwaitingConnection, "Wysylanie SABM")
 	f := m.command(ax25.TypeSABM, true, nil, 0, 0)
 	for attempt := 0; attempt < m.n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
@@ -111,16 +127,16 @@ func (m *Manager) Connect(ctx context.Context, port, target string) error {
 		select {
 		case typ := <-m.control:
 			if typ == ax25.TypeUA {
-				m.setState(Connected, "Sesja AX.25 połączona")
+				m.setState(Connected, "Sesja AX.25 polaczona")
 				return nil
 			}
 			if typ == ax25.TypeDM {
-				m.setState(Disconnected, "Stacja odrzuciła połączenie")
+				m.setState(Disconnected, "Stacja odrzucila polaczenie")
 				return errors.New("connection rejected (DM)")
 			}
 		case <-time.After(m.t1):
 		case <-ctx.Done():
-			m.setState(Disconnected, "Połączenie anulowane")
+			m.setState(Disconnected, "Polaczenie anulowane")
 			return ctx.Err()
 		}
 	}
@@ -137,7 +153,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 	send := m.ports[m.port]
 	m.drain()
 	m.mu.Unlock()
-	m.setState(AwaitingRelease, "Rozłączanie")
+	m.setState(AwaitingRelease, "Rozlaczanie")
 	f := m.command(ax25.TypeDISC, true, nil, 0, 0)
 	for attempt := 0; attempt < m.n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
@@ -146,7 +162,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		select {
 		case typ := <-m.control:
 			if typ == ax25.TypeUA || typ == ax25.TypeDM {
-				m.setState(Disconnected, "Rozłączono")
+				m.setState(Disconnected, "Rozlaczono")
 				return nil
 			}
 		case <-time.After(m.t1):
@@ -154,7 +170,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 			break
 		}
 	}
-	m.setState(Disconnected, "Sesja zamknięta lokalnie")
+	m.setState(Disconnected, "Sesja zamknieta lokalnie")
 	return nil
 }
 
@@ -170,6 +186,31 @@ func (m *Manager) Send(ctx context.Context, data []byte) error {
 		data = data[n:]
 	}
 	return nil
+}
+
+// KeepAlive sends AX.25 supervisory polls while an established link is idle.
+// It does not inject any text into the remote terminal.
+func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.mu.Lock()
+			if m.state != Connected {
+				m.mu.Unlock()
+				continue
+			}
+			send, nr := m.ports[m.port], m.vr
+			m.mu.Unlock()
+			_ = m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr))
+		}
+	}
 }
 func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 	m.mu.Lock()
@@ -221,14 +262,20 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		}
 	case ax25.TypeDISC:
 		_ = m.sendResponse(context.Background(), port, ax25.TypeUA, true, 0)
-		m.setState(Disconnected, "Zdalna stacja rozłączyła sesję")
+		m.setState(Disconnected, "Zdalna stacja rozlaczyla sesje")
 	case ax25.TypeRR:
 		select {
 		case m.ack <- f.NR:
 		default:
 		}
+		if f.PollFinal && f.Destination.CommandResponse {
+			m.mu.Lock()
+			nr := m.vr
+			m.mu.Unlock()
+			_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
+		}
 	case ax25.TypeRNR:
-		m.emit(Event{Type: "notice", Message: "Zdalna stacja chwilowo nie może odbierać"})
+		m.emit(Event{Type: "notice", Message: "Zdalna stacja chwilowo nie moze odbierac"})
 	case ax25.TypeREJ:
 		select {
 		case m.ack <- f.NR:
@@ -265,16 +312,20 @@ func (m *Manager) command(t ax25.Type, pf bool, pid *byte, ns, nr uint8) ax25.Fr
 	m.mu.Unlock()
 	remote.CommandResponse = true
 	local.CommandResponse = false
-	return ax25.Frame{Destination: remote, Source: local, Type: t, PollFinal: pf, PID: pid, NS: ns, NR: nr}
+	m.mu.Lock()
+	digis := append([]ax25.Address(nil), m.digipeaters...)
+	m.mu.Unlock()
+	return ax25.Frame{Destination: remote, Source: local, Digipeaters: digis, Type: t, PollFinal: pf, PID: pid, NS: ns, NR: nr}
 }
 func (m *Manager) sendResponse(ctx context.Context, port string, t ax25.Type, pf bool, nr uint8) error {
 	m.mu.Lock()
 	send := m.ports[port]
 	remote, local := m.remote, m.local
+	digis := append([]ax25.Address(nil), m.digipeaters...)
 	m.mu.Unlock()
 	remote.CommandResponse = false
 	local.CommandResponse = true
-	return m.sendFrame(ctx, send, ax25.Frame{Destination: remote, Source: local, Type: t, PollFinal: pf, NR: nr})
+	return m.sendFrame(ctx, send, ax25.Frame{Destination: remote, Source: local, Digipeaters: digis, Type: t, PollFinal: pf, NR: nr})
 }
 func (m *Manager) sendFrame(ctx context.Context, send Sender, f ax25.Frame) error {
 	if send == nil {

@@ -1,8 +1,9 @@
 # Modern Packet Radio BBS
 
 An independent, clean-room implementation of an AX.25 packet-radio node,
-router and, later, BBS. The first milestone focuses on KISS TCP, AX.25 modulo
-8 sessions, a browser terminal, monitoring and MHEARD.
+router and BBS. The current development milestone includes KISS TCP, AXUDP,
+AX.25 modulo-8 sessions, a browser terminal, monitoring, MHEARD and B2F mail
+forwarding.
 
 The production program does not import or require the local `Zródał/`
 reference laboratory. LinBPQ, URONode and pyBBS are used only to understand
@@ -20,11 +21,13 @@ verification is pending installation of the Go toolchain):
 - local Web UI with a real-time dual-mode terminal;
 - working bidirectional Telnet BBS connections from the browser;
 - unit tests and fuzz targets for protocol parsers;
+- incoming AX.25 connections to both the NODE and BBS callsigns;
+- B2F/FBB-compatible forwarding with LZHUF compression;
 - initial clean-room and architecture documentation.
 
-The TNC option is visible but deliberately does not transmit yet. It will be
-enabled after the connected-mode AX.25 session manager is complete. Do not use
-this version on an unattended radio link.
+The AX.25 link layer is still a development implementation (modulo 8, one
+outstanding I frame). Test it with Direwolf or another KISS TNC before placing
+it on an unattended radio link.
 
 ## Build
 
@@ -66,6 +69,8 @@ loopback.
 
 ## Documentation
 
+- `docs/INSTRUKCJA-PL.txt` — aktualizowana instrukcja polska
+- `docs/USER-MANUAL-EN.txt` — maintained English manual
 - `docs/source-analysis.md`
 - `docs/feature-reference.md`
 - `docs/protocol-sources.md`
@@ -78,3 +83,30 @@ terminal client to `127.0.0.1:8023` and enter your callsign.
 
 Initial BBS commands: `H`, `L`, `LB`, `R <id>`, `S <call>`, `SB <topic>`,
 `K <id>` and `B`. End message text with `/EX` on its own line.
+
+An incoming AX.25 connection addressed to the configured node callsign opens
+the node command shell. A connection addressed to the configured BBS callsign
+opens the mailbox directly and uses the AX.25 source callsign as the user
+identity. The same services remain available over their configured Telnet
+listeners.
+
+## Windows test start
+
+Double-click `run-test-windows.cmd`, or run from PowerShell:
+
+```powershell
+.\run-test-windows.ps1 -OpenBrowser -RunTests
+```
+
+Stop the server with `Ctrl+C`.
+
+To start two isolated temporary instances on Windows, run
+`run-two-bbs-windows.cmd`. Ctrl+C stops both instances and removes their
+temporary configurations, databases and logs.
+
+## Local node test
+
+The example configuration starts a local node on `127.0.0.1:8010`. Connect
+from the web terminal in Telnet mode and use: `NODES`, `ROUTES`, `PORTS`,
+`SERVICES`, `C BBS` and `BYE`. `C BBS` enters the same persistent BBS and the
+BBS command `B` returns to the node.

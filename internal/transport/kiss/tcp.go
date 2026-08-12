@@ -21,10 +21,11 @@ type TCPConfig struct {
 }
 type Stats struct{ RXFrames, TXFrames, RXBytes, TXBytes, DecodeErrors, DroppedTX atomic.Uint64 }
 type TCPPort struct {
-	cfg   TCPConfig
-	tx    chan transport.Packet
-	log   *slog.Logger
-	stats Stats
+	cfg       TCPConfig
+	tx        chan transport.Packet
+	log       *slog.Logger
+	stats     Stats
+	connected atomic.Bool
 }
 
 func NewTCPPort(c TCPConfig, l *slog.Logger) *TCPPort {
@@ -34,6 +35,9 @@ func NewTCPPort(c TCPConfig, l *slog.Logger) *TCPPort {
 	return &TCPPort{cfg: c, tx: make(chan transport.Packet, c.Queue), log: l}
 }
 func (p *TCPPort) ID() string { return p.cfg.ID }
+func (p *TCPPort) Status() transport.Status {
+	return transport.Status{ID: p.ID(), Type: "KISS TCP", Connected: p.connected.Load()}
+}
 func (p *TCPPort) Send(ctx context.Context, pkt transport.Packet) error {
 	select {
 	case p.tx <- pkt:
@@ -69,6 +73,8 @@ func (p *TCPPort) runConn(ctx context.Context, out chan<- transport.Packet) erro
 		return err
 	}
 	defer c.Close()
+	p.connected.Store(true)
+	defer p.connected.Store(false)
 	p.log.Info("port connected", "port", p.ID(), "address", p.cfg.Address)
 	errch := make(chan error, 2)
 	go p.readLoop(ctx, c, out, errch)

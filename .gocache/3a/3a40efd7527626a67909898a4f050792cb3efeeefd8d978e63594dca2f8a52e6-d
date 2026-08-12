@@ -1,0 +1,9 @@
+./ascii.go
+./big5.go
+./charset.go
+./codepage.go
+./cp932.go
+./file.go
+./local.go
+./utf16.go
+./utf8.go
