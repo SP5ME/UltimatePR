@@ -545,6 +545,16 @@ type serverMessage struct {
 	Error string `json:"error,omitempty"`
 }
 
+func terminalMessageFromEvent(e session.Event) serverMessage {
+	msg := serverMessage{Type: e.Type, State: string(e.State)}
+	if len(e.Data) > 0 {
+		msg.Data = string(e.Data)
+	} else {
+		msg.Data = e.Message
+	}
+	return msg
+}
+
 type safeWS struct {
 	conn *websocket.Conn
 	mu   sync.Mutex
@@ -682,7 +692,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						if e.Type == "data" && historyConnected && s.cfg.History != nil {
 							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", string(e.Data))
 						}
-						msg := serverMessage{Type: e.Type, State: string(e.State), Data: string(e.Message)}
+						msg := terminalMessageFromEvent(e)
 						if e.State == session.Disconnected && !historyConnected {
 							msg.Error = string(e.Message)
 						}

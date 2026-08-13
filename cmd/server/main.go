@@ -64,6 +64,16 @@ func main() {
 	if cfg.BBS.Enabled {
 		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID})
 	}
+	ownCalls := map[string]struct{}{
+		ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(): {},
+	}
+	if cfg.BBS.Enabled {
+		ownCalls[ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String()] = struct{}{}
+	}
+	isOwnCallsign := func(call string) bool {
+		_, ok := ownCalls[strings.ToUpper(strings.TrimSpace(call))]
+		return ok
+	}
 	digi := digipeater.New(digiAliases...)
 	log.Info("AX.25 digipeater enabled", "aliases", func() []string {
 		out := make([]string, len(digiAliases))
@@ -320,11 +330,13 @@ func main() {
 				continue
 			}
 			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
-			heard.Heard(f.Source.String(), pkt.PortID)
-			if f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
+			if !isOwnCallsign(f.Source.String()) {
+				heard.Heard(f.Source.String(), pkt.PortID)
+			}
+			if !isOwnCallsign(f.Source.String()) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
 				heard.Beacon(f.Source.String(), pkt.PortID, string(f.Payload))
 				reported := parseUltimatePRBeacon(string(f.Payload))
-				reported = withoutCallsigns(reported, digiAliases...)
+				reported = withoutCallsigns(reported, append(digiAliases, ownCallsAsAddresses(ownCalls)...)...)
 				heard.Reported(reported, f.Source.String(), pkt.PortID)
 			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
@@ -465,6 +477,18 @@ func withoutCallsigns(calls []string, excluded ...ax25.Address) []string {
 		}
 	}
 	return result
+}
+
+func ownCallsAsAddresses(calls map[string]struct{}) []ax25.Address {
+	out := make([]ax25.Address, 0, len(calls))
+	for call := range calls {
+		addr, err := ax25.ParseAddress(call)
+		if err != nil {
+			continue
+		}
+		out = append(out, addr)
+	}
+	return out
 }
 
 func parseUltimatePRBeacon(text string) []string {
