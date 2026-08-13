@@ -17,6 +17,10 @@ type githubRelease struct {
 	Name    string `json:"name"`
 }
 
+func branchReleaseEndpoint(channel string) string {
+	return "https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/" + channel + "-latest"
+}
+
 func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 	c, err := appconfig.Load(s.cfg.ConfigPath)
 	if err != nil {
@@ -24,7 +28,7 @@ func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	channel := c.Application.UpdateChannel
-	endpoint := "https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/" + channel + "-latest"
+	endpoint := branchReleaseEndpoint(channel)
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -36,6 +40,27 @@ func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		// A rolling branch release is briefly absent while GitHub replaces its
+		// tag and assets. One delayed retry avoids exposing that publication
+		// window as a permanent error in the panel.
+		resp.Body.Close()
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			http.Error(w, "Przekroczono czas sprawdzania aktualizacji", 504)
+			return
+		}
+		req, _ = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("User-Agent", "UltimatePR-updater")
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			http.Error(w, "Nie można połączyć się z GitHub: "+err.Error(), 502)
+			return
+		}
+		defer resp.Body.Close()
+	}
 	if resp.StatusCode != 200 {
 		http.Error(w, fmt.Sprintf("GitHub zwrócił status %d", resp.StatusCode), 502)
 		return
