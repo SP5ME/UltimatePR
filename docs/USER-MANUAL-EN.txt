@@ -11,11 +11,48 @@ Download and extract the package for your architecture, then run as root:
   ./install.sh
 
 Open http://SERVER_ADDRESS:8080. The first-run wizard can import a YAML settings
-backup or create a clean configuration. Enter the callsign, Maidenhead locator,
-QTH, language, SSIDs and a new panel password.
+backup or create a clean configuration. Enter the callsign, language, SSIDs and
+a new panel password. The Maidenhead locator and QTH are optional and remain
+empty if they are not entered.
 
 There are exactly two modes: station only, or station + NODE + BBS. NODE and BBS
 are always enabled and disabled together.
+
+DIGIPEATER
+
+UltimatePR always operates as an AX.25 digipeater; there is no enable/disable
+switch. It repeats a frame on the same port only when the station callsign is
+the first unused entry in the VIA path. When BBS is enabled, the BBS callsign
+also acts as a digipeater. UltimatePR sets the H bit, does not repeat its own
+frames and suppresses duplicate frames for 30 seconds.
+
+STATION AND BBS BEACONS
+
+The station beacon is sent every 10 minutes only while at least one
+authenticated UltimatePR browser tab is actually open. The BBS beacon is sent
+whenever BBS is enabled. It also uses a 10-minute interval, offset by 5 minutes
+from the station beacon. Beacons are AX.25 UI frames with PID F0 addressed to
+BEACON.
+
+An UltimatePR beacon contains one line each for: callsign, optional Maidenhead
+locator, optional QTH, DIGI, UltimatePR, and up to five most recently heard
+unique MHEARD callsigns separated by commas. Empty optional fields and an empty
+MHEARD list are omitted. The local station and local BBS callsigns are never
+included in MHEARD.
+
+MHEARD AND BEACON PREVIEW
+
+The compact MHEARD list shows only an activity LED and callsign so that more
+stations fit on screen. A single click displays the station's latest received
+beacon in the terminal area without creating or interrupting a session. A
+double-click starts a connection. Clicking a session tab restores that
+conversation.
+
+UltimatePR also parses beacons produced by other UltimatePR stations. Callsigns
+reported in their MHEARD line are added as indirectly heard stations and marked
+with an asterisk, for example *SP5ABC. The asterisk disappears after the
+station is heard directly. The local station and BBS callsigns are ignored even
+when another station reports them.
 
 FILES
 

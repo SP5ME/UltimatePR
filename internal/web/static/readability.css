@@ -17,7 +17,7 @@
 .history-row small, .heard-row small { display: flex; justify-content: space-between; gap: 8px; }
 .history-row small b, .heard-row small b { color: #aebfc0; font-weight: 600; white-space: nowrap; }
 .history-row p { margin-top: 2px; color: #b8c8c9; }
-.heard-row { gap: 7px 10px; padding: 15px 2px; }
+.heard-row { display: block; grid-template-columns: none; padding: 7px 2px; }
 .heard-row span { font-size: 12px; }
 .heard-row small { font-size: 11px; line-height: 1.45; }
 .activity-led { width: 10px; height: 10px; margin-right: 10px; }

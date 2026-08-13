@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/config"
+	"github.com/packet-radio/ultimatepr/internal/digipeater"
 	"github.com/packet-radio/ultimatepr/internal/history"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
@@ -47,6 +49,18 @@ func main() {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
+	digiAliases := []ax25.Address{{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}}
+	if cfg.BBS.Enabled {
+		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID})
+	}
+	digi := digipeater.New(digiAliases...)
+	log.Info("AX.25 digipeater enabled", "aliases", func() []string {
+		out := make([]string, len(digiAliases))
+		for i, a := range digiAliases {
+			out[i] = a.String()
+		}
+		return out
+	}())
 	var restartRequested atomic.Bool
 	rx := make(chan transport.Packet, 256)
 	portIDs := make([]string, 0, len(cfg.Ports))
@@ -109,22 +123,38 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	sendBeacon := func(sendCtx context.Context) error {
-		send := senders[cfg.Beacon.Port]
+	beaconPort := cfg.Beacon.Port
+	if beaconPort == "" && len(portIDs) > 0 {
+		beaconPort = portIDs[0]
+	}
+	beaconDestination := cfg.Beacon.Destination
+	if strings.TrimSpace(beaconDestination) == "" {
+		beaconDestination = "BEACON"
+	}
+	sendBeaconFrame := func(sendCtx context.Context, source ax25.Address, text string) error {
+		send := senders[beaconPort]
 		if send == nil {
-			return fmt.Errorf("beacon port %q unavailable", cfg.Beacon.Port)
+			return fmt.Errorf("beacon port %q unavailable", beaconPort)
 		}
-		dst, err := ax25.ParseAddress(cfg.Beacon.Destination)
+		dst, err := ax25.ParseAddress(beaconDestination)
 		if err != nil {
 			return err
 		}
 		pid := byte(0xF0)
-		f := ax25.Frame{Destination: dst, Source: ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, Type: ax25.TypeUI, PID: &pid, Payload: []byte(cfg.Beacon.Text)}
+		f := ax25.Frame{Destination: dst, Source: source, Type: ax25.TypeUI, PID: &pid, Payload: []byte(text)}
 		b, err := ax25.Encode(f)
 		if err != nil {
 			return err
 		}
 		return send(sendCtx, b)
+	}
+	sendBeacon := func(sendCtx context.Context) error {
+		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
+		return sendBeaconFrame(sendCtx, source, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
+	}
+	sendBBSBeacon := func(sendCtx context.Context) error {
+		source := ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}
+		return sendBeaconFrame(sendCtx, source, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
 	}
 	inbound := session.NewInboundMux(senders, log)
 	web := webui.New(webui.Config{
@@ -166,22 +196,7 @@ func main() {
 		Version: bbs.BuildVersion,
 	}, log)
 	inbound.Register(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
-	if cfg.Beacon.Enabled {
-		go func() {
-			ticker := time.NewTicker(time.Duration(cfg.Beacon.IntervalMinutes) * time.Minute)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if err := sendBeacon(ctx); err != nil {
-						log.Warn("beacon failed", "error", err)
-					}
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-	}
+	go runBeaconSchedule(ctx, web, true, cfg.BBS.Enabled, sendBeacon, sendBBSBeacon, log)
 	var bbsServer *bbs.Server
 	if cfg.BBS.Enabled {
 		store, err := bbs.Open(cfg.BBS.Database)
@@ -248,7 +263,23 @@ func main() {
 			}
 			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
 			heard.Heard(f.Source.String(), pkt.PortID)
+			if f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
+				heard.Beacon(f.Source.String(), pkt.PortID, string(f.Payload))
+				reported := parseUltimatePRBeacon(string(f.Payload))
+				reported = withoutCallsigns(reported, digiAliases...)
+				heard.Reported(reported, f.Source.String(), pkt.PortID)
+			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
+			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
+				if send := senders[pkt.PortID]; send != nil {
+					if err := send(ctx, repeated); err != nil {
+						log.Warn("digipeater transmit failed", "port", pkt.PortID, "error", err)
+					} else {
+						log.Info("frame digipeated", "port", pkt.PortID, "source", f.Source.String())
+					}
+				}
+				continue
+			}
 			if !inbound.Handle(pkt.PortID, f) {
 				radio.Handle(pkt.PortID, f)
 			}
@@ -275,4 +306,137 @@ func fmtPort(p uint16) string {
 		p /= 10
 	}
 	return string(b[i:])
+}
+
+func runBeaconSchedule(ctx context.Context, web *webui.Server, stationEnabled, bbsEnabled bool, sendStation, sendBBS func(context.Context) error, log *slog.Logger) {
+	const interval = 10 * time.Minute
+	if bbsEnabled {
+		go func() {
+			timer := time.NewTimer(interval / 2)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				return
+			}
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				if err := sendBBS(ctx); err != nil {
+					log.Warn("BBS beacon failed", "error", err)
+				}
+				select {
+				case <-ticker.C:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+	if stationEnabled {
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if web.HasActiveBrowser() {
+						if err := sendStation(ctx); err != nil {
+							log.Warn("station beacon failed", "error", err)
+						}
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+}
+
+func beaconText(source ax25.Address, locator, qth string, entries []mheard.Entry, excluded ...ax25.Address) string {
+	lines := []string{source.String()}
+	if locator = strings.ToUpper(strings.TrimSpace(locator)); locator != "" {
+		lines = append(lines, locator)
+	}
+	if qth = strings.TrimSpace(qth); qth != "" {
+		lines = append(lines, qth)
+	}
+	lines = append(lines, "DIGI", "UltimatePR")
+
+	calls := make([]string, 0, 5)
+	seen := make(map[string]struct{}, 5)
+	for _, entry := range entries {
+		call := strings.ToUpper(strings.TrimSpace(entry.Callsign))
+		if call == "" {
+			continue
+		}
+		own := false
+		for _, alias := range excluded {
+			if call == alias.String() {
+				own = true
+				break
+			}
+		}
+		if own {
+			continue
+		}
+		if _, exists := seen[call]; exists {
+			continue
+		}
+		seen[call] = struct{}{}
+		calls = append(calls, call)
+		if len(calls) == 5 {
+			break
+		}
+	}
+	if len(calls) > 0 {
+		lines = append(lines, strings.Join(calls, ","))
+	}
+	return strings.Join(lines, "\r")
+}
+
+func withoutCallsigns(calls []string, excluded ...ax25.Address) []string {
+	blocked := make(map[string]struct{}, len(excluded))
+	for _, address := range excluded {
+		blocked[address.String()] = struct{}{}
+	}
+	result := calls[:0]
+	for _, call := range calls {
+		if _, found := blocked[call]; !found {
+			result = append(result, call)
+		}
+	}
+	return result
+}
+
+func parseUltimatePRBeacon(text string) []string {
+	lines := strings.FieldsFunc(strings.ReplaceAll(text, "\r\n", "\n"), func(r rune) bool { return r == '\r' || r == '\n' })
+	software := -1
+	for i := 0; i+1 < len(lines); i++ {
+		if strings.EqualFold(strings.TrimSpace(lines[i]), "DIGI") && strings.EqualFold(strings.TrimSpace(lines[i+1]), "UltimatePR") {
+			software = i + 1
+			break
+		}
+	}
+	if software < 0 || software+1 >= len(lines) {
+		return nil
+	}
+	result := make([]string, 0, 5)
+	seen := make(map[string]struct{}, 5)
+	for _, raw := range strings.Split(lines[software+1], ",") {
+		call := strings.ToUpper(strings.TrimSpace(raw))
+		address, err := ax25.ParseAddress(call)
+		if err != nil || address.String() != call {
+			continue
+		}
+		if _, exists := seen[call]; exists {
+			continue
+		}
+		seen[call] = struct{}{}
+		result = append(result, call)
+		if len(result) == 5 {
+			break
+		}
+	}
+	return result
 }

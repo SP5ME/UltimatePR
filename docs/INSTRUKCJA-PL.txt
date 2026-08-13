@@ -17,9 +17,43 @@ INSTALACJA
 PIERWSZE URUCHOMIENIE
 
 Kreator pozwala wczytać kopię konfiguracji YAML albo utworzyć czystą
-konfigurację. Należy podać znak, lokator, QTH, język, SSID i nowe hasło panelu.
+konfigurację. Należy podać znak, język, SSID i nowe hasło panelu. Lokator oraz
+QTH są opcjonalne i pozostają puste, jeśli użytkownik ich nie uzupełni.
 Dostępne są dwa tryby: tylko stacja oraz stacja + NODE + BBS. NODE i BBS są
 zawsze włączane razem.
+
+DIGI
+
+UltimatePR zawsze pełni funkcję digipeatera AX.25 i nie wymaga jej włączania.
+Powtarza ramkę na tym samym porcie tylko wtedy, gdy znak stacji jest pierwszym
+nieobsłużonym znakiem na trasie VIA. Przy aktywnym BBS funkcję DIGI pełni także
+znak BBS. Program ustawia bit H, nie powtarza własnych ramek i blokuje duplikaty
+przez 30 sekund.
+
+BEACONY STACJI I BBS
+
+Beacon stacji jest wysyłany co 10 minut tylko wtedy, gdy przynajmniej jedna
+zalogowana karta panelu WWW jest faktycznie otwarta. Beacon BBS działa zawsze,
+gdy BBS jest włączony. Jest nadawany również co 10 minut, ale z przesunięciem
+5 minut względem beaconu stacji. Beacony są ramkami AX.25 UI z PID F0,
+skierowanymi do BEACON.
+
+Format beaconu UltimatePR zawiera po jednym wierszu: znak, opcjonalny lokator,
+opcjonalne QTH, DIGI, UltimatePR oraz maksymalnie pięć ostatnich unikalnych
+znaków z MHEARD rozdzielonych przecinkami. Puste dane opcjonalne i pusty MHEARD
+są pomijane. Własny znak stacji i znak własnego BBS nie są umieszczane w MHEARD.
+
+MHEARD I PODGLĄD BEACONU
+
+Lista MHEARD pokazuje tylko diodę aktywności i znak, aby pomieścić więcej
+stacji. Pojedyncze kliknięcie wyświetla ostatni odebrany beacon w polu terminala
+bez tworzenia ani przerywania sesji. Dwuklik rozpoczyna połączenie, a kliknięcie
+zakładki sesji przywraca jej rozmowę.
+
+UltimatePR analizuje także beacony innych stacji w formacie UltimatePR. Znaki
+przekazane w ich MHEARD są dopisywane jako pośrednio słyszane i oznaczane
+gwiazdką, np. *SP5ABC. Po bezpośrednim odebraniu ramki gwiazdka znika. Program
+ignoruje własny znak stacji i własny znak BBS także w cudzych beaconach.
 
 PLIKI
 

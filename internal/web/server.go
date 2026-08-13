@@ -104,6 +104,14 @@ func New(cfg Config, log *slog.Logger) *Server {
 	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession)}
 }
 
+// HasActiveBrowser reports whether at least one authenticated application page
+// currently has its persistent notification connection open.
+func (s *Server) HasActiveBrowser() bool {
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	return len(s.notify) > 0
+}
+
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
 // operator station in the web terminal. NODE and BBS links use other handlers.
 func (s *Server) ServeOperatorAX25(remote string, r io.Reader, w io.Writer) {
