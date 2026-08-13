@@ -145,8 +145,8 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Nowe hasła nie są identyczne", http.StatusBadRequest)
 		return
 	}
-	if len(q.New) < 8 || len(q.New) > 128 {
-		http.Error(w, "Hasło musi mieć od 8 do 128 znaków", http.StatusBadRequest)
+	if len(q.New) < 4 || len(q.New) > 128 {
+		http.Error(w, "Hasło musi mieć od 4 do 128 znaków", http.StatusBadRequest)
 		return
 	}
 	s.authMu.RLock()
