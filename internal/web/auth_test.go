@@ -3,6 +3,7 @@ package web
 import (
 	"net"
 	"testing"
+	"time"
 )
 
 func TestPasswordHash(t *testing.T) {
@@ -15,6 +16,23 @@ func TestPasswordHash(t *testing.T) {
 	}
 	if !verifyPassword("", "packet") || verifyPassword("", "other") {
 		t.Fatal("default password verification failed")
+	}
+}
+
+func TestPersistentSessionToken(t *testing.T) {
+	now := time.Now()
+	token, err := createSessionToken("hash-one", now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !verifySessionToken("hash-one", token, now) {
+		t.Fatal("valid token rejected")
+	}
+	if verifySessionToken("hash-two", token, now) {
+		t.Fatal("token survived password change")
+	}
+	if verifySessionToken("hash-one", token, now.Add(2*time.Hour)) {
+		t.Fatal("expired token accepted")
 	}
 }
 

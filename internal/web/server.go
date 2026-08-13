@@ -68,7 +68,6 @@ type Server struct {
 	incomingMu  sync.Mutex
 	incoming    map[uint64]*operatorSession
 	authMu      sync.RWMutex
-	sessions    map[string]time.Time
 }
 
 type notification struct {
@@ -102,7 +101,7 @@ func (s *operatorSession) close() {
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession), sessions: make(map[string]time.Time)}
+	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession)}
 }
 
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
@@ -540,7 +539,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	s.wsClients.Add(1)
 	defer s.wsClients.Add(-1)
 	ws.SetReadLimit(16 * 1024)
-	_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Terminal gotowy. Wybierz Telnet lub TNC.\r\n"})
+	_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Terminal gotowy. Wybierz TNC / Radio lub lokalny BBS.\r\n"})
 	var remote net.Conn
 	activeMode := ""
 	historyStation, historyPort, historyDigi := "", "", ""
@@ -669,21 +668,15 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				}()
 				continue
 			}
-			if m.Mode != "telnet" && m.Mode != "bbs" {
+			if m.Mode != "bbs" {
 				_ = out.write(serverMessage{Type: "error", Error: "Nieznany tryb terminala."})
 				continue
 			}
-			address := net.JoinHostPort(m.Host, strconv.Itoa(m.Port))
-			if m.Mode == "bbs" {
-				if s.cfg.BBSListen == "" {
-					_ = out.write(serverMessage{Type: "error", Error: "Lokalny BBS jest wylaczony."})
-					continue
-				}
-				address = s.cfg.BBSListen
-			} else if err := validateTelnet(m.Host, m.Port); err != nil {
-				_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+			if s.cfg.BBSListen == "" {
+				_ = out.write(serverMessage{Type: "error", Error: "Lokalny BBS jest wylaczony."})
 				continue
 			}
+			address := s.cfg.BBSListen
 			dialCtx, dialCancel := context.WithTimeout(r.Context(), 8*time.Second)
 			conn, err := (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext(dialCtx, "tcp", address)
 			dialCancel()
@@ -692,17 +685,14 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			remote = conn
-			historyStation = m.Host
-			if m.Mode == "bbs" {
-				historyStation = "Lokalny BBS"
-			}
+			historyStation = "Lokalny BBS"
 			historyPort, historyDigi, historyConnected = address, "", true
 			if s.cfg.History != nil {
 				s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
 			}
 			done := remoteDone
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
-			go s.copyTelnetToWS(out, conn, done, m.Mode, historyStation, historyPort)
+			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort)
 		case "data":
 			if historyConnected && s.cfg.History != nil {
 				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)

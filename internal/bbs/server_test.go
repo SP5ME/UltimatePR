@@ -61,10 +61,27 @@ func TestProfilePersistsAndHomeBBSChanges(t *testing.T) {
 	if !ok || !p.Completed || p.Name != "Mike" || p.HomeBBS != "SR5DDD.#PL.POL.EU" || p.Locator != "KO02MF" {
 		t.Fatalf("bad profile: %+v", p)
 	}
+	if !strings.Contains(out.String(), "type SKIP to skip") {
+		t.Fatalf("optional fields do not explain how to skip: %s", out.String())
+	}
 	var second bytes.Buffer
 	s.Serve(strings.NewReader("SP5ME\nPROFILE\nB\n"), &second)
 	if strings.Contains(second.String(), "First connection") || !strings.Contains(second.String(), "Home BBS: SR5DDD.#PL.POL.EU") {
 		t.Fatalf("second login: %s", second.String())
+	}
+}
+
+func TestProfileOptionalFieldsAcceptSkip(t *testing.T) {
+	store, _ := Open(filepath.Join(t.TempDir(), "bbs.json"))
+	s := &Server{Title: "BBS", Node: "SP5AAA-8", Language: "pl", Store: store}
+	var out bytes.Buffer
+	s.Serve(strings.NewReader("SP5ME\nMike\n\nPOMIN\nPOMIN\nB\n"), &out)
+	p, ok := store.Profile("SP5ME")
+	if !ok || p.QTH != "" || p.Locator != "" {
+		t.Fatalf("optional fields were not skipped: %+v", p)
+	}
+	if !strings.Contains(out.String(), "wpisz POMIN aby pominac") {
+		t.Fatalf("Polish skip instruction missing: %s", out.String())
 	}
 }
 

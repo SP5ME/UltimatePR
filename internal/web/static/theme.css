@@ -42,6 +42,9 @@
 [data-theme="light"] .heard-row:hover { background: #267d450d; }
 [data-theme="light"] #sendForm button { border-color: #267d45; background: #267d45; color: #fff; font-weight: 800; }
 [data-theme="light"] #sendForm button:disabled { border-color: #aebbb0; background: #dce3dd; color: #738077; }
+[data-theme="light"] .session-tab { border-color: #9cad9e; background: #f5f8f5; color: #405247; }
+[data-theme="light"] .session-tab.active { border-color: #267d45; background: #dcefe2; color: #153d24; }
+[data-theme="light"] .session-close { border-color: #9cad9e; color: #263b2d; }
 
 .settings-card { max-width: 1180px; width: 100%; margin-inline: auto; padding: 24px; border-radius: 10px; }
 .settings-card h3 { font-size: 17px; }

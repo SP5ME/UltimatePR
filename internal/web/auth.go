@@ -21,6 +21,7 @@ import (
 const (
 	sessionCookie  = "ultimatepr_session"
 	passwordRounds = 120000
+	sessionMaxAge  = 30 * 24 * time.Hour
 )
 
 type loginRequest struct {
@@ -101,38 +102,67 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Nieprawidłowy użytkownik lub hasło", http.StatusUnauthorized)
 		return
 	}
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
+	token, err := createSessionToken(hash, time.Now().Add(sessionMaxAge))
+	if err != nil {
 		http.Error(w, "Cannot create session", http.StatusInternalServerError)
 		return
 	}
-	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
-	s.authMu.Lock()
-	s.sessions[token] = time.Now().Add(12 * time.Hour)
-	s.authMu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 12 * 60 * 60})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: int(sessionMaxAge.Seconds()), Expires: time.Now().Add(sessionMaxAge)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie(sessionCookie); err == nil {
-		s.authMu.Lock()
-		delete(s.sessions, cookie.Value)
-		s.authMu.Unlock()
-	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) validSession(token string) bool {
-	s.authMu.Lock()
-	defer s.authMu.Unlock()
-	expires, ok := s.sessions[token]
-	if !ok || time.Now().After(expires) {
-		delete(s.sessions, token)
+	s.authMu.RLock()
+	hash := s.cfg.PasswordHash
+	s.authMu.RUnlock()
+	return verifySessionToken(hash, token, time.Now())
+}
+
+func createSessionToken(passwordHash string, expires time.Time) (string, error) {
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	payload := fmt.Sprintf("%d.%s", expires.Unix(), base64.RawURLEncoding.EncodeToString(nonce))
+	mac := hmac.New(sha256.New, sessionSigningKey(passwordHash))
+	_, _ = mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+func verifySessionToken(passwordHash, token string, now time.Time) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
 		return false
 	}
-	return true
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return false
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	fields := strings.Split(string(payload), ".")
+	if len(fields) != 2 {
+		return false
+	}
+	expires, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil || now.Unix() >= expires {
+		return false
+	}
+	mac := hmac.New(sha256.New, sessionSigningKey(passwordHash))
+	_, _ = mac.Write(payload)
+	return hmac.Equal(sig, mac.Sum(nil))
+}
+
+func sessionSigningKey(passwordHash string) []byte {
+	sum := sha256.Sum256([]byte("ultimatepr-session-v1\x00" + passwordHash))
+	return sum[:]
 }
 
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +203,6 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	s.authMu.Lock()
 	s.cfg.PasswordHash = hash
-	s.sessions = make(map[string]time.Time)
 	s.authMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)

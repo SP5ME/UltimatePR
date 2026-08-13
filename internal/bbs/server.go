@@ -327,20 +327,20 @@ func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Sca
 		}
 	}
 	if language.Normalize(lang) == "pl" {
-		fmt.Fprint(w, "QTH (opcjonalnie): ")
+		fmt.Fprint(w, "QTH (opcjonalnie, wpisz POMIN aby pominac): ")
 	} else {
-		fmt.Fprint(w, "QTH (optional): ")
+		fmt.Fprint(w, "QTH (optional, type SKIP to skip): ")
 	}
 	if in.Scan() {
-		p.QTH = strings.TrimSpace(in.Text())
+		p.QTH = optionalProfileValue(in.Text())
 	}
 	if language.Normalize(lang) == "pl" {
-		fmt.Fprint(w, "Locator (opcjonalnie): ")
+		fmt.Fprint(w, "Locator (opcjonalnie, wpisz POMIN aby pominac): ")
 	} else {
-		fmt.Fprint(w, "Locator (optional): ")
+		fmt.Fprint(w, "Locator (optional, type SKIP to skip): ")
 	}
 	if in.Scan() {
-		p.Locator = strings.ToUpper(strings.TrimSpace(in.Text()))
+		p.Locator = strings.ToUpper(optionalProfileValue(in.Text()))
 	}
 	p.Language, p.Completed = language.Normalize(lang), true
 	if err := s.Store.SaveProfile(p); err != nil {
@@ -352,6 +352,16 @@ func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Sca
 		fmt.Fprint(w, "Profile saved.\r\n")
 	}
 	return p
+}
+
+func optionalProfileValue(value string) string {
+	value = strings.TrimSpace(value)
+	switch strings.ToUpper(value) {
+	case "POMIN", "POMIŃ", "SKIP":
+		return ""
+	default:
+		return value
+	}
 }
 func (s *Server) printProfile(w io.Writer, p UserProfile) {
 	fmt.Fprintf(w, "Call: %s\r\nName: %s\r\nHome BBS: %s\r\nQTH: %s\r\nLocator: %s\r\nLanguage: %s\r\n", p.Callsign, p.Name, p.HomeBBS, p.QTH, p.Locator, strings.ToUpper(p.Language))
