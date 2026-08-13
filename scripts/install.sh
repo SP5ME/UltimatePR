@@ -5,9 +5,16 @@ set -eu
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -x "$SOURCE_DIR/ultimatepr" ] || { echo "Brak pliku ultimatepr obok instalatora." >&2; exit 1; }
 
+if ! getent group ultimatepr >/dev/null 2>&1; then
+  if command -v addgroup >/dev/null 2>&1; then addgroup -S ultimatepr 2>/dev/null || addgroup --system ultimatepr
+  else groupadd --system ultimatepr; fi
+fi
 if ! id ultimatepr >/dev/null 2>&1; then
-  if command -v adduser >/dev/null 2>&1; then adduser -S -D -H -s /sbin/nologin ultimatepr 2>/dev/null || adduser --system --no-create-home --shell /usr/sbin/nologin ultimatepr
-  else useradd --system --no-create-home --shell /usr/sbin/nologin ultimatepr; fi
+  if command -v adduser >/dev/null 2>&1; then adduser -S -D -H -s /sbin/nologin -G ultimatepr ultimatepr 2>/dev/null || adduser --system --no-create-home --shell /usr/sbin/nologin --ingroup ultimatepr ultimatepr
+  else useradd --system --no-create-home --shell /usr/sbin/nologin --gid ultimatepr ultimatepr; fi
+elif ! id -Gn ultimatepr | tr ' ' '\n' | grep -qx ultimatepr; then
+  if command -v addgroup >/dev/null 2>&1; then addgroup ultimatepr ultimatepr
+  else usermod -a -G ultimatepr ultimatepr; fi
 fi
 install -d -m 0755 /opt/ultimatepr /etc/ultimatepr
 install -d -m 0750 -o ultimatepr -g ultimatepr /var/lib/ultimatepr /var/lib/ultimatepr/backups
