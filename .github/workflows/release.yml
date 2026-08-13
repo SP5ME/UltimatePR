@@ -68,6 +68,7 @@ jobs:
           cp README.md LICENSE "dist/${{ steps.package.outputs.name }}/"
           cp docs/INSTRUKCJA-PL.txt docs/USER-MANUAL-EN.txt "dist/${{ steps.package.outputs.name }}/"
           cp scripts/install.sh scripts/ultimatepr-update scripts/ultimatepr.service scripts/ultimatepr.openrc "dist/${{ steps.package.outputs.name }}/"
+          chmod +x "dist/${{ steps.package.outputs.name }}/ultimatepr" "dist/${{ steps.package.outputs.name }}/install.sh" "dist/${{ steps.package.outputs.name }}/ultimatepr-update" "dist/${{ steps.package.outputs.name }}/ultimatepr.openrc"
       - name: Create archive
         shell: bash
         run: |

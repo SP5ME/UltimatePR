@@ -4,8 +4,9 @@ set -eu
 [ "$(id -u)" -eq 0 ] || { echo "Uruchom instalator jako root." >&2; exit 1; }
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -x "$SOURCE_DIR/ultimatepr" ] || { echo "Brak pliku ultimatepr obok instalatora." >&2; exit 1; }
+[ -f "$SOURCE_DIR/ultimatepr-update" ] || { echo "Brak pliku ultimatepr-update obok instalatora." >&2; exit 1; }
 
-if ! getent group ultimatepr >/dev/null 2>&1; then
+if ! grep -q '^ultimatepr:' /etc/group 2>/dev/null; then
   if command -v addgroup >/dev/null 2>&1; then addgroup -S ultimatepr 2>/dev/null || addgroup --system ultimatepr
   else groupadd --system ultimatepr; fi
 fi
@@ -16,18 +17,25 @@ elif ! id -Gn ultimatepr | tr ' ' '\n' | grep -qx ultimatepr; then
   if command -v addgroup >/dev/null 2>&1; then addgroup ultimatepr ultimatepr
   else usermod -a -G ultimatepr ultimatepr; fi
 fi
-install -d -m 0755 /opt/ultimatepr /etc/ultimatepr
+install -d -m 0755 /opt/ultimatepr /etc/ultimatepr /usr/local /usr/local/sbin
 install -d -m 0750 -o ultimatepr -g ultimatepr /var/lib/ultimatepr /var/lib/ultimatepr/backups
+touch /var/log/ultimatepr.log
+chown ultimatepr:ultimatepr /var/log/ultimatepr.log
+chmod 0640 /var/log/ultimatepr.log
 install -m 0755 "$SOURCE_DIR/ultimatepr" /opt/ultimatepr/ultimatepr
 [ -f /etc/ultimatepr/config.yaml ] && chown ultimatepr:ultimatepr /etc/ultimatepr/config.yaml || chown ultimatepr:ultimatepr /etc/ultimatepr
-[ -f "$SOURCE_DIR/ultimatepr-update" ] && install -m 0755 "$SOURCE_DIR/ultimatepr-update" /usr/local/sbin/ultimatepr-update
+install -m 0755 "$SOURCE_DIR/ultimatepr-update" /usr/local/sbin/ultimatepr-update
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+  [ -f "$SOURCE_DIR/ultimatepr.service" ] || { echo "Brak pliku ultimatepr.service." >&2; exit 1; }
+  install -d -m 0755 /etc/systemd/system
   install -m 0644 "$SOURCE_DIR/ultimatepr.service" /etc/systemd/system/ultimatepr.service
   systemctl daemon-reload
   systemctl enable --now ultimatepr
   echo "UltimatePR uruchomiono przez systemd."
 elif command -v rc-update >/dev/null 2>&1; then
+  [ -f "$SOURCE_DIR/ultimatepr.openrc" ] || { echo "Brak pliku ultimatepr.openrc." >&2; exit 1; }
+  install -d -m 0755 /etc/init.d
   install -m 0755 "$SOURCE_DIR/ultimatepr.openrc" /etc/init.d/ultimatepr
   rc-update add ultimatepr default
   rc-service ultimatepr restart || rc-service ultimatepr start
@@ -38,9 +46,11 @@ else
 fi
 
 if command -v doas >/dev/null 2>&1; then
+  install -d -m 0755 /etc/doas.d
   printf '%s\n' 'permit nopass ultimatepr as root cmd /usr/local/sbin/ultimatepr-update args main' 'permit nopass ultimatepr as root cmd /usr/local/sbin/ultimatepr-update args dev' > /etc/doas.d/ultimatepr.conf
   chmod 0600 /etc/doas.d/ultimatepr.conf
 elif command -v sudo >/dev/null 2>&1; then
+  install -d -m 0755 /etc/sudoers.d
   printf '%s\n' 'ultimatepr ALL=(root) NOPASSWD: /usr/local/sbin/ultimatepr-update main, /usr/local/sbin/ultimatepr-update dev' > /etc/sudoers.d/ultimatepr
   chmod 0440 /etc/sudoers.d/ultimatepr
 else
