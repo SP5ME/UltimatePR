@@ -50,7 +50,10 @@ go run ./cmd/server -config configs/example.yaml
 ```
 
 Przykładowa konfiguracja łączy się z KISS TCP Direwolfa pod adresem
-`127.0.0.1:8001`. Interfejs WWW jest dostępny pod `http://127.0.0.1:8080`.
+`127.0.0.1:8001`. Interfejs WWW jest dostępny na porcie `8080`. Pierwsze
+logowanie: użytkownik `admin`, hasło `packet`. Po zalogowaniu zmień hasło w
+zakładce **Konfiguracja → Aplikacja**. Dostęp można ograniczyć do pojedynczych
+adresów IP lub sieci CIDR, np. `192.168.1.0/24`.
 
 Na Windows można także uruchomić:
 
@@ -64,7 +67,7 @@ tymczasowe instancje do testów lokalnych.
 
 ### Terminal i usługi
 
-Po otwarciu `http://127.0.0.1:8080` można wybrać tryb połączenia:
+Po otwarciu `http://ADRES_IP_SERWERA:8080` można wybrać tryb połączenia:
 
 - **Telnet** — dwukierunkowe połączenie TCP z serwerem BBS lub NODE;
 - **TNC / Radio** — połączenie przez wybrany port KISS i AX.25
@@ -75,7 +78,7 @@ systemowej.
 
 Przykładowa konfiguracja uruchamia:
 
-- interfejs WWW: `127.0.0.1:8080`;
+- interfejs WWW: `0.0.0.0:8080`;
 - NODE: `127.0.0.1:8010`;
 - BBS: `127.0.0.1:8023`;
 - port forwarding BBS: `127.0.0.1:7300`.
@@ -90,7 +93,8 @@ w osobnym wierszu.
 ### Bezpieczeństwo
 
 Dane radiowe i sieciowe są traktowane jako niezaufane, a parsery stosują
-limity rozmiaru. Interfejs WWW domyślnie nasłuchuje tylko na adresie lokalnym.
+limity rozmiaru. Interfejs WWW wymaga zalogowania i domyślnie nasłuchuje na
+`0.0.0.0:8080`.
 Przed wystawieniem usług do Internetu należy zastosować zaporę, reverse proxy
 z TLS i odpowiednią kontrolę dostępu.
 
@@ -165,7 +169,10 @@ go run ./cmd/server -config configs/example.yaml
 ```
 
 The example configuration connects to a Direwolf KISS TCP listener at
-`127.0.0.1:8001`. The Web interface is served at `http://127.0.0.1:8080`.
+`127.0.0.1:8001`. The Web interface is served on port `8080`. Initial
+credentials are user `admin` and password `packet`. Change the password under
+**Configuration → Application** after the first login. Access can be limited
+to individual IP addresses or CIDR networks such as `192.168.1.0/24`.
 
 On Windows you can also run:
 
@@ -179,7 +186,7 @@ testing.
 
 ### Terminal and services
 
-Open `http://127.0.0.1:8080` and select a connection mode:
+Open `http://SERVER_IP_ADDRESS:8080` and select a connection mode:
 
 - **Telnet** — a bidirectional TCP connection to a BBS or NODE;
 - **TNC / Radio** — a connection through the selected KISS port and AX.25
@@ -190,7 +197,7 @@ shell.
 
 The example configuration starts:
 
-- Web interface: `127.0.0.1:8080`;
+- Web interface: `0.0.0.0:8080`;
 - NODE: `127.0.0.1:8010`;
 - BBS: `127.0.0.1:8023`;
 - BBS forwarding port: `127.0.0.1:7300`.
@@ -204,7 +211,8 @@ Basic BBS commands are `H`, `L`, `LB`, `R <id>`, `S <call>`, `SB <topic>`,
 ### Security
 
 Radio and network input is treated as untrusted and parsers enforce explicit
-size limits. The Web listener defaults to the loopback interface. Before
+size limits. The Web listener requires authentication and its address allowlist
+can restrict access to trusted hosts or networks. Before
 exposing services to the Internet, use a firewall, a TLS reverse proxy and
 appropriate access controls.
 

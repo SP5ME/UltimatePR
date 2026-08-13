@@ -39,6 +39,6 @@ radio port; bounded queues and explicit drop counters are required.
 ## Security boundaries
 
 KISS and AX.25 data are untrusted. Every parser has a configured maximum size
-and returns errors rather than panicking. Web defaults to loopback. No package
+and returns errors rather than panicking. Web access requires authentication
+and can be restricted by an IP/CIDR allowlist. No package
 executes a system shell.
-

@@ -13,6 +13,11 @@ Polish and English manuals must describe the same software state.
 UltimatePR is an independent Packet Radio server combining:
 - an AX.25 node/access point and router;
 - a mailbox BBS with mail forwarding;
+
+The Web panel listens on 0.0.0.0:8080 by default. Initial credentials are
+admin / packet. Change the password under Configuration -> Application. The
+same page can restrict access to individual IP addresses or CIDR networks,
+for example 192.168.1.0/24.
 - a browser-based multi-session AX.25 and Telnet terminal;
 - KISS TCP and AXUDP transports;
 - MHeard, frame monitor, beacon and conversation history.
@@ -31,7 +36,7 @@ The script builds the current code and keeps a visible PowerShell window.
 Stop it with Ctrl+C.
 
 Default endpoints:
-- Web UI: http://127.0.0.1:8080
+- Web UI: http://SERVER_IP_ADDRESS:8080
 - NODE Telnet: 127.0.0.1:8010
 - BBS Telnet: 127.0.0.1:8023
 - BBS forwarding: 127.0.0.1:7300

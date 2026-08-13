@@ -14,7 +14,10 @@ type Station struct {
 	SSID     uint8  `yaml:"ssid"`
 }
 type Web struct {
-	Listen string `yaml:"listen"`
+	Listen           string   `yaml:"listen"`
+	Username         string   `yaml:"username"`
+	PasswordHash     string   `yaml:"password_hash,omitempty" json:"-"`
+	AllowedAddresses []string `yaml:"allowed_addresses"`
 }
 type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
@@ -132,10 +135,23 @@ func Parse(b []byte) (Config, error) {
 	if err := yaml.Unmarshal(b, &c); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
+	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
 	return c, nil
+}
+
+func (c *Config) applyDefaults() {
+	if strings.TrimSpace(c.Web.Listen) == "" {
+		c.Web.Listen = "0.0.0.0:8080"
+	}
+	if strings.TrimSpace(c.Web.Username) == "" {
+		c.Web.Username = "admin"
+	}
+	if len(c.Web.AllowedAddresses) == 0 {
+		c.Web.AllowedAddresses = []string{"0.0.0.0"}
+	}
 }
 
 func Save(path string, raw []byte) error {
@@ -184,12 +200,23 @@ func (c Config) Validate() error {
 			return fmt.Errorf("history: database and positive limits are required")
 		}
 	}
-	host, _, err := net.SplitHostPort(c.Web.Listen)
+	_, _, err := net.SplitHostPort(c.Web.Listen)
 	if err != nil {
 		return fmt.Errorf("web.listen: %w", err)
 	}
-	if host != "127.0.0.1" && host != "localhost" && host != "::1" {
-		return fmt.Errorf("web.listen must use loopback in milestone one")
+	if strings.TrimSpace(c.Web.Username) == "" {
+		return fmt.Errorf("web.username is required")
+	}
+	for i, address := range c.Web.AllowedAddresses {
+		address = strings.TrimSpace(address)
+		if address == "0.0.0.0" || address == "::" {
+			continue
+		}
+		if net.ParseIP(address) == nil {
+			if _, _, err := net.ParseCIDR(address); err != nil {
+				return fmt.Errorf("web.allowed_addresses[%d]: expected IP address or CIDR network", i)
+			}
+		}
 	}
 	if c.BBS.Enabled {
 		if _, _, err := net.SplitHostPort(c.BBS.Listen); err != nil {

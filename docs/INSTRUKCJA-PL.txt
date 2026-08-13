@@ -13,6 +13,11 @@ docs/USER-MANUAL-EN.txt. Wersje PL i EN muszą opisywać ten sam stan programu.
 UltimatePR jest niezależnym serwerem Packet Radio. Łączy funkcje:
 - noda AX.25, czyli punktu dostępowego i routera;
 - BBS, czyli skrzynki pocztowej z forwardingiem;
+
+Panel WWW domyślnie nasłuchuje na 0.0.0.0:8080. Pierwsze logowanie używa
+użytkownika admin i hasła packet. Hasło należy zmienić w zakładce
+Konfiguracja -> Aplikacja. W tej samej zakładce można ograniczyć dostęp do
+adresów IP lub sieci CIDR, np. 192.168.1.0/24.
 - terminala AX.25 i Telnet w przeglądarce;
 - transportów KISS TCP oraz AXUDP;
 - MHeard, monitora ramek, beaconu i historii rozmów.
@@ -32,7 +37,7 @@ Skrypt buduje aktualny program i otwiera widoczne okno PowerShell. Zatrzymanie:
   Ctrl+C
 
 Domyślne adresy:
-- panel WWW: http://127.0.0.1:8080
+- panel WWW: http://ADRES_IP_SERWERA:8080
 - NODE Telnet: 127.0.0.1:8010
 - BBS Telnet: 127.0.0.1:8023
 - forwarding BBS: 127.0.0.1:7300

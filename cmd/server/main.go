@@ -119,6 +119,9 @@ func main() {
 	inbound := session.NewInboundMux(senders, log)
 	web := webui.New(webui.Config{
 		Listen:           cfg.Web.Listen,
+		Username:         cfg.Web.Username,
+		PasswordHash:     cfg.Web.PasswordHash,
+		AllowedAddresses: cfg.Web.AllowedAddresses,
 		NodeCallsign:     cfg.Server.Callsign,
 		NodeSSID:         cfg.Server.SSID,
 		BBSCallsign:      cfg.BBS.Callsign,

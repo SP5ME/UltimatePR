@@ -2,7 +2,11 @@
     callsign: SP5ME
     ssid: 7
 web:
-    listen: 127.0.0.1:8080
+    listen: 0.0.0.0:8080
+    username: admin
+    password_hash: ""
+    allowed_addresses:
+        - 0.0.0.0
 ports:
     - id: radio-2m
       type: kiss-tcp

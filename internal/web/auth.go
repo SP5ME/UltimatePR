@@ -1,0 +1,228 @@
+package web
+
+import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	appconfig "github.com/packet-radio/ultimatepr/internal/config"
+)
+
+const (
+	sessionCookie  = "ultimatepr_session"
+	passwordRounds = 120000
+)
+
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type passwordRequest struct {
+	Current string `json:"current_password"`
+	New     string `json:"new_password"`
+	Confirm string `json:"confirm_password"`
+}
+
+func (s *Server) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login.html" || r.URL.Path == "/login.css" || r.URL.Path == "/login.js" || r.URL.Path == "/api/login" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		cookie, err := r.Cookie(sessionCookie)
+		if err == nil && s.validSession(cookie.Value) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/ws/") {
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+		http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+	})
+}
+
+func (s *Server) allowAddresses(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+		ip := net.ParseIP(strings.Trim(host, "[]"))
+		if ip == nil || !addressAllowed(ip, s.cfg.AllowedAddresses) {
+			http.Error(w, "Address not allowed", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func addressAllowed(ip net.IP, rules []string) bool {
+	for _, raw := range rules {
+		rule := strings.TrimSpace(raw)
+		if rule == "0.0.0.0" && ip.To4() != nil {
+			return true
+		}
+		if rule == "::" && ip.To4() == nil {
+			return true
+		}
+		if exact := net.ParseIP(rule); exact != nil && exact.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(rule); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	var q loginRequest
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&q) != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	s.authMu.RLock()
+	username, hash := s.cfg.Username, s.cfg.PasswordHash
+	s.authMu.RUnlock()
+	if subtle.ConstantTimeCompare([]byte(q.Username), []byte(username)) != 1 || !verifyPassword(hash, q.Password) {
+		time.Sleep(250 * time.Millisecond)
+		http.Error(w, "Nieprawidłowy użytkownik lub hasło", http.StatusUnauthorized)
+		return
+	}
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		http.Error(w, "Cannot create session", http.StatusInternalServerError)
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+	s.authMu.Lock()
+	s.sessions[token] = time.Now().Add(12 * time.Hour)
+	s.authMu.Unlock()
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 12 * 60 * 60})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(sessionCookie); err == nil {
+		s.authMu.Lock()
+		delete(s.sessions, cookie.Value)
+		s.authMu.Unlock()
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) validSession(token string) bool {
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	expires, ok := s.sessions[token]
+	if !ok || time.Now().After(expires) {
+		delete(s.sessions, token)
+		return false
+	}
+	return true
+}
+
+func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	var q passwordRequest
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&q) != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if q.New != q.Confirm {
+		http.Error(w, "Nowe hasła nie są identyczne", http.StatusBadRequest)
+		return
+	}
+	if len(q.New) < 8 || len(q.New) > 128 {
+		http.Error(w, "Hasło musi mieć od 8 do 128 znaków", http.StatusBadRequest)
+		return
+	}
+	s.authMu.RLock()
+	valid := verifyPassword(s.cfg.PasswordHash, q.Current)
+	s.authMu.RUnlock()
+	if !valid {
+		http.Error(w, "Obecne hasło jest nieprawidłowe", http.StatusUnauthorized)
+		return
+	}
+	hash, err := hashPassword(q.New)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c, err := appconfig.Load(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.Web.PasswordHash = hash
+	if err = appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.authMu.Lock()
+	s.cfg.PasswordHash = hash
+	s.sessions = make(map[string]time.Time)
+	s.authMu.Unlock()
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func hashPassword(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+	digest := deriveKey([]byte(password), salt, passwordRounds, 32)
+	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", passwordRounds, hex.EncodeToString(salt), hex.EncodeToString(digest)), nil
+}
+
+func verifyPassword(encoded, password string) bool {
+	if encoded == "" {
+		return subtle.ConstantTimeCompare([]byte(password), []byte("packet")) == 1
+	}
+	parts := strings.Split(encoded, "$")
+	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
+		return false
+	}
+	rounds, err := strconv.Atoi(parts[1])
+	salt, errSalt := hex.DecodeString(parts[2])
+	want, errHash := hex.DecodeString(parts[3])
+	if err != nil || errSalt != nil || errHash != nil || rounds < 10000 || rounds > 1000000 || len(want) != 32 {
+		return false
+	}
+	got := deriveKey([]byte(password), salt, rounds, len(want))
+	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+func deriveKey(password, salt []byte, rounds, size int) []byte {
+	result := make([]byte, 0, size)
+	for block := uint32(1); len(result) < size; block++ {
+		mac := hmac.New(sha256.New, password)
+		mac.Write(salt)
+		mac.Write([]byte{byte(block >> 24), byte(block >> 16), byte(block >> 8), byte(block)})
+		u := mac.Sum(nil)
+		t := append([]byte(nil), u...)
+		for i := 1; i < rounds; i++ {
+			mac = hmac.New(sha256.New, password)
+			mac.Write(u)
+			u = mac.Sum(nil)
+			for j := range t {
+				t[j] ^= u[j]
+			}
+		}
+		result = append(result, t...)
+	}
+	return result[:size]
+}

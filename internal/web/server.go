@@ -32,6 +32,9 @@ var assets embed.FS
 
 type Config struct {
 	Listen           string
+	Username         string
+	PasswordHash     string
+	AllowedAddresses []string
 	NodeCallsign     string
 	NodeSSID         uint8
 	BBSCallsign      string
@@ -63,6 +66,8 @@ type Server struct {
 	incomingSeq atomic.Uint64
 	incomingMu  sync.Mutex
 	incoming    map[uint64]*operatorSession
+	authMu      sync.RWMutex
+	sessions    map[string]time.Time
 }
 
 type notification struct {
@@ -96,7 +101,7 @@ func (s *operatorSession) close() {
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession)}
+	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession), sessions: make(map[string]time.Time)}
 }
 
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
@@ -147,6 +152,9 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("PUT /api/application/password", s.changePassword)
 	mux.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("GET /api/mheard", s.mheard)
@@ -165,7 +173,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/config/model", s.configModelGet)
 	mux.HandleFunc("PUT /api/config/model", s.configModelPut)
 
-	h := securityHeaders(mux)
+	h := securityHeaders(s.allowAddresses(s.authenticate(mux)))
 	srv := &http.Server{Addr: s.cfg.Listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { s.log.Info("web listening", "address", "http://"+s.cfg.Listen); done <- srv.ListenAndServe() }()
@@ -287,6 +295,12 @@ func (s *Server) configModelPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid configuration", http.StatusBadRequest)
 		return
 	}
+	current, err := appconfig.Load(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.Web.PasswordHash = current.Web.PasswordHash
 	if err := appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
