@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/packet-radio/modernbbs/internal/bbs"
+	"github.com/packet-radio/ultimatepr/internal/bbs"
 )
 
 func TestNodeEntersBBSAndReturns(t *testing.T) {

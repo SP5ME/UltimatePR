@@ -31,9 +31,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - goos: windows
-            goarch: amd64
-            archive: zip
           - goos: linux
             goarch: amd64
             archive: tar.gz
@@ -56,7 +53,7 @@ jobs:
         run: |
           suffix="${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ -n "${{ matrix.goarm }}" ]; then suffix="${suffix}v${{ matrix.goarm }}"; fi
-          echo "name=modernbbs-${GITHUB_REF_NAME}-${suffix}" >> "$GITHUB_OUTPUT"
+          echo "name=ultimatepr-${GITHUB_REF_NAME}-${suffix}" >> "$GITHUB_OUTPUT"
       - name: Build executable
         shell: bash
         env:
@@ -66,9 +63,8 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir -p "dist/${{ steps.package.outputs.name }}"
-          binary="modernbbs"
-          if [ "$GOOS" = "windows" ]; then binary="modernbbs.exe"; fi
-          go build -trimpath -ldflags="-s -w -X github.com/packet-radio/modernbbs/internal/bbs.BuildVersion=${GITHUB_REF_NAME#v}" -o "dist/${{ steps.package.outputs.name }}/$binary" ./cmd/server
+          binary="ultimatepr"
+          go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=${GITHUB_REF_NAME#v}" -o "dist/${{ steps.package.outputs.name }}/$binary" ./cmd/server
           cp configs/example.yaml "dist/${{ steps.package.outputs.name }}/config.example.yaml"
           cp README.md LICENSE "dist/${{ steps.package.outputs.name }}/"
           cp docs/INSTRUKCJA-PL.txt docs/USER-MANUAL-EN.txt "dist/${{ steps.package.outputs.name }}/"
@@ -76,11 +72,7 @@ jobs:
         shell: bash
         run: |
           cd dist
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip -r "${{ steps.package.outputs.name }}.zip" "${{ steps.package.outputs.name }}"
-          else
-            tar -czf "${{ steps.package.outputs.name }}.tar.gz" "${{ steps.package.outputs.name }}"
-          fi
+          tar -czf "${{ steps.package.outputs.name }}.tar.gz" "${{ steps.package.outputs.name }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.name }}
@@ -103,4 +95,4 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --title "ModernBBS $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --title "UltimatePR $GITHUB_REF_NAME"

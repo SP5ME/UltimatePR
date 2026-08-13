@@ -23,7 +23,7 @@ beacon:
     enabled: false
     port: radio-2m
     destination: BEACON
-    text: SP5ME Modern Packet BBS
+    text: SP5ME UltimatePR
     interval_minutes: 10
 history:
     enabled: true
@@ -38,7 +38,7 @@ bbs:
     listen: 127.0.0.1:8023
     forward_listen: 127.0.0.1:7300
     database: data/bbs.json
-    title: Modern Packet BBS
+    title: UltimatePR BBS
     callsign: SP5ME
     ssid: 8
     hierarchical_address: SP5ME.#PL.POL.EU

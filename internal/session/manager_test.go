@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/packet-radio/modernbbs/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 )
 
 func testManager(t *testing.T) (*Manager, chan []byte) {

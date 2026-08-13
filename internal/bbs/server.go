@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/packet-radio/modernbbs/internal/language"
+	"github.com/packet-radio/ultimatepr/internal/language"
 )
 
 type Server struct {
@@ -63,7 +63,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 	in := bufio.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	lang := language.Normalize(s.Language)
-	fmt.Fprintf(w, "\r\n%s [%s] ModernBBS %s\r\n%s", s.Title, s.Node, BuildVersion, language.T(lang, "callsign"))
+	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n%s", s.Title, s.Node, BuildVersion, language.T(lang, "callsign"))
 	if !in.Scan() {
 		return
 	}
@@ -85,7 +85,7 @@ func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
 	in := bufio.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	lang := language.Normalize(s.Language)
-	fmt.Fprintf(w, "\r\n%s [%s] ModernBBS %s\r\n", s.Title, s.Node, BuildVersion)
+	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n", s.Title, s.Node, BuildVersion)
 	s.ServeSessionLanguage(call, lang, in, w)
 }
 

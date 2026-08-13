@@ -52,7 +52,7 @@ The direct BBS forwarding port implements open B2F with SID capability
 negotiation, `FC` proposal blocks, `F>` checksums, `FS` selection, LZHUF
 compression and `FF`/`FQ` reverse-forwarding turns. The implementation uses
 the MIT-licensed `wl2k-go` protocol and codec package and is adapted to the
-ModernBBS store and routing layer. Primary specifications:
+UltimatePR store and routing layer. Primary specifications:
 
 - https://www.f6fbb.org/protocole.html
 - https://www.winlink.org/B2F

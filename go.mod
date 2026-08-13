@@ -1,4 +1,4 @@
-module github.com/packet-radio/modernbbs
+module github.com/packet-radio/ultimatepr
 
 go 1.25.0
 

@@ -1,10 +1,12 @@
-# Modern Packet Radio BBS
+# UltimatePR
+
+**The Ultimate Packet Radio Station**
 
 [Polski](#polski) | [English](#english)
 
 ## Polski
 
-Modern Packet Radio BBS to niezależna implementacja clean-room węzła, routera
+UltimatePR to niezależna implementacja clean-room węzła, routera
 i skrzynki BBS dla Packet Radio AX.25. Program jest napisany w Go, ma wbudowany
 interfejs WWW i jest dostarczany jako pojedynczy, lekki plik wykonywalny.
 
@@ -38,7 +40,7 @@ Wymagane jest Go 1.25 lub nowsze.
 go mod download
 go test ./...
 go vet ./...
-go build -o modernbbs ./cmd/server
+go build -o ultimatepr ./cmd/server
 ```
 
 ### Uruchomienie
@@ -96,8 +98,11 @@ z TLS i odpowiednią kontrolę dostępu.
 
 Workflow CI uruchamia testy, race detector, `go vet` i kompilację przy każdym
 pushu oraz pull requeście. Utworzenie tagu w formacie `v*`, na przykład
-`v0.4.0`, uruchamia budowanie paczek dla Windows i Linux oraz tworzy GitHub
+`v0.4.0`, uruchamia budowanie paczek dla Linuxa oraz tworzy GitHub
 Release z sumami SHA-256.
+
+Paczki linuksowe są budowane z `CGO_ENABLED=0`, dlatego plik wykonywalny jest
+statyczny i działa również na Alpine Linux bez instalowania glibc.
 
 ```sh
 git tag v0.4.0
@@ -116,7 +121,7 @@ git push origin v0.4.0
 
 ## English
 
-Modern Packet Radio BBS is an independent clean-room implementation of an
+UltimatePR is an independent clean-room implementation of an
 AX.25 packet-radio node, router and BBS. It is written in Go, includes an
 embedded Web interface and is distributed as a single lightweight executable.
 
@@ -150,7 +155,7 @@ Go 1.25 or newer is required.
 go mod download
 go test ./...
 go vet ./...
-go build -o modernbbs ./cmd/server
+go build -o ultimatepr ./cmd/server
 ```
 
 ### Running
@@ -207,8 +212,11 @@ appropriate access controls.
 
 The CI workflow runs tests, the race detector, `go vet` and a build on every
 push and pull request. Creating a `v*` tag, for example `v0.4.0`, builds
-Windows and Linux packages and publishes a GitHub Release with SHA-256
+Linux packages and publishes a GitHub Release with SHA-256
 checksums.
+
+Linux packages are built with `CGO_ENABLED=0`, so the executable is static and
+runs on Alpine Linux without installing glibc.
 
 ```sh
 git tag v0.4.0

@@ -1,4 +1,5 @@
-MODERN PACKET RADIO BBS — INSTRUKCJA UŻYTKOWNIKA I ADMINISTRATORA
+ULTIMATEPR — THE ULTIMATE PACKET RADIO STATION
+INSTRUKCJA UŻYTKOWNIKA I ADMINISTRATORA
 Wersja robocza, aktualizowana wraz z rozwojem programu
 Ostatnia aktualizacja: 12.08.2026
 
@@ -9,7 +10,7 @@ docs/USER-MANUAL-EN.txt. Wersje PL i EN muszą opisywać ten sam stan programu.
 
 1. PRZEZNACZENIE
 
-Modern Packet Radio BBS jest niezależnym serwerem Packet Radio. Łączy funkcje:
+UltimatePR jest niezależnym serwerem Packet Radio. Łączy funkcje:
 - noda AX.25, czyli punktu dostępowego i routera;
 - BBS, czyli skrzynki pocztowej z forwardingiem;
 - terminala AX.25 i Telnet w przeglądarce;
@@ -175,7 +176,7 @@ wersja jest podstawowa i będzie rozwijana.
 
 9. TNC, KISS TCP I RADIO
 
-Program TNC (np. Direwolf) powinien udostępniać serwer KISS TCP. ModernBBS jest
+Program TNC (np. Direwolf) powinien udostępniać serwer KISS TCP. UltimatePR jest
 klientem i domyślnie łączy się z 127.0.0.1:8001. Jeden TNC i jedno radio mogą
 obsługiwać terminal, NODE, BBS i forwarding. Ramki są rozdzielane według portu,
 znaku lokalnego i zdalnego; wszystkie usługi współdzielą przepustowość kanału.

@@ -10,7 +10,7 @@ import (
 	wl2k "github.com/la5nta/wl2k-go/fbb"
 )
 
-// b2fMailbox adapts ModernBBS persistence and forwarding state to the open
+// b2fMailbox adapts UltimatePR persistence and forwarding state to the open
 // FBB B2 forwarding implementation. Protocol data never becomes the database
 // format; this boundary also makes classical FBB fallbacks possible.
 type b2fMailbox struct {
@@ -119,8 +119,8 @@ func (m *b2fMailbox) ProcessInbound(messages ...*wl2k.Message) error {
 }
 
 func configureB2FSession(s *wl2k.Session) {
-	s.SetUserAgent(wl2k.UserAgent{Name: "ModernBBS", Version: "0.4.0"})
-	if os.Getenv("MODERNBBS_FBB_TRACE") == "1" {
+	s.SetUserAgent(wl2k.UserAgent{Name: "UltimatePR", Version: BuildVersion})
+	if os.Getenv("ULTIMATEPR_FBB_TRACE") == "1" || os.Getenv("MODERNBBS_FBB_TRACE") == "1" {
 		s.SetLogger(log.New(os.Stderr, "FBB ", 0))
 	} else {
 		s.SetLogger(log.New(io.Discard, "", 0))

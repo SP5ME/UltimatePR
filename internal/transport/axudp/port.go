@@ -9,7 +9,7 @@ import (
 	"net"
 	"sync/atomic"
 
-	"github.com/packet-radio/modernbbs/internal/transport"
+	"github.com/packet-radio/ultimatepr/internal/transport"
 )
 
 type Config struct {

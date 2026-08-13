@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/packet-radio/modernbbs/internal/language"
+	"github.com/packet-radio/ultimatepr/internal/language"
 )
 
 type Message struct {

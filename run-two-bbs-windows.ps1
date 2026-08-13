@@ -8,10 +8,10 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $runtimeDir = Join-Path $projectRoot ".runtime"
-$serverExe = Join-Path $runtimeDir "modernbbs-two-test.exe"
-$goCache = Join-Path $env:TEMP "modernbbs-go\cache"
-$goModCache = Join-Path $env:TEMP "modernbbs-go\mod"
-$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("modernbbs-two-" + [guid]::NewGuid().ToString("N"))
+$serverExe = Join-Path $runtimeDir "ultimatepr-two-test.exe"
+$goCache = Join-Path $env:TEMP "ultimatepr-go\cache"
+$goModCache = Join-Path $env:TEMP "ultimatepr-go\mod"
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ultimatepr-two-" + [guid]::NewGuid().ToString("N"))
 $processA = $null
 $processB = $null
 
@@ -48,7 +48,7 @@ function Remove-TestDirectory([string]$path) {
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
     $leaf = Split-Path -Leaf $resolved
     if (-not $resolved.StartsWith($tempRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-        -not $leaf.StartsWith("modernbbs-two-", [System.StringComparison]::OrdinalIgnoreCase)) {
+        -not $leaf.StartsWith("ultimatepr-two-", [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Odmowa usuniecia nieoczekiwanego katalogu: $resolved"
     }
     Remove-Item -LiteralPath $resolved -Recurse -Force
@@ -194,7 +194,7 @@ try {
 
     Write-Host ""
     Write-Host "Dwie tymczasowe instancje dzialaja:" -ForegroundColor Green
-    Write-Host "Wersja: ModernBBS 0.4.0-dev | forwarding: B2F/LZHUF" -ForegroundColor Green
+    Write-Host "Wersja: UltimatePR 0.4.0-dev | forwarding: B2F/LZHUF" -ForegroundColor Green
     Write-Host "BBS A: WWW 8080 | NODE 8010 | BBS 8023 | FWD 7300"
     Write-Host "BBS B: WWW 8081 | NODE 8011 | BBS 8024 | FWD 7301"
     Write-Host "Katalog tymczasowy: $testRoot"

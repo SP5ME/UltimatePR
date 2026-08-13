@@ -14,13 +14,13 @@ import (
 	"time"
 
 	wl2k "github.com/la5nta/wl2k-go/fbb"
-	"github.com/packet-radio/modernbbs/internal/language"
+	"github.com/packet-radio/ultimatepr/internal/language"
 )
 
 // This is the classic, uncompressed FBB forwarding protocol used by packet
 // BBS software. B1F/B2F compression can be negotiated later without changing
 // the queue and message store.
-const fbbSID = "[ModernBBS-0.3.0-BF$]"
+const fbbSID = "[UltimatePR-0.4.0-BF$]"
 
 type fbbProposal struct {
 	Kind, From, At, To, BID string
@@ -160,7 +160,7 @@ func sendFBBMessage(w io.Writer, m Message, local string) error {
 		return err
 	}
 	now := time.Now().UTC()
-	rline := fmt.Sprintf("R:%sZ %d@%s ModernBBS", now.Format("060102/1504"), m.ID, stripSSID(local))
+	rline := fmt.Sprintf("R:%sZ %d@%s UltimatePR", now.Format("060102/1504"), m.ID, stripSSID(local))
 	body := strings.ReplaceAll(language.ASCII(m.Body), "\r\n", "\n")
 	body = strings.ReplaceAll(body, "\n", "\r\n")
 	_, err := io.WriteString(w, rline+"\r\n\r\n"+body+"\r\n\x1a\r")

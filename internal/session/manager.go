@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/packet-radio/modernbbs/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 )
 
 type State string

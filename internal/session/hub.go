@@ -3,7 +3,7 @@ package session
 import (
 	"sync"
 
-	"github.com/packet-radio/modernbbs/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 )
 
 // Hub owns independent outgoing AX.25 link state machines sharing one radio.

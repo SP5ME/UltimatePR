@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/packet-radio/modernbbs/internal/bbs"
-	appconfig "github.com/packet-radio/modernbbs/internal/config"
-	"github.com/packet-radio/modernbbs/internal/history"
-	"github.com/packet-radio/modernbbs/internal/mheard"
-	"github.com/packet-radio/modernbbs/internal/monitor"
-	"github.com/packet-radio/modernbbs/internal/session"
-	"github.com/packet-radio/modernbbs/internal/transport"
+	"github.com/packet-radio/ultimatepr/internal/bbs"
+	appconfig "github.com/packet-radio/ultimatepr/internal/config"
+	"github.com/packet-radio/ultimatepr/internal/history"
+	"github.com/packet-radio/ultimatepr/internal/mheard"
+	"github.com/packet-radio/ultimatepr/internal/monitor"
+	"github.com/packet-radio/ultimatepr/internal/session"
+	"github.com/packet-radio/ultimatepr/internal/transport"
 )
 
 //go:embed static/*

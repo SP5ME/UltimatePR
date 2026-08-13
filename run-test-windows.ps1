@@ -8,9 +8,9 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configPath = Join-Path $projectRoot "configs\example.yaml"
 $runtimeDir = Join-Path $projectRoot ".runtime"
-$serverExe = Join-Path $runtimeDir "modernbbs-test.exe"
-$goCache = Join-Path $env:TEMP "modernbbs-go\cache"
-$goModCache = Join-Path $env:TEMP "modernbbs-go\mod"
+$serverExe = Join-Path $runtimeDir "ultimatepr-test.exe"
+$goCache = Join-Path $env:TEMP "ultimatepr-go\cache"
+$goModCache = Join-Path $env:TEMP "ultimatepr-go\mod"
 
 $goExe = Get-Command go.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 if (-not $goExe) {

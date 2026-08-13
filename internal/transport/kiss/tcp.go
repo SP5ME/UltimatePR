@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/packet-radio/modernbbs/internal/transport"
+	"github.com/packet-radio/ultimatepr/internal/transport"
 )
 
 type TCPConfig struct {
