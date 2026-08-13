@@ -39,6 +39,48 @@ func TestExampleConfiguration(t *testing.T) {
 	}
 }
 
+func TestBeaconViaConfiguration(t *testing.T) {
+	raw := []byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+beacon: {enabled: true, port: p1, destination: BEACON, via: "SR5AAA-1, SR5BBB-2", text: hi, interval_minutes: 10}
+node: {enabled: true, alias: SP5ME, listen: 127.0.0.1:8010, language: pl}
+bbs: {enabled: true, listen: 127.0.0.1:8023, forward_listen: 127.0.0.1:8024, database: data/bbs.json, callsign: SP5ME, language: pl, beacon_via: "SR5CCC-3"}
+`)
+	c, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Beacon.Via != "SR5AAA-1, SR5BBB-2" || c.BBS.BeaconVia != "SR5CCC-3" {
+		t.Fatalf("unexpected beacon via fields: %+v %+v", c.Beacon, c.BBS)
+	}
+}
+
+func TestPortEnabledDefaultsAndDisable(t *testing.T) {
+	raw := []byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, channel: 0, max_frame_bytes: 4096, reconnect_seconds: 5}
+  - {id: p2, type: kiss-tcp, enabled: false, max_frame_bytes: 4096, reconnect_seconds: 5}
+`)
+	c, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Ports) != 2 {
+		t.Fatalf("unexpected ports count: %d", len(c.Ports))
+	}
+	if c.Ports[0].Enabled == nil || !*c.Ports[0].Enabled {
+		t.Fatal("enabled port did not default to true")
+	}
+	if c.Ports[1].Enabled == nil || *c.Ports[1].Enabled {
+		t.Fatal("disabled port was not preserved")
+	}
+}
+
 func TestSaveRejectsInvalidWithoutChangingFile(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.yaml")
 	good, err := os.ReadFile("../../configs/example.yaml")

@@ -52,6 +52,7 @@ type Config struct {
 	BBSListen        string
 	BBS              *bbs.Store
 	ConfigPath       string
+	ReconnectPort    func(string) error
 	RequestRestart   func()
 	Version          string
 }
@@ -185,6 +186,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("POST /api/update/apply", s.updateApply)
 	mux.HandleFunc("GET /api/config/model", s.configModelGet)
 	mux.HandleFunc("PUT /api/config/model", s.configModelPut)
+	mux.HandleFunc("POST /api/ports/{id}/reconnect", s.portReconnect)
 
 	h := securityHeaders(s.allowAddresses(s.authenticate(mux)))
 	srv := &http.Server{Addr: s.cfg.Listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
@@ -501,6 +503,23 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+func (s *Server) portReconnect(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.ReconnectPort == nil {
+		http.Error(w, "port reconnect is unavailable", http.StatusNotImplemented)
+		return
+	}
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		http.Error(w, "port id is required", http.StatusBadRequest)
+		return
+	}
+	if err := s.cfg.ReconnectPort(id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize: 4096, WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
@@ -663,7 +682,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						if e.Type == "data" && historyConnected && s.cfg.History != nil {
 							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", string(e.Data))
 						}
-						_ = out.write(serverMessage{Type: e.Type, State: string(e.State), Data: string(e.Data), Error: e.Message})
+						msg := serverMessage{Type: e.Type, State: string(e.State), Data: string(e.Message)}
+						if e.State == session.Disconnected && !historyConnected {
+							msg.Error = string(e.Message)
+						}
+						_ = out.write(msg)
 					}
 				}()
 				go func() {

@@ -30,6 +30,30 @@ func ParseAddress(s string) (Address, error) {
 	}
 	return a, nil
 }
+
+// ParseDigipeaters parses a comma-separated digipeater path.
+// Empty input returns nil, nil.
+func ParseDigipeaters(s string) ([]Address, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	parts := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' '
+	})
+	out := make([]Address, 0, len(parts))
+	for _, part := range parts {
+		a, err := ParseAddress(part)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if len(out) > 8 {
+		return nil, fmt.Errorf("too many digipeaters")
+	}
+	return out, nil
+}
 func (a Address) Validate() error {
 	if len(a.Callsign) < 1 || len(a.Callsign) > 6 || a.SSID > 15 {
 		return fmt.Errorf("invalid AX.25 address")

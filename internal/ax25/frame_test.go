@@ -16,6 +16,26 @@ func TestAddressRoundTrip(t *testing.T) {
 		t.Fatalf("%v %v", got, e)
 	}
 }
+
+func TestParseDigipeaters(t *testing.T) {
+	got, err := ParseDigipeaters("sq5aaa-1, sp5bbb-2 ; sp5ccc-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"SQ5AAA-1", "SP5BBB-2", "SP5CCC-3"}
+	if len(got) != len(want) {
+		t.Fatalf("digipeaters=%v", got)
+	}
+	for i := range want {
+		if got[i].String() != want[i] {
+			t.Fatalf("digipeaters=%v", got)
+		}
+	}
+	if got, err := ParseDigipeaters(" "); err != nil || got != nil {
+		t.Fatalf("empty parse=%v err=%v", got, err)
+	}
+}
+
 func TestFrameTypesRoundTrip(t *testing.T) {
 	pid := byte(0xF0)
 	types := []Type{TypeUI, TypeSABM, TypeUA, TypeDISC, TypeDM, TypeI, TypeRR, TypeRNR, TypeREJ}

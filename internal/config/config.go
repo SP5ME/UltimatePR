@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,6 +31,7 @@ type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
 	Port            string `yaml:"port"`
 	Destination     string `yaml:"destination"`
+	Via             string `yaml:"via,omitempty"`
 	Text            string `yaml:"text"`
 	IntervalMinutes int    `yaml:"interval_minutes"`
 }
@@ -52,6 +54,7 @@ type BBS struct {
 	SSID          uint8         `yaml:"ssid"`
 	Address       string        `yaml:"hierarchical_address"`
 	Language      string        `yaml:"language"`
+	BeaconVia     string        `yaml:"beacon_via,omitempty"`
 	Forwarding    BBSForwarding `yaml:"forwarding"`
 }
 type BBSForwarding struct {
@@ -107,6 +110,7 @@ type NodeService struct {
 type Port struct {
 	ID               string   `yaml:"id"`
 	Type             string   `yaml:"type"`
+	Enabled          *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Host             string   `yaml:"host"`
 	Port             uint16   `yaml:"port"`
 	Channel          uint8    `yaml:"channel"`
@@ -231,6 +235,9 @@ func (c Config) Validate() error {
 			return fmt.Errorf("beacon.destination: %w", err)
 		}
 	}
+	if _, err := ax25.ParseDigipeaters(c.Beacon.Via); err != nil {
+		return fmt.Errorf("beacon.via: %w", err)
+	}
 	if c.Beacon.Enabled && (c.Beacon.Port == "" || strings.TrimSpace(c.Beacon.Text) == "" || c.Beacon.IntervalMinutes < 1) {
 		return fmt.Errorf("beacon: port, text and interval >= 10 seconds are required")
 	}
@@ -238,6 +245,9 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(c.History.Database) == "" || c.History.MaxStations < 1 || c.History.MaxSessionsPerStation < 1 || c.History.MaxLinesPerStation < 1 || c.History.MaxBytes < 1024 || c.History.RetentionDays < 1 {
 			return fmt.Errorf("history: database and positive limits are required")
 		}
+	}
+	if _, err := ax25.ParseDigipeaters(c.BBS.BeaconVia); err != nil {
+		return fmt.Errorf("bbs.beacon_via: %w", err)
 	}
 	_, _, err := net.SplitHostPort(c.Web.Listen)
 	if err != nil {
@@ -267,12 +277,26 @@ func (c Config) Validate() error {
 	}
 	seen := map[string]bool{}
 	for i, p := range c.Ports {
+		if p.Enabled == nil {
+			enabled := true
+			c.Ports[i].Enabled = &enabled
+			p.Enabled = c.Ports[i].Enabled
+		}
 		if p.ID == "" || seen[p.ID] {
 			return fmt.Errorf("ports[%d]: id is empty or duplicated", i)
 		}
 		seen[p.ID] = true
 		if p.Type != "kiss-tcp" && p.Type != "axudp" {
 			return fmt.Errorf("ports[%d]: unsupported type %q", i, p.Type)
+		}
+		if p.MaxFrameBytes < 256 || p.MaxFrameBytes > 65535 {
+			return fmt.Errorf("ports[%d]: max_frame_bytes out of range", i)
+		}
+		if p.Type == "kiss-tcp" && (p.ReconnectSeconds < 1 || p.ReconnectSeconds > 3600) {
+			return fmt.Errorf("ports[%d]: reconnect_seconds out of range", i)
+		}
+		if p.Enabled != nil && !*p.Enabled {
+			continue
 		}
 		if p.Type == "kiss-tcp" && (p.Host == "" || p.Port == 0 || p.Channel > 15) {
 			return fmt.Errorf("ports[%d]: invalid KISS host, port or channel", i)
@@ -284,12 +308,6 @@ func (c Config) Validate() error {
 			if p.RemoteHost == "" || p.RemotePort == 0 {
 				return fmt.Errorf("ports[%d]: AXUDP remote host and port required", i)
 			}
-		}
-		if p.MaxFrameBytes < 256 || p.MaxFrameBytes > 65535 {
-			return fmt.Errorf("ports[%d]: max_frame_bytes out of range", i)
-		}
-		if p.Type == "kiss-tcp" && (p.ReconnectSeconds < 1 || p.ReconnectSeconds > 3600) {
-			return fmt.Errorf("ports[%d]: reconnect_seconds out of range", i)
 		}
 	}
 	if c.Node.Enabled {

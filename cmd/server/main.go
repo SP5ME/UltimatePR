@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -49,6 +50,16 @@ func main() {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
+	stationBeaconVia, err := ax25.ParseDigipeaters(cfg.Beacon.Via)
+	if err != nil {
+		log.Error("station beacon path failed", "error", err)
+		os.Exit(2)
+	}
+	bbsBeaconVia, err := ax25.ParseDigipeaters(cfg.BBS.BeaconVia)
+	if err != nil {
+		log.Error("BBS beacon path failed", "error", err)
+		os.Exit(2)
+	}
 	digiAliases := []ax25.Address{{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}}
 	if cfg.BBS.Enabled {
 		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID})
@@ -67,28 +78,72 @@ func main() {
 	senders := make(map[string]session.Sender, len(cfg.Ports))
 	mon := monitor.New(300)
 	ports := make([]transport.Port, 0, len(cfg.Ports))
-	for _, pc := range cfg.Ports {
-		portIDs = append(portIDs, pc.ID)
-		var p transport.Port
-		if pc.Type == "axudp" {
-			p = axudp.New(axudp.Config{ID: pc.ID, Listen: pc.Listen, RemoteHost: pc.RemoteHost, RemotePort: pc.RemotePort, FCS: pc.FCS, AllowFrom: pc.AllowFrom, MaxFrame: pc.MaxFrameBytes, Queue: 256}, log)
-		} else {
-			p = kiss.NewTCPPort(kiss.TCPConfig{ID: pc.ID, Address: net.JoinHostPort(pc.Host, fmtPort(pc.Port)), Channel: pc.Channel, MaxFrame: pc.MaxFrameBytes, Reconnect: time.Duration(pc.ReconnectSeconds) * time.Second, Queue: 256}, log)
+	type runningPort struct {
+		port    transport.Port
+		enabled bool
+		mu      sync.Mutex
+		cancel  context.CancelFunc
+		done    chan struct{}
+	}
+	startPort := func(r *runningPort) {
+		portCtx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
+		r.cancel = cancel
+		r.done = done
+		go func(p transport.Port, pctx context.Context, done chan struct{}) {
+			defer close(done)
+			if e := p.Run(pctx, rx); e != nil && pctx.Err() == nil {
+				log.Error("port stopped", "port", p.ID(), "error", e)
+			}
+		}(r.port, portCtx, done)
+	}
+	restartPort := func(id string, runtimes map[string]*runningPort) error {
+		r := runtimes[id]
+		if r == nil {
+			return fmt.Errorf("port %q not found", id)
 		}
-		senders[pc.ID] = func(port transport.Port, channel uint8) session.Sender {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if !r.enabled {
+			return fmt.Errorf("port %q is disabled", id)
+		}
+		if r.cancel != nil {
+			r.cancel()
+			if r.done != nil {
+				<-r.done
+			}
+		}
+		startPort(r)
+		return nil
+	}
+	runtimes := make(map[string]*runningPort, len(cfg.Ports))
+	for _, pc := range cfg.Ports {
+		cfgPort := pc
+		portIDs = append(portIDs, cfgPort.ID)
+		enabled := cfgPort.Enabled == nil || *cfgPort.Enabled
+		var p transport.Port
+		if cfgPort.Type == "axudp" {
+			p = axudp.New(axudp.Config{ID: cfgPort.ID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
+		} else {
+			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), Channel: cfgPort.Channel, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256}, log)
+		}
+		runtime := &runningPort{port: p, enabled: enabled}
+		runtimes[cfgPort.ID] = runtime
+		senders[cfgPort.ID] = func(port transport.Port, channel uint8, active bool, id string) session.Sender {
 			return func(ctx context.Context, b []byte) error {
+				if !active {
+					return fmt.Errorf("port %q is disabled", id)
+				}
 				if f, err := ax25.Decode(b); err == nil {
 					mon.Add("TX", port.ID(), f, len(b))
 				}
 				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: channel, Data: b})
 			}
-		}(p, pc.Channel)
+		}(p, cfgPort.Channel, enabled, cfgPort.ID)
 		ports = append(ports, p)
-		go func() {
-			if e := p.Run(ctx, rx); e != nil && ctx.Err() == nil {
-				log.Error("port stopped", "port", p.ID(), "error", e)
-			}
-		}()
+		if enabled {
+			startPort(runtime)
+		}
 	}
 	var nodeRouter *nodecore.Router
 	if cfg.Node.Enabled {
@@ -131,7 +186,7 @@ func main() {
 	if strings.TrimSpace(beaconDestination) == "" {
 		beaconDestination = "BEACON"
 	}
-	sendBeaconFrame := func(sendCtx context.Context, source ax25.Address, text string) error {
+	sendBeaconFrame := func(sendCtx context.Context, source ax25.Address, via []ax25.Address, text string) error {
 		send := senders[beaconPort]
 		if send == nil {
 			return fmt.Errorf("beacon port %q unavailable", beaconPort)
@@ -141,7 +196,7 @@ func main() {
 			return err
 		}
 		pid := byte(0xF0)
-		f := ax25.Frame{Destination: dst, Source: source, Type: ax25.TypeUI, PID: &pid, Payload: []byte(text)}
+		f := ax25.Frame{Destination: dst, Source: source, Digipeaters: via, Type: ax25.TypeUI, PID: &pid, Payload: []byte(text)}
 		b, err := ax25.Encode(f)
 		if err != nil {
 			return err
@@ -150,11 +205,11 @@ func main() {
 	}
 	sendBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
-		return sendBeaconFrame(sendCtx, source, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
+		return sendBeaconFrame(sendCtx, source, stationBeaconVia, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
 	}
 	sendBBSBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}
-		return sendBeaconFrame(sendCtx, source, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
+		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
 	}
 	inbound := session.NewInboundMux(senders, log)
 	web := webui.New(webui.Config{
@@ -189,6 +244,9 @@ func main() {
 			return ""
 		}(),
 		ConfigPath: *path,
+		ReconnectPort: func(id string) error {
+			return restartPort(id, runtimes)
+		},
 		RequestRestart: func() {
 			restartRequested.Store(true)
 			stop()

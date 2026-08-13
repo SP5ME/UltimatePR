@@ -15,6 +15,7 @@ beacon:
   enabled: false
   port: ""
   destination: BEACON
+  via: ""
   text: N0CALL UltimatePR
   interval_minutes: 30
 history:
@@ -35,6 +36,7 @@ bbs:
   ssid: 8
   hierarchical_address: ""
   language: en
+  beacon_via: ""
   forwarding:
     enabled: false
     interval_minutes: 15

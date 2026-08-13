@@ -45,7 +45,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan ax25.Type, 8), ack: make(chan uint8, 8), subs: map[chan Event]struct{}{}, t1: 3 * time.Second, n2: 5, paclen: 128}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan ax25.Type, 8), ack: make(chan uint8, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
 }
 
 func (m *Manager) Subscribe() (<-chan Event, func()) {
@@ -117,7 +117,7 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.vr = 0
 	m.drain()
 	m.mu.Unlock()
-	m.setState(AwaitingConnection, "Wysylanie SABM")
+	m.setState(AwaitingConnection, "0/3")
 	f := m.command(ax25.TypeSABM, true, nil, 0, 0)
 	for attempt := 0; attempt < m.n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
@@ -135,6 +135,7 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 				return errors.New("connection rejected (DM)")
 			}
 		case <-time.After(m.t1):
+			m.setState(AwaitingConnection, fmt.Sprintf("%d/%d", attempt+1, m.n2))
 		case <-ctx.Done():
 			m.setState(Disconnected, "Polaczenie anulowane")
 			return ctx.Err()
