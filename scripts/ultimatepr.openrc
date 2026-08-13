@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+name="UltimatePR"
+description="UltimatePR packet radio station"
+command="/opt/ultimatepr/ultimatepr"
+command_args="-config /etc/ultimatepr/config.yaml"
+command_user="ultimatepr:ultimatepr"
+directory="/var/lib/ultimatepr"
+supervisor="supervise-daemon"
+respawn_delay=3
+respawn_max=0
+output_log="/var/log/ultimatepr.log"
+error_log="/var/log/ultimatepr.log"
+
+depend() { need net; after firewall; }

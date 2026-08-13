@@ -1,0 +1,70 @@
+name: Branch update packages
+
+on:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.25.x', cache: true}
+      - run: go test ./...
+      - run: go vet ./...
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {goarch: amd64, suffix: amd64}
+          - {goarch: arm64, suffix: arm64}
+          - {goarch: arm, goarm: '7', suffix: armv7}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.25.x', cache: true}
+      - name: Build branch package
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: '0'
+        run: |
+          short="${GITHUB_SHA::7}"
+          channel="$GITHUB_REF_NAME"
+          dir="ultimatepr-$channel-linux-${{ matrix.suffix }}"
+          mkdir -p "dist/$dir"
+          go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=$channel-$short" -o "dist/$dir/ultimatepr" ./cmd/server
+          cp README.md LICENSE dist/$dir/
+          cp scripts/install.sh scripts/ultimatepr-update scripts/ultimatepr.service scripts/ultimatepr.openrc dist/$dir/
+          tar -C dist -czf "dist/$dir.tar.gz" "$dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ultimatepr-${{ github.ref_name }}-linux-${{ matrix.suffix }}
+          path: dist/ultimatepr-${{ github.ref_name }}-linux-${{ matrix.suffix }}.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {path: release, merge-multiple: true}
+      - name: Replace branch update release
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          cd release
+          sha256sum *.tar.gz > SHA256SUMS.txt
+          tag="$GITHUB_REF_NAME-latest"
+          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create "$tag" * --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" --title "$GITHUB_REF_NAME-${GITHUB_SHA::7}" --notes "Automatyczny pakiet aktualizacyjny z gałęzi $GITHUB_REF_NAME. Konfiguracja użytkownika nie jest częścią pakietu."

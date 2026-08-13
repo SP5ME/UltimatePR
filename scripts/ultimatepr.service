@@ -1,0 +1,21 @@
+[Unit]
+Description=UltimatePR packet radio station
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ultimatepr
+Group=ultimatepr
+WorkingDirectory=/var/lib/ultimatepr
+ExecStart=/opt/ultimatepr/ultimatepr -config /etc/ultimatepr/config.yaml
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/ultimatepr /var/lib/ultimatepr /opt/ultimatepr
+
+[Install]
+WantedBy=multi-user.target

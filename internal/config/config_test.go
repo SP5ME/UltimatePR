@@ -80,3 +80,42 @@ func TestSaveModelRoundTrip(t *testing.T) {
 		t.Fatal("model changed during save")
 	}
 }
+
+func TestCleanFirstRunModes(t *testing.T) {
+	station := New(ModeStation, "N0CALL", "AA00AA", "Example", "en", 0, 7, 8)
+	if err := station.Validate(); err != nil {
+		t.Fatalf("station config: %v", err)
+	}
+	if station.Node.Enabled || station.BBS.Enabled {
+		t.Fatal("station mode enabled NODE or BBS")
+	}
+	full := New(ModeFull, "N0CALL", "AA00AA", "Example", "en", 0, 7, 8)
+	if err := full.Validate(); err != nil {
+		t.Fatalf("full config: %v", err)
+	}
+	if !full.Node.Enabled || !full.BBS.Enabled {
+		t.Fatal("full mode did not enable NODE and BBS")
+	}
+	full.BBS.Enabled = false
+	if err := full.Validate(); err == nil {
+		t.Fatal("split NODE/BBS mode was accepted")
+	}
+}
+
+func TestInvalidLocatorRejected(t *testing.T) {
+	c := New(ModeStation, "N0CALL", "INVALID", "Example", "en", 0, 7, 8)
+	if err := c.Validate(); err == nil {
+		t.Fatal("invalid locator was accepted")
+	}
+}
+
+func TestStableChannelMigratesToMain(t *testing.T) {
+	raw := []byte("application: {update_channel: stable}\nserver: {callsign: N0CALL}\nterminal: {callsign: N0CALL}\n")
+	c, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Application.UpdateChannel != "main" {
+		t.Fatalf("channel = %q", c.Application.UpdateChannel)
+	}
+}

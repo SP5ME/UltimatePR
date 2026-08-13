@@ -53,6 +53,7 @@ type Config struct {
 	BBS              *bbs.Store
 	ConfigPath       string
 	RequestRestart   func()
+	Version          string
 }
 
 type Server struct {
@@ -170,6 +171,11 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("DELETE /api/bbs/messages/{id}", s.bbsDelete)
 	mux.HandleFunc("GET /api/config", s.configGet)
 	mux.HandleFunc("PUT /api/config", s.configPut)
+	mux.HandleFunc("GET /api/config/backup", s.configBackup)
+	mux.HandleFunc("POST /api/config/restore", s.configRestore)
+	mux.HandleFunc("GET /api/update", s.updateStatus)
+	mux.HandleFunc("PUT /api/update/channel", s.updateChannel)
+	mux.HandleFunc("POST /api/update/apply", s.updateApply)
 	mux.HandleFunc("GET /api/config/model", s.configModelGet)
 	mux.HandleFunc("PUT /api/config/model", s.configModelPut)
 
@@ -328,6 +334,42 @@ func (s *Server) configGet(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	_, _ = w.Write(b)
+}
+func (s *Server) configBackup(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.ConfigPath == "" {
+		http.Error(w, "Configuration unavailable", http.StatusNotFound)
+		return
+	}
+	b, err := os.ReadFile(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="ultimatepr-config-backup.yaml"`)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(b)
+}
+func (s *Server) configRestore(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.ConfigPath == "" {
+		http.Error(w, "Configuration unavailable", http.StatusNotFound)
+		return
+	}
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "Configuration too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	if err = appconfig.Save(s.cfg.ConfigPath, b); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.log.Info("configuration restored", "path", s.cfg.ConfigPath)
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"saved":true,"restart_required":true}`))
+	if s.cfg.RequestRestart != nil {
+		go func() { time.Sleep(250 * time.Millisecond); s.cfg.RequestRestart() }()
+	}
 }
 func (s *Server) configPut(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.ConfigPath == "" {

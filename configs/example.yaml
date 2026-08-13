@@ -1,218 +1,54 @@
-﻿server:
-    callsign: SP5ME
-    ssid: 7
+application:
+  mode: station-node-bbs
+  locator: AA00AA
+  qth: Example
+  language: en
+  update_channel: main
+server: {callsign: N0CALL, ssid: 7}
 web:
-    listen: 0.0.0.0:8080
-    username: admin
-    password_hash: ""
-    allowed_addresses:
-        - 0.0.0.0
-ports:
-    - id: radio-2m
-      type: kiss-tcp
-      host: 127.0.0.1
-      port: 8001
-      channel: 0
-      max_frame_bytes: 4096
-      reconnect_seconds: 5
-      listen: ""
-      remote_host: ""
-      remote_port: 0
-      fcs: false
-      allow_from: []
-terminal:
-    callsign: SP5ME
-    ssid: 0
+  listen: 0.0.0.0:8080
+  username: admin
+  allowed_addresses: [0.0.0.0, "::"]
+ports: []
+terminal: {callsign: N0CALL, ssid: 0}
 beacon:
-    enabled: false
-    port: radio-2m
-    destination: BEACON
-    text: SP5ME UltimatePR
-    interval_minutes: 10
+  enabled: false
+  port: ""
+  destination: BEACON
+  text: N0CALL UltimatePR
+  interval_minutes: 30
 history:
-    enabled: true
-    database: data/history.json
-    max_stations: 100
-    max_sessions_per_station: 10
-    max_lines_per_station: 50
-    max_bytes: 5242880
-    retention_days: 90
+  enabled: true
+  database: data/history.json
+  max_stations: 200
+  max_sessions_per_station: 50
+  max_lines_per_station: 2000
+  max_bytes: 10485760
+  retention_days: 90
 bbs:
-    enabled: true
-    listen: 127.0.0.1:8023
-    forward_listen: 127.0.0.1:7300
-    database: data/bbs.json
-    title: UltimatePR BBS
-    callsign: SP5ME
-    ssid: 8
-    hierarchical_address: SP5ME.#PL.POL.EU
-    language: pl
-    forwarding:
-        enabled: false
-        interval_minutes: 5
-        connect_timeout_seconds: 15
-        session_timeout_seconds: 120
-        max_messages_per_session: 50
-        max_body_bytes: 20000
-        peers:
-            - id: sr5ddd
-              callsign: SR5DDD-8
-              enabled: false
-              transport: telnet
-              host: sr5ddd.example.org
-              port: 7300
-              via_node: ""
-              schedule:
-                - 00:00-23:59
-              private_routes:
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-              bulletin_scopes:
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
-                - SR5DDD
-                - '#PL'
-                - POL
-                - EU
+  enabled: true
+  listen: 127.0.0.1:8023
+  forward_listen: 127.0.0.1:8024
+  database: data/bbs.json
+  title: N0CALL BBS
+  callsign: N0CALL
+  ssid: 8
+  hierarchical_address: ""
+  language: en
+  forwarding:
+    enabled: false
+    interval_minutes: 15
+    connect_timeout_seconds: 15
+    session_timeout_seconds: 120
+    max_messages_per_session: 50
+    max_body_bytes: 131072
+    peers: []
 node:
-    enabled: true
-    alias: SP5ND
-    listen: 127.0.0.1:8010
-    language: pl
-    neighbors:
-        - id: sr5ddd
-          enabled: false
-          callsign: SR5DDD-7
-          port: axudp-sr5ddd
-          quality: 200
-          locked: true
-    routes:
-        - destination: SR5DDD-7
-          via: sr5ddd
-          quality: 200
-          enabled: false
-    services:
-        - name: BBS
-          callsign: SP5ME-8
-          command: BBS
-          enabled: true
+  enabled: true
+  alias: N0CALL
+  listen: 127.0.0.1:8010
+  language: en
+  neighbors: []
+  routes: []
+  services:
+    - {name: BBS, callsign: N0CALL-8, command: BBS, enabled: true}

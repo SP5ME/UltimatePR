@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" -eq 0 ] || { echo "Updater wymaga uprawnień root." >&2; exit 1; }
+CHANNEL=${1:-}
+[ "$CHANNEL" = main ] || [ "$CHANNEL" = dev ] || { echo "Kanał musi być main albo dev." >&2; exit 2; }
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] && [ "${ULTIMATEPR_UPDATE_RUN:-0}" != 1 ]; then
+  systemd-run --unit="ultimatepr-update-$(date +%s)" --collect --setenv=ULTIMATEPR_UPDATE_RUN=1 /usr/local/sbin/ultimatepr-update "$CHANNEL"
+  echo "Aktualizacja została uruchomiona w oddzielnej usłudze systemowej."
+  exit 0
+fi
+case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; armv7l|armv7) ARCH=armv7;; *) echo "Nieobsługiwana architektura." >&2; exit 3;; esac
+TMP=$(mktemp -d /tmp/ultimatepr-update.XXXXXX); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+if command -v curl >/dev/null 2>&1; then GET='curl -fsSL'; else GET='wget -qO-'; fi
+API="https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/$CHANNEL-latest"
+PATTERN="ultimatepr-$CHANNEL-linux-$ARCH.tar.gz"
+JSON=$($GET "$API")
+URL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' | grep "$PATTERN" | head -n 1)
+[ -n "$URL" ] || { echo "Nie znaleziono pakietu aktualizacji dla $ARCH." >&2; exit 4; }
+case "$URL" in https://github.com/SP5ME/UltimatePR/releases/download/*) ;; *) echo "Odrzucono nieprawidłowy adres aktualizacji." >&2; exit 5;; esac
+$GET "$URL" > "$TMP/package.tar.gz"
+SUMURL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*SHA256SUMS.txt\)".*/\1/p' | head -n 1)
+[ -n "$SUMURL" ] || { echo "Brak podpisanej listy sum SHA-256." >&2; exit 6; }
+$GET "$SUMURL" > "$TMP/SHA256SUMS.txt"
+EXPECTED=$(grep " $(basename "$URL")$" "$TMP/SHA256SUMS.txt" | awk '{print $1}')
+ACTUAL=$(sha256sum "$TMP/package.tar.gz" | awk '{print $1}')
+[ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Suma SHA-256 pakietu jest nieprawidłowa." >&2; exit 6; }
+tar -xzf "$TMP/package.tar.gz" -C "$TMP"
+NEW=$(find "$TMP" -type f -name ultimatepr | head -n 1); [ -n "$NEW" ] || exit 7; chmod 0755 "$NEW"
+cp -p /opt/ultimatepr/ultimatepr /var/lib/ultimatepr/backups/ultimatepr.previous
+[ -f /etc/ultimatepr/config.yaml ] && cp -p /etc/ultimatepr/config.yaml "/var/lib/ultimatepr/backups/config-$(date +%Y%m%d-%H%M%S).yaml"
+install -m 0755 "$NEW" /opt/ultimatepr/ultimatepr.new
+mv /opt/ultimatepr/ultimatepr.new /opt/ultimatepr/ultimatepr
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then systemctl restart ultimatepr; sleep 3; systemctl is-active --quiet ultimatepr || { cp /var/lib/ultimatepr/backups/ultimatepr.previous /opt/ultimatepr/ultimatepr; systemctl restart ultimatepr; exit 8; }
+else rc-service ultimatepr restart; sleep 3; rc-service ultimatepr status >/dev/null 2>&1 || { cp /var/lib/ultimatepr/backups/ultimatepr.previous /opt/ultimatepr/ultimatepr; rc-service ultimatepr restart; exit 8; }; fi
+echo "Aktualizacja UltimatePR zakończona."

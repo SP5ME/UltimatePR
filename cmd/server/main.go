@@ -30,13 +30,23 @@ func main() {
 	path := flag.String("config", "config.yaml", "configuration file")
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	cfg, err := config.Load(*path)
+	if os.IsNotExist(err) {
+		if err = webui.RunSetup(ctx, "0.0.0.0:8080", *path, log); err != nil {
+			log.Error("first-run setup failed", "error", err)
+			os.Exit(2)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		cfg, err = config.Load(*path)
+	}
 	if err != nil {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	var restartRequested atomic.Bool
 	rx := make(chan transport.Packet, 256)
 	portIDs := make([]string, 0, len(cfg.Ports))
@@ -153,6 +163,7 @@ func main() {
 			restartRequested.Store(true)
 			stop()
 		},
+		Version: bbs.BuildVersion,
 	}, log)
 	inbound.Register(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
 	if cfg.Beacon.Enabled {

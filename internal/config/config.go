@@ -19,6 +19,13 @@ type Web struct {
 	PasswordHash     string   `yaml:"password_hash,omitempty" json:"-"`
 	AllowedAddresses []string `yaml:"allowed_addresses"`
 }
+type Application struct {
+	Mode          string `yaml:"mode"`
+	Locator       string `yaml:"locator"`
+	QTH           string `yaml:"qth"`
+	Language      string `yaml:"language"`
+	UpdateChannel string `yaml:"update_channel"`
+}
 type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
 	Port            string `yaml:"port"`
@@ -112,14 +119,15 @@ type Port struct {
 	AllowFrom        []string `yaml:"allow_from"`
 }
 type Config struct {
-	Server   Station `yaml:"server"`
-	Web      Web     `yaml:"web"`
-	Ports    []Port  `yaml:"ports"`
-	Terminal Station `yaml:"terminal"`
-	Beacon   Beacon  `yaml:"beacon"`
-	History  History `yaml:"history"`
-	BBS      BBS     `yaml:"bbs"`
-	Node     Node    `yaml:"node"`
+	Application Application `yaml:"application"`
+	Server      Station     `yaml:"server"`
+	Web         Web         `yaml:"web"`
+	Ports       []Port      `yaml:"ports"`
+	Terminal    Station     `yaml:"terminal"`
+	Beacon      Beacon      `yaml:"beacon"`
+	History     History     `yaml:"history"`
+	BBS         BBS         `yaml:"bbs"`
+	Node        Node        `yaml:"node"`
 }
 
 func Load(path string) (Config, error) {
@@ -143,6 +151,22 @@ func Parse(b []byte) (Config, error) {
 }
 
 func (c *Config) applyDefaults() {
+	if strings.TrimSpace(c.Application.Mode) == "" {
+		if c.Node.Enabled || c.BBS.Enabled {
+			c.Application.Mode = "station-node-bbs"
+		} else {
+			c.Application.Mode = "station"
+		}
+	}
+	if !validLanguage(c.Application.Language) {
+		c.Application.Language = "pl"
+	}
+	if strings.TrimSpace(c.Application.UpdateChannel) == "" {
+		c.Application.UpdateChannel = "main"
+	}
+	if c.Application.UpdateChannel == "stable" {
+		c.Application.UpdateChannel = "main"
+	}
 	if strings.TrimSpace(c.Web.Listen) == "" {
 		c.Web.Listen = "0.0.0.0:8080"
 	}
@@ -181,6 +205,21 @@ func SaveModel(path string, c Config) error {
 }
 
 func (c Config) Validate() error {
+	if c.Application.Mode != "station" && c.Application.Mode != "station-node-bbs" {
+		return fmt.Errorf("application.mode must be station or station-node-bbs")
+	}
+	if c.Application.Mode == "station" && (c.Node.Enabled || c.BBS.Enabled) {
+		return fmt.Errorf("station mode cannot enable NODE or BBS")
+	}
+	if c.Application.Mode == "station-node-bbs" && (!c.Node.Enabled || !c.BBS.Enabled) {
+		return fmt.Errorf("station-node-bbs mode requires NODE and BBS together")
+	}
+	if c.Application.UpdateChannel != "main" && c.Application.UpdateChannel != "dev" {
+		return fmt.Errorf("application.update_channel must be main or dev")
+	}
+	if locator := strings.ToUpper(strings.TrimSpace(c.Application.Locator)); locator != "" && !validLocator(locator) {
+		return fmt.Errorf("application.locator: invalid Maidenhead locator")
+	}
 	if err := validStation(c.Server); err != nil {
 		return fmt.Errorf("server: %w", err)
 	}
@@ -313,6 +352,34 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validLocator(v string) bool {
+	v = strings.ToUpper(strings.TrimSpace(v))
+	if len(v) != 4 && len(v) != 6 && len(v) != 8 {
+		return false
+	}
+	for i, r := range v {
+		switch {
+		case i < 2:
+			if r < 'A' || r > 'R' {
+				return false
+			}
+		case i < 4:
+			if r < '0' || r > '9' {
+				return false
+			}
+		case i < 6:
+			if r < 'A' || r > 'X' {
+				return false
+			}
+		default:
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func validLanguage(v string) bool {
