@@ -1,112 +1,224 @@
 # Modern Packet Radio BBS
 
-An independent, clean-room implementation of an AX.25 packet-radio node,
-router and BBS. The current development milestone includes KISS TCP, AXUDP,
-AX.25 modulo-8 sessions, a browser terminal, monitoring, MHEARD and B2F mail
-forwarding.
+[Polski](#polski) | [English](#english)
 
-The production program does not import or require the local `Zródał/`
-reference laboratory. LinBPQ, URONode and pyBBS are used only to understand
-expected user-visible behaviour and interoperability targets.
+## Polski
 
-## Current status
+Modern Packet Radio BBS to niezależna implementacja clean-room węzła, routera
+i skrzynki BBS dla Packet Radio AX.25. Program jest napisany w Go, ma wbudowany
+interfejs WWW i jest dostarczany jako pojedynczy, lekki plik wykonywalny.
 
-The repository currently contains the first protocol foundation (build
-verification is pending installation of the Go toolchain):
+### Najważniejsze funkcje
 
-- YAML configuration model and validation;
-- streaming KISS encoder/decoder with bounds checking;
-- KISS TCP client with reconnect and a shared FIFO TX queue;
-- AX.25 callsign, address and modulo-8 frame encoder/decoder;
-- local Web UI with a real-time dual-mode terminal;
-- working bidirectional Telnet BBS connections from the browser;
-- unit tests and fuzz targets for protocol parsers;
-- incoming AX.25 connections to both the NODE and BBS callsigns;
-- B2F/FBB-compatible forwarding with LZHUF compression;
-- initial clean-room and architecture documentation.
+- porty KISS TCP oraz AXUDP;
+- sesje AX.25 modulo 8;
+- lokalny NODE i trwała skrzynka BBS;
+- połączenia BBS przez Telnet i AX.25;
+- terminal Packet Radio/Telnet w przeglądarce;
+- podgląd ramek, MHEARD i historia połączeń;
+- przekazywanie poczty B2F/FBB z kompresją LZHUF;
+- polska i angielska wersja komunikatów NODE/BBS;
+- konfiguracja w pliku YAML.
 
-The AX.25 link layer is still a development implementation (modulo 8, one
-outstanding I frame). Test it with Direwolf or another KISS TNC before placing
-it on an unattended radio link.
+Program produkcyjny nie korzysta z lokalnego katalogu laboratoryjnego
+`Zródał/`. LinBPQ, URONode i pyBBS służą wyłącznie jako materiały pomocnicze
+do analizy zachowania i zgodności protokołów.
 
-## Build
+### Status projektu
 
-Requires Go 1.24 or newer.
+Warstwa łącza AX.25 jest nadal rozwijana. Obecna implementacja obsługuje
+modulo 8 oraz jedno oczekujące potwierdzenie ramki I. Przed pozostawieniem
+serwera bez nadzoru należy przetestować go z Direwolfem lub innym TNC KISS.
+
+### Wymagania i budowanie
+
+Wymagane jest Go 1.25 lub nowsze.
 
 ```sh
 go mod download
 go test ./...
 go vet ./...
-go build ./...
+go build -o modernbbs ./cmd/server
 ```
 
-## Run
+### Uruchomienie
 
 ```sh
 go run ./cmd/server -config configs/example.yaml
 ```
 
-The example connects to a Direwolf KISS TCP listener on `127.0.0.1:8001` and
-serves the local Web UI on `http://127.0.0.1:8080`.
+Przykładowa konfiguracja łączy się z KISS TCP Direwolfa pod adresem
+`127.0.0.1:8001`. Interfejs WWW jest dostępny pod `http://127.0.0.1:8080`.
 
-## Browser terminal
-
-Open `http://127.0.0.1:8080`, select a mode and provide connection details.
-
-- **Telnet** is operational and provides a bidirectional connection to a BBS
-  reachable by TCP.
-- **TNC / Radio** uses the selected KISS port and a basic modulo-8 AX.25
-  connected-mode session (SABM/UA, I/RR and DISC/UA). The first implementation
-  intentionally uses a one-frame transmit window.
-
-The terminal is a Packet Radio/Telnet client. It never exposes a system shell.
-
-## Safety
-
-Radio and network input is untrusted. Parsers impose explicit size limits.
-The project never exposes a system shell. The Web listener defaults to
-loopback.
-
-## Documentation
-
-- `docs/INSTRUKCJA-PL.txt` — aktualizowana instrukcja polska
-- `docs/USER-MANUAL-EN.txt` — maintained English manual
-- `docs/source-analysis.md`
-- `docs/feature-reference.md`
-- `docs/protocol-sources.md`
-- `docs/architecture.md`
-# Modern Packet BBS
-
-The server currently provides a local web console, KISS TCP/AX.25 terminal and
-a persistent packet BBS service. With the example configuration, connect a
-terminal client to `127.0.0.1:8023` and enter your callsign.
-
-Initial BBS commands: `H`, `L`, `LB`, `R <id>`, `S <call>`, `SB <topic>`,
-`K <id>` and `B`. End message text with `/EX` on its own line.
-
-An incoming AX.25 connection addressed to the configured node callsign opens
-the node command shell. A connection addressed to the configured BBS callsign
-opens the mailbox directly and uses the AX.25 source callsign as the user
-identity. The same services remain available over their configured Telnet
-listeners.
-
-## Windows test start
-
-Double-click `run-test-windows.cmd`, or run from PowerShell:
+Na Windows można także uruchomić:
 
 ```powershell
 .\run-test-windows.ps1 -OpenBrowser -RunTests
 ```
 
-Stop the server with `Ctrl+C`.
+albo dwukrotnie kliknąć `run-test-windows.cmd`. Serwer zatrzymuje się przez
+`Ctrl+C`. Skrypt `run-two-bbs-windows.cmd` uruchamia dwie odizolowane,
+tymczasowe instancje do testów lokalnych.
 
-To start two isolated temporary instances on Windows, run
-`run-two-bbs-windows.cmd`. Ctrl+C stops both instances and removes their
-temporary configurations, databases and logs.
+### Terminal i usługi
 
-## Local node test
+Po otwarciu `http://127.0.0.1:8080` można wybrać tryb połączenia:
 
-The example configuration starts a local node on `127.0.0.1:8010`. Connect
-from the web terminal in Telnet mode and use: `NODES`, `ROUTES`, `PORTS`,
-`SERVICES`, `C BBS` and `BYE`. `C BBS` enters the same persistent BBS and the
-BBS command `B` returns to the node.
+- **Telnet** — dwukierunkowe połączenie TCP z serwerem BBS lub NODE;
+- **TNC / Radio** — połączenie przez wybrany port KISS i AX.25
+  (SABM/UA, I/RR oraz DISC/UA).
+
+Terminal służy wyłącznie do Packet Radio i Telnetu. Nie udostępnia powłoki
+systemowej.
+
+Przykładowa konfiguracja uruchamia:
+
+- interfejs WWW: `127.0.0.1:8080`;
+- NODE: `127.0.0.1:8010`;
+- BBS: `127.0.0.1:8023`;
+- port forwarding BBS: `127.0.0.1:7300`.
+
+Podstawowe komendy NODE: `NODES`, `ROUTES`, `PORTS`, `SERVICES`, `C BBS`
+i `BYE`.
+
+Podstawowe komendy BBS: `H`, `L`, `LB`, `R <id>`, `S <znak>`,
+`SB <temat>`, `K <id>` i `B`. Treść wiadomości kończy się wpisaniem `/EX`
+w osobnym wierszu.
+
+### Bezpieczeństwo
+
+Dane radiowe i sieciowe są traktowane jako niezaufane, a parsery stosują
+limity rozmiaru. Interfejs WWW domyślnie nasłuchuje tylko na adresie lokalnym.
+Przed wystawieniem usług do Internetu należy zastosować zaporę, reverse proxy
+z TLS i odpowiednią kontrolę dostępu.
+
+### GitHub Actions i wydania
+
+Workflow CI uruchamia testy, race detector, `go vet` i kompilację przy każdym
+pushu oraz pull requeście. Utworzenie tagu w formacie `v*`, na przykład
+`v0.4.0`, uruchamia budowanie paczek dla Windows i Linux oraz tworzy GitHub
+Release z sumami SHA-256.
+
+```sh
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+### Dokumentacja
+
+- `docs/INSTRUKCJA-PL.txt` — pełniejsza instrukcja po polsku;
+- `docs/USER-MANUAL-EN.txt` — pełna instrukcja po angielsku;
+- `docs/feature-reference.md` — opis funkcji;
+- `docs/protocol-sources.md` — źródła specyfikacji;
+- `docs/architecture.md` — architektura projektu.
+
+---
+
+## English
+
+Modern Packet Radio BBS is an independent clean-room implementation of an
+AX.25 packet-radio node, router and BBS. It is written in Go, includes an
+embedded Web interface and is distributed as a single lightweight executable.
+
+### Main features
+
+- KISS TCP and AXUDP ports;
+- AX.25 modulo-8 sessions;
+- local NODE and persistent BBS mailbox;
+- BBS connections over Telnet and AX.25;
+- browser-based Packet Radio/Telnet terminal;
+- frame monitor, MHEARD and connection history;
+- B2F/FBB mail forwarding with LZHUF compression;
+- Polish and English NODE/BBS messages;
+- YAML configuration.
+
+The production program does not use the local `Zródał/` reference laboratory.
+LinBPQ, URONode and pyBBS are used only to study expected user-visible
+behaviour and protocol interoperability.
+
+### Project status
+
+The AX.25 link layer is still under development. The current implementation
+uses modulo 8 with one outstanding I frame. Test it with Direwolf or another
+KISS TNC before placing it on an unattended radio link.
+
+### Requirements and build
+
+Go 1.25 or newer is required.
+
+```sh
+go mod download
+go test ./...
+go vet ./...
+go build -o modernbbs ./cmd/server
+```
+
+### Running
+
+```sh
+go run ./cmd/server -config configs/example.yaml
+```
+
+The example configuration connects to a Direwolf KISS TCP listener at
+`127.0.0.1:8001`. The Web interface is served at `http://127.0.0.1:8080`.
+
+On Windows you can also run:
+
+```powershell
+.\run-test-windows.ps1 -OpenBrowser -RunTests
+```
+
+or double-click `run-test-windows.cmd`. Stop the server with `Ctrl+C`.
+`run-two-bbs-windows.cmd` starts two isolated temporary instances for local
+testing.
+
+### Terminal and services
+
+Open `http://127.0.0.1:8080` and select a connection mode:
+
+- **Telnet** — a bidirectional TCP connection to a BBS or NODE;
+- **TNC / Radio** — a connection through the selected KISS port and AX.25
+  (SABM/UA, I/RR and DISC/UA).
+
+The terminal is only a Packet Radio/Telnet client. It never exposes a system
+shell.
+
+The example configuration starts:
+
+- Web interface: `127.0.0.1:8080`;
+- NODE: `127.0.0.1:8010`;
+- BBS: `127.0.0.1:8023`;
+- BBS forwarding port: `127.0.0.1:7300`.
+
+Basic NODE commands are `NODES`, `ROUTES`, `PORTS`, `SERVICES`, `C BBS` and
+`BYE`.
+
+Basic BBS commands are `H`, `L`, `LB`, `R <id>`, `S <call>`, `SB <topic>`,
+`K <id>` and `B`. Finish message text by entering `/EX` on a separate line.
+
+### Security
+
+Radio and network input is treated as untrusted and parsers enforce explicit
+size limits. The Web listener defaults to the loopback interface. Before
+exposing services to the Internet, use a firewall, a TLS reverse proxy and
+appropriate access controls.
+
+### GitHub Actions and releases
+
+The CI workflow runs tests, the race detector, `go vet` and a build on every
+push and pull request. Creating a `v*` tag, for example `v0.4.0`, builds
+Windows and Linux packages and publishes a GitHub Release with SHA-256
+checksums.
+
+```sh
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+### Documentation
+
+- `docs/INSTRUKCJA-PL.txt` — complete Polish manual;
+- `docs/USER-MANUAL-EN.txt` — maintained English manual;
+- `docs/feature-reference.md` — feature reference;
+- `docs/protocol-sources.md` — protocol specification sources;
+- `docs/architecture.md` — project architecture.
