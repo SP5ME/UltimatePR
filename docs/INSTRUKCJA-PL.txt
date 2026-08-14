@@ -5,6 +5,16 @@ dla AMD64, ARM64 i ARMv7 oraz obsługują systemd i OpenRC (Alpine Linux).
 
 INSTALACJA
 
+Najprościej:
+
+   curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+
+Jeśli chcesz kanał `dev`, zamień `main` na `dev` w adresie i ostatnim
+argumencie skryptu. Jeśli jest dostępne `sudo`, instalator użyje go
+automatycznie.
+
+Jeżeli wolisz instalację z pobranej paczki:
+
 1. Pobierz i rozpakuj paczkę dla swojej architektury.
 2. Przejdź do rozpakowanego katalogu.
 3. Jako root wykonaj:

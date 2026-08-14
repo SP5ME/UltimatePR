@@ -5,7 +5,15 @@ and ARMv7 and include systemd and OpenRC (Alpine Linux) service definitions.
 
 INSTALLATION
 
-Download and extract the package for your architecture, then run as root:
+The simplest path is:
+
+  curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+
+Replace `main` with `dev` to install the dev channel.
+If `sudo` is available, the installer will use it automatically.
+
+If you prefer the downloaded release archive, unpack the package for your
+architecture and run as root:
 
   chmod +x install.sh ultimatepr ultimatepr-update ultimatepr.openrc
   ./install.sh

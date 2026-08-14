@@ -47,8 +47,8 @@ jobs:
           mkdir -p "dist/$dir"
           go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=$channel-$short" -o "dist/$dir/ultimatepr" ./cmd/server
           cp README.md LICENSE dist/$dir/
-          cp scripts/install.sh scripts/ultimatepr-update scripts/ultimatepr.service scripts/ultimatepr.openrc dist/$dir/
-          chmod +x "dist/$dir/ultimatepr" "dist/$dir/install.sh" "dist/$dir/ultimatepr-update" "dist/$dir/ultimatepr.openrc"
+          cp install-ultimatepr.sh scripts/install.sh scripts/ultimatepr-update scripts/ultimatepr.service scripts/ultimatepr.openrc dist/$dir/
+          chmod +x "dist/$dir/ultimatepr" "dist/$dir/install-ultimatepr.sh" "dist/$dir/install.sh" "dist/$dir/ultimatepr-update" "dist/$dir/ultimatepr.openrc"
           tar -C dist -czf "dist/$dir.tar.gz" "$dir"
       - uses: actions/upload-artifact@v4
         with:
