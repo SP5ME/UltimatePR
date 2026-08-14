@@ -13,7 +13,7 @@ OpenRC (m.in. Alpine Linux). Najprościej uruchomić bootstrap instalatora z
 repozytorium:
 
 ```sh
-curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+(command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
 Jeśli chcesz kanał `dev`, podmień `main` na `dev` w adresie i ostatnim
@@ -86,7 +86,7 @@ Release packages support Linux AMD64, ARM64 and ARMv7 with systemd or OpenRC.
 The simplest install path is:
 
 ```sh
-curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+(command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
 Replace `main` with `dev` to install the dev channel. If you already unpacked a

@@ -7,7 +7,7 @@ INSTALACJA
 
 Najprościej:
 
-   curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+   (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 
 Jeśli chcesz kanał `dev`, zamień `main` na `dev` w adresie i ostatnim
 argumencie skryptu. Jeśli jest dostępne `sudo`, instalator użyje go

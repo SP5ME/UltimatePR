@@ -7,7 +7,7 @@ INSTALLATION
 
 The simplest path is:
 
-  curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh && sh /tmp/install-ultimatepr.sh
+  (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 
 Replace `main` with `dev` to install the dev channel.
 If `sudo` is available, the installer will use it automatically.
