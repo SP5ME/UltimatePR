@@ -4,7 +4,7 @@ set -eu
 [ "$(id -u)" -eq 0 ] || { echo "Updater wymaga uprawnień root." >&2; exit 1; }
 
 CHANNEL=""
-STATUS_FILE="${ULTIMATEPR_UPDATE_STATUS_FILE:-}"
+STATUS_FILE="${ULTIMATEPR_UPDATE_STATUS_FILE:-/var/lib/ultimatepr/update-job.state}"
 SPAWN_ONLY="0"
 
 while [ "$#" -gt 0 ]; do

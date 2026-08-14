@@ -168,7 +168,7 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Aktualizacja już trwa", http.StatusConflict)
 		return
 	}
-	args := []string{"/usr/local/sbin/ultimatepr-update", "--status-file", updateJobStatusPath, c.Application.UpdateChannel}
+	args := []string{"/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel}
 	cmd := exec.CommandContext(context.Background(), launcher, args...)
 	if err = cmd.Start(); err != nil {
 		http.Error(w, err.Error(), 500)
