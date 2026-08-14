@@ -1,55 +1,165 @@
 #!/bin/sh
 set -eu
+
 [ "$(id -u)" -eq 0 ] || { echo "Updater wymaga uprawnień root." >&2; exit 1; }
-CHANNEL=${1:-}
+
+CHANNEL=""
+STATUS_FILE="${ULTIMATEPR_UPDATE_STATUS_FILE:-}"
+SPAWN_ONLY="0"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --status-file)
+      [ "$#" -ge 2 ] || { echo "Brak wartości dla --status-file." >&2; exit 2; }
+      STATUS_FILE=$2
+      shift 2
+      ;;
+    main|dev)
+      CHANNEL=$1
+      shift
+      break
+      ;;
+    *)
+      echo "Kanał musi być main albo dev." >&2
+      exit 2
+      ;;
+  esac
+done
+
 [ "$CHANNEL" = main ] || [ "$CHANNEL" = dev ] || { echo "Kanał musi być main albo dev." >&2; exit 2; }
+
+status_write() {
+  [ -n "$STATUS_FILE" ] || return 0
+  mkdir -p "$(dirname -- "$STATUS_FILE")" 2>/dev/null || true
+  tmp="${STATUS_FILE}.tmp.$$"
+  status="${1:-running}"
+  message="${2:-}"
+  exit_code="${3:-}"
+  progress="${4:-}"
+  stage="${5:-}"
+  updated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  {
+    printf 'status=%s\n' "$status"
+    printf 'message=%s\n' "$message"
+    printf 'exit_code=%s\n' "$exit_code"
+    printf 'progress=%s\n' "$progress"
+    printf 'stage=%s\n' "$stage"
+    printf 'updated_at=%s\n' "$updated_at"
+  } > "$tmp"
+  mv "$tmp" "$STATUS_FILE"
+  chmod 0644 "$STATUS_FILE" 2>/dev/null || true
+}
+
+cleanup() {
+  [ -n "${TMP:-}" ] && rm -rf "$TMP"
+}
+
+on_exit() {
+  code=$?
+  trap - EXIT HUP INT TERM
+  if [ "$SPAWN_ONLY" = "1" ] && [ "$code" -eq 0 ]; then
+    cleanup
+    exit 0
+  fi
+  if [ "$code" -eq 0 ]; then
+    status_write success "Aktualizacja UltimatePR zakończona." 0 100 completed
+  elif [ -n "$STATUS_FILE" ]; then
+    status_write error "Aktualizacja UltimatePR nie powiodła się." "$code" 98 failed
+  fi
+  cleanup
+  exit "$code"
+}
+
+trap on_exit EXIT HUP INT TERM
+
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] && [ "${ULTIMATEPR_UPDATE_RUN:-0}" != 1 ]; then
-  systemd-run --unit="ultimatepr-update-$(date +%s)" --collect --setenv=ULTIMATEPR_UPDATE_RUN=1 /usr/local/sbin/ultimatepr-update "$CHANNEL"
+  SPAWN_ONLY="1"
+  if [ -n "$STATUS_FILE" ]; then
+    systemd-run --unit="ultimatepr-update-$(date +%s)" --collect --setenv=ULTIMATEPR_UPDATE_RUN=1 --setenv="ULTIMATEPR_UPDATE_STATUS_FILE=$STATUS_FILE" /usr/local/sbin/ultimatepr-update "$CHANNEL"
+  else
+    systemd-run --unit="ultimatepr-update-$(date +%s)" --collect --setenv=ULTIMATEPR_UPDATE_RUN=1 /usr/local/sbin/ultimatepr-update "$CHANNEL"
+  fi
+  status_write running "Aktualizacja uruchomiona w tle." "" 1 queued
   echo "Aktualizacja została uruchomiona w oddzielnej usłudze systemowej."
   exit 0
 fi
-case "$(uname -m)" in x86_64|amd64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; armv7l|armv7) ARCH=armv7;; *) echo "Nieobsługiwana architektura." >&2; exit 3;; esac
-TMP=$(mktemp -d /tmp/ultimatepr-update.XXXXXX); trap 'rm -rf "$TMP"' EXIT HUP INT TERM
-if command -v curl >/dev/null 2>&1; then GET='curl -fsSL'; else GET='wget -qO-'; fi
+
+case "$(uname -m)" in
+  x86_64|amd64) ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+  armv7l|armv7) ARCH=armv7 ;;
+  *) echo "Nieobsługiwana architektura." >&2; exit 3 ;;
+esac
+
+TMP=$(mktemp -d /tmp/ultimatepr-update.XXXXXX)
+trap on_exit EXIT HUP INT TERM
+
+if command -v curl >/dev/null 2>&1; then
+  GET='curl -fsSL'
+else
+  GET='wget -qO-'
+fi
+
 API="https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/$CHANNEL-latest"
 PATTERN="ultimatepr-$CHANNEL-linux-$ARCH.tar.gz"
+
 wait_for_systemd_stop() {
   i=0
   while [ "$i" -lt 15 ]; do
     systemctl is-active --quiet ultimatepr || return 0
     sleep 1
-    i=$((i+1))
+    i=$((i + 1))
   done
   return 1
 }
+
 wait_for_openrc_stop() {
   i=0
   while [ "$i" -lt 15 ]; do
     rc-service ultimatepr status >/dev/null 2>&1 || return 0
     sleep 1
-    i=$((i+1))
+    i=$((i + 1))
   done
   return 1
 }
+
+status_write running "Sprawdzanie dostępnej aktualizacji." "" 5 checking
 JSON=$($GET "$API")
 URL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' | grep "$PATTERN" | head -n 1)
 [ -n "$URL" ] || { echo "Nie znaleziono pakietu aktualizacji dla $ARCH." >&2; exit 4; }
-case "$URL" in https://github.com/SP5ME/UltimatePR/releases/download/*) ;; *) echo "Odrzucono nieprawidłowy adres aktualizacji." >&2; exit 5;; esac
+case "$URL" in
+  https://github.com/SP5ME/UltimatePR/releases/download/*) ;;
+  *) echo "Odrzucono nieprawidłowy adres aktualizacji." >&2; exit 5 ;;
+esac
+
+status_write running "Pobieranie pakietu aktualizacji." "" 10 downloading
 $GET "$URL" > "$TMP/package.tar.gz"
 SUMURL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*SHA256SUMS.txt\)".*/\1/p' | head -n 1)
 [ -n "$SUMURL" ] || { echo "Brak podpisanej listy sum SHA-256." >&2; exit 6; }
+
+status_write running "Sprawdzanie podpisu pakietu." "" 20 verifying
 $GET "$SUMURL" > "$TMP/SHA256SUMS.txt"
 EXPECTED=$(grep " $(basename "$URL")$" "$TMP/SHA256SUMS.txt" | awk '{print $1}')
 ACTUAL=$(sha256sum "$TMP/package.tar.gz" | awk '{print $1}')
 [ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Suma SHA-256 pakietu jest nieprawidłowa." >&2; exit 6; }
+
+status_write running "Rozpakowywanie aktualizacji." "" 30 unpacking
 tar -xzf "$TMP/package.tar.gz" -C "$TMP"
-NEW=$(find "$TMP" -type f -name ultimatepr | head -n 1); [ -n "$NEW" ] || exit 7; chmod 0755 "$NEW"
+NEW=$(find "$TMP" -type f -name ultimatepr | head -n 1)
+[ -n "$NEW" ] || exit 7
+chmod 0755 "$NEW"
+
+status_write running "Tworzenie kopii poprzedniej wersji." "" 45 backing-up
 cp -p /opt/ultimatepr/ultimatepr /var/lib/ultimatepr/backups/ultimatepr.previous
 [ -f /etc/ultimatepr/config.yaml ] && cp -p /etc/ultimatepr/config.yaml "/var/lib/ultimatepr/backups/config-$(date +%Y%m%d-%H%M%S).yaml"
+
+status_write running "Instalowanie nowej wersji." "" 60 replacing
 install -m 0755 "$NEW" /opt/ultimatepr/ultimatepr.new
 mv /opt/ultimatepr/ultimatepr.new /opt/ultimatepr/ultimatepr
+
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   [ -f "$TMP/ultimatepr.service" ] && install -m 0644 "$TMP/ultimatepr.service" /etc/systemd/system/ultimatepr.service
+  status_write running "Restartowanie usługi systemd." "" 80 restarting-web
   systemctl daemon-reload
   systemctl stop ultimatepr || true
   wait_for_systemd_stop || true
@@ -59,7 +169,7 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   while [ "$i" -lt 15 ]; do
     systemctl is-active --quiet ultimatepr && break
     sleep 1
-    i=$((i+1))
+    i=$((i + 1))
   done
   if ! systemctl is-active --quiet ultimatepr; then
     cp /var/lib/ultimatepr/backups/ultimatepr.previous /opt/ultimatepr/ultimatepr
@@ -71,12 +181,13 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     while [ "$i" -lt 15 ]; do
       systemctl is-active --quiet ultimatepr && break
       sleep 1
-      i=$((i+1))
+      i=$((i + 1))
     done
     systemctl is-active --quiet ultimatepr || exit 8
   fi
 else
   [ -f "$TMP/ultimatepr.openrc" ] && install -m 0755 "$TMP/ultimatepr.openrc" /etc/init.d/ultimatepr
+  status_write running "Restartowanie usługi OpenRC." "" 80 restarting-services
   rc-service ultimatepr stop || true
   wait_for_openrc_stop || true
   rc-service ultimatepr start
@@ -84,7 +195,7 @@ else
   while [ "$i" -lt 15 ]; do
     rc-service ultimatepr status >/dev/null 2>&1 && break
     sleep 1
-    i=$((i+1))
+    i=$((i + 1))
   done
   if ! rc-service ultimatepr status >/dev/null 2>&1; then
     cp /var/lib/ultimatepr/backups/ultimatepr.previous /opt/ultimatepr/ultimatepr
@@ -95,9 +206,11 @@ else
     while [ "$i" -lt 15 ]; do
       rc-service ultimatepr status >/dev/null 2>&1 && break
       sleep 1
-      i=$((i+1))
+      i=$((i + 1))
     done
     rc-service ultimatepr status >/dev/null 2>&1 || exit 8
   fi
 fi
+
+status_write success "Aktualizacja UltimatePR zakończona." 0 100 completed
 echo "Aktualizacja UltimatePR zakończona."

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,8 +19,52 @@ type githubRelease struct {
 	Name    string `json:"name"`
 }
 
+const updateJobStatusPath = "/var/lib/ultimatepr/update-job.state"
+
+type updateJobStatus struct {
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+	Stage     string `json:"stage"`
+	Progress  string `json:"progress"`
+	ExitCode  string `json:"exit_code"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 func branchReleaseEndpoint(channel string) string {
 	return "https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/" + channel + "-latest"
+}
+
+func loadUpdateJobStatus() updateJobStatus {
+	b, err := os.ReadFile(updateJobStatusPath)
+	if err != nil {
+		return updateJobStatus{Status: "idle"}
+	}
+	state := updateJobStatus{Status: "idle"}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "=") {
+			continue
+		}
+		key, value, _ := strings.Cut(line, "=")
+		switch strings.TrimSpace(key) {
+		case "status":
+			state.Status = strings.TrimSpace(value)
+		case "message":
+			state.Message = strings.TrimSpace(value)
+		case "stage":
+			state.Stage = strings.TrimSpace(value)
+		case "progress":
+			state.Progress = strings.TrimSpace(value)
+		case "exit_code":
+			state.ExitCode = strings.TrimSpace(value)
+		case "updated_at":
+			state.UpdatedAt = strings.TrimSpace(value)
+		}
+	}
+	if state.Status == "" {
+		state.Status = "idle"
+	}
+	return state
 }
 
 func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
@@ -117,12 +163,24 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	cmd := exec.CommandContext(r.Context(), launcher, "/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		http.Error(w, strings.TrimSpace(string(out))+": "+err.Error(), 500)
+	state := loadUpdateJobStatus()
+	if state.Status == "running" || state.Status == "queued" {
+		http.Error(w, "Aktualizacja już trwa", http.StatusConflict)
 		return
 	}
+	args := []string{"/usr/local/sbin/ultimatepr-update", "--status-file", updateJobStatusPath, c.Application.UpdateChannel}
+	cmd := exec.CommandContext(context.Background(), launcher, args...)
+	if err = cmd.Start(); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	go func() { _ = cmd.Wait() }()
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"started": true, "message": strings.TrimSpace(string(out))})
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{"started": true, "status_path": filepath.Base(updateJobStatusPath)})
+}
+
+func (s *Server) updateJobStatus(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(loadUpdateJobStatus())
 }

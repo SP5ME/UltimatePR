@@ -182,6 +182,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/config/backup", s.configBackup)
 	mux.HandleFunc("POST /api/config/restore", s.configRestore)
 	mux.HandleFunc("GET /api/update", s.updateStatus)
+	mux.HandleFunc("GET /api/update/status", s.updateJobStatus)
 	mux.HandleFunc("PUT /api/update/channel", s.updateChannel)
 	mux.HandleFunc("POST /api/update/apply", s.updateApply)
 	mux.HandleFunc("GET /api/config/model", s.configModelGet)
