@@ -1,6 +1,6 @@
 ﻿<!doctype html>
 <html lang="pl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UltimatePR</title><link rel="stylesheet" href="/app.css?v=6"><link rel="stylesheet" href="/bbs.css?v=9"><link rel="stylesheet" href="/readability.css?v=3"><link rel="stylesheet" href="/theme.css?v=4"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UltimatePR</title><link rel="stylesheet" href="/app.css?v=6"><link rel="stylesheet" href="/bbs.css?v=10"><link rel="stylesheet" href="/readability.css?v=3"><link rel="stylesheet" href="/theme.css?v=4"></head>
 <body>
 <header><div><span class="eyebrow">THE ULTIMATE PACKET RADIO STATION</span><h1>UltimatePR</h1></div><div class="system-status"><div id="serviceStatus" class="service-status"></div><div id="connectionStatus" class="connection-status"></div><small id="uptime">uruchamianie…</small><span id="nodeCall" hidden>—</span></div></header>
 <nav><button id="navTerminal" class="active">Terminal</button><button id="sendBeacon">Beacon</button><button id="navMonitor">Monitor</button><span class="nav-spacer"></span><button id="themeToggle" title="Zmień jasny lub ciemny motyw">Motyw: ciemny</button><button id="soundToggle" title="Powiadomienia dźwiękowe terminala">Dźwięk: WŁ.</button><button id="navConfig">Konfiguracja</button><button id="logout">Wyloguj</button></nav>
@@ -15,7 +15,7 @@
 <section id="configView" class="config-view" hidden>
   <div class="config-head"><div><span class="eyebrow">KONFIGURACJA SERWERA</span><h2>Stacja, NODE, BBS i TNC</h2><p>Konfiguracja jest zapisywana po sprawdzeniu wszystkich pól.</p></div><div><button id="reloadConfig" class="secondary">Cofnij zmiany</button><button id="saveConfig" class="primary">Sprawdź i zapisz</button></div></div>
   <div id="configNotice" class="config-notice">Zmiany wymagają ponownego uruchomienia serwera.</div>
-  <div class="config-tabs"><button id="configStationTab" class="active">Stacja</button><button id="configBBSTab">BBS</button><button id="configNodeTab">NODE</button><button id="configTNCTab">TNC / Radio</button><button id="configApplicationTab">Aplikacja</button></div>
+  <div class="config-tabs"><button id="configStationTab" class="active">Stacja</button><button id="configBBSTab" hidden>BBS</button><button id="configNodeTab" hidden>NODE</button><button id="configTNCTab">TNC / Radio</button><button id="configApplicationTab">Aplikacja</button></div>
   <div id="stationConfigPanel" class="settings-panel">
     <div class="settings-card"><h3>Stacja operatora</h3><p>Dane stacji używane przez terminal, DIGI oraz automatyczny beacon AX.25.</p><div class="field-grid"><label>Znak terminala<input id="terminalCallsign" maxlength="6"></label><label>SSID terminala<input id="terminalSSID" type="number" min="0" max="15"></label><label>Lokator (opcjonalnie)<input id="applicationLocator" placeholder="KO02AB"></label><label>QTH (opcjonalnie)<input id="applicationQTH"></label></div></div>
     <div class="settings-card"><h3>Beacon stacji</h3><p>Gdy beacon stacji jest włączony, jest wysyłany automatycznie co 10 minut, gdy strona UltimatePR jest otwarta. Używa znaku stacji operatora i danych stacji.</p><div class="field-grid"><label>VIA / DIGI<input id="beaconVia" placeholder="SR5XYZ-1, SR5ABC-2"></label></div></div>
@@ -63,4 +63,4 @@
   </div>
 </div>
 <footer><span>LOCAL WEB UI</span><span>BBS + KISS + AX.25</span><span id="terminalCall">TERMINAL —</span></footer>
-<script src="/app.js?v=36"></script></body></html>
+<script src="/app.js?v=37"></script></body></html>
