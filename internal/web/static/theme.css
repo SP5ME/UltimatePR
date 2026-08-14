@@ -45,6 +45,11 @@
 [data-theme="light"] .session-tab { border-color: #9cad9e; background: #f5f8f5; color: #405247; }
 [data-theme="light"] .session-tab.active { border-color: #267d45; background: #dcefe2; color: #153d24; }
 [data-theme="light"] .session-close { border-color: #9cad9e; color: #263b2d; }
+[data-theme="light"] .update-progress-backdrop { background: rgba(232, 238, 233, .68); }
+[data-theme="light"] .update-progress-modal { background: linear-gradient(145deg, #fff, #f4f8f4); box-shadow: 0 18px 40px rgba(36, 59, 41, .18); }
+[data-theme="light"] .update-progress-header p,
+[data-theme="light"] .update-progress-summary span { color: var(--muted); }
+[data-theme="light"] .update-progress-track { background: #edf3ee; }
 
 .settings-card { max-width: 1180px; width: 100%; margin-inline: auto; padding: 24px; border-radius: 10px; }
 .settings-card h3 { font-size: 17px; }

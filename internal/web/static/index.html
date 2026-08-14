@@ -42,5 +42,25 @@
     <div class="settings-card"><h3>Zmiana hasła</h3><p>Po zmianie hasła nastąpi wylogowanie. Hasło musi mieć co najmniej 4 znaki.</p><div class="field-grid"><label>Obecne hasło<input id="currentPassword" type="password" autocomplete="current-password"></label><label>Nowe hasło<input id="newPassword" type="password" minlength="4" autocomplete="new-password"></label><label>Powtórz nowe hasło<input id="confirmPassword" type="password" minlength="4" autocomplete="new-password"></label></div><button id="changePassword" class="secondary">Zmień hasło</button><div id="passwordNotice" class="config-notice"></div></div>
   </div>
 </section>
+<div id="updateProgressBackdrop" class="update-progress-backdrop" hidden>
+  <div class="update-progress-modal" role="status" aria-live="polite" aria-busy="true">
+    <div class="update-progress-header">
+      <span class="update-progress-spinner" aria-hidden="true"></span>
+      <div>
+        <h3 id="updateProgressTitle">Aktualizacja aplikacji</h3>
+        <p id="updateProgressStage">Oczekiwanie na uruchomienie…</p>
+      </div>
+    </div>
+    <div class="update-progress-body">
+      <div class="update-progress-summary">
+        <strong id="updateProgressPercent">0%</strong>
+        <span id="updateProgressMessage">Trwa przygotowanie aktualizacji.</span>
+      </div>
+      <div class="update-progress-track" aria-hidden="true">
+        <span id="updateProgressBar"></span>
+      </div>
+    </div>
+  </div>
+</div>
 <footer><span>LOCAL WEB UI</span><span>BBS + KISS + AX.25</span><span id="terminalCall">TERMINAL —</span></footer>
-<script src="/app.js?v=34"></script></body></html>
+<script src="/app.js?v=35"></script></body></html>
