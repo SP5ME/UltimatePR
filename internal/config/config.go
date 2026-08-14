@@ -374,25 +374,21 @@ func (c Config) Validate() error {
 
 func validLocator(v string) bool {
 	v = strings.ToUpper(strings.TrimSpace(v))
-	if len(v) != 4 && len(v) != 6 && len(v) != 8 {
+	if len(v) != 6 {
 		return false
 	}
 	for i, r := range v {
 		switch {
 		case i < 2:
-			if r < 'A' || r > 'R' {
+			if r < 'A' || r > 'Z' {
 				return false
 			}
 		case i < 4:
 			if r < '0' || r > '9' {
 				return false
 			}
-		case i < 6:
-			if r < 'A' || r > 'X' {
-				return false
-			}
 		default:
-			if r < '0' || r > '9' {
+			if r < 'A' || r > 'Z' {
 				return false
 			}
 		}

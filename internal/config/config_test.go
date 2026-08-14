@@ -145,9 +145,20 @@ func TestCleanFirstRunModes(t *testing.T) {
 }
 
 func TestInvalidLocatorRejected(t *testing.T) {
-	c := New(ModeStation, "N0CALL", "INVALID", "Example", "en", 0, 7, 8)
-	if err := c.Validate(); err == nil {
-		t.Fatal("invalid locator was accepted")
+	for _, locator := range []string{"INVALID", "AA00AA00", "KO02A", "KO02A1", "KO02JD1"} {
+		c := New(ModeStation, "N0CALL", locator, "Example", "en", 0, 7, 8)
+		if err := c.Validate(); err == nil {
+			t.Fatalf("invalid locator %q was accepted", locator)
+		}
+	}
+}
+
+func TestValidLocatorAccepted(t *testing.T) {
+	for _, locator := range []string{"KO02JD", "ko02mg"} {
+		c := New(ModeStation, "N0CALL", locator, "Example", "en", 0, 7, 8)
+		if err := c.Validate(); err != nil {
+			t.Fatalf("valid locator %q was rejected: %v", locator, err)
+		}
 	}
 }
 
