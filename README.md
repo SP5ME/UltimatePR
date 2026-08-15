@@ -9,15 +9,15 @@ pakietem NODE + BBS. NODE i BBS są jednym trybem — nie uruchamia się ich oso
 ## Instalacja wydania na Linuxie
 
 Obsługiwane są Linux AMD64, ARM64 i ARMv7 oraz autostart przez systemd lub
-OpenRC (m.in. Alpine Linux). Najprościej uruchomić bootstrap instalatora z
-repozytorium:
+OpenRC (m.in. Alpine Linux). Domyślnym kanałem instalacji jest `main`:
 
 ```sh
 (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
-Jeśli chcesz kanał `dev`, podmień `main` na `dev` w adresie i ostatnim
-argumencie skryptu. Gdy masz `sudo`, instalator użyje go automatycznie.
+Opcjonalnie możesz użyć kanału `dev`, podmieniając `main` na `dev` w adresie i
+ostatnim argumencie skryptu. Gdy masz `sudo`, instalator użyje go
+automatycznie.
 
 Jeżeli wolisz zainstalować z pobranej paczki, rozpakuj archiwum właściwe dla
 architektury i jako root uruchom:
@@ -83,15 +83,15 @@ AXUDP, frame monitor, MHEARD, history and beacon. It has two operating modes:
 station only, or station with NODE and BBS enabled together.
 
 Release packages support Linux AMD64, ARM64 and ARMv7 with systemd or OpenRC.
-The simplest install path is:
+The default install channel is `main`:
 
 ```sh
 (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
-Replace `main` with `dev` to install the dev channel. If you already unpacked a
-release archive, run `./install.sh` as root instead. If `sudo` is available,
-the installer will use it automatically. Then open
+Optionally replace `main` with `dev` to install the dev channel. If you already
+unpacked a release archive, run `./install.sh` as root instead. If `sudo` is
+available, the installer will use it automatically. Then open
 `http://SERVER_ADDRESS:8080`. The first-run
 wizard can create a clean configuration or import a configuration-only YAML
 backup. Stable and rolling dev updates preserve configuration and data and
