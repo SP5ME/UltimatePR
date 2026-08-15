@@ -67,6 +67,45 @@ func loadUpdateJobStatus() updateJobStatus {
 	return state
 }
 
+func writeUpdateJobStatus(state updateJobStatus) error {
+	dir := filepath.Dir(updateJobStatusPath)
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		return err
+	}
+	tmp := updateJobStatusPath + ".tmp"
+	b := strings.Builder{}
+	writeLine := func(key, value string) {
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(value)
+		b.WriteByte('\n')
+	}
+	writeLine("status", state.Status)
+	writeLine("message", state.Message)
+	writeLine("exit_code", state.ExitCode)
+	writeLine("progress", state.Progress)
+	writeLine("stage", state.Stage)
+	writeLine("updated_at", time.Now().UTC().Format(time.RFC3339))
+	if err := os.WriteFile(tmp, []byte(b.String()), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, updateJobStatusPath)
+}
+
+func updateJobIsFresh(state updateJobStatus, since time.Time) bool {
+	if state.Status == "" || state.Status == "idle" {
+		return false
+	}
+	if state.UpdatedAt == "" {
+		return true
+	}
+	t, err := time.Parse(time.RFC3339, state.UpdatedAt)
+	if err != nil {
+		return true
+	}
+	return !t.Before(since)
+}
+
 func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 	c, err := appconfig.Load(s.cfg.ConfigPath)
 	if err != nil {
@@ -175,6 +214,25 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go func() { _ = cmd.Wait() }()
+	started := false
+	startedAt := time.Now()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		state := loadUpdateJobStatus()
+		if updateJobIsFresh(state, startedAt) {
+			started = true
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !started {
+		if err := writeUpdateJobStatus(updateJobStatus{Status: "error", Message: "Aktualizacja nie wystartowała.", ExitCode: "1", Progress: "0", Stage: "start-failed"}); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		http.Error(w, "Aktualizacja nie wystartowała", http.StatusGatewayTimeout)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{"started": true, "status_path": filepath.Base(updateJobStatusPath)})
