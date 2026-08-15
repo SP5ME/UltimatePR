@@ -6,16 +6,48 @@ SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 [ -x "$SOURCE_DIR/ultimatepr" ] || { echo "Brak pliku ultimatepr obok instalatora." >&2; exit 1; }
 [ -f "$SOURCE_DIR/ultimatepr-update" ] || { echo "Brak pliku ultimatepr-update obok instalatora." >&2; exit 1; }
 
-if ! grep -q '^ultimatepr:' /etc/group 2>/dev/null; then
-  if command -v addgroup >/dev/null 2>&1; then addgroup -S ultimatepr 2>/dev/null || addgroup --system ultimatepr
-  else groupadd --system ultimatepr; fi
-fi
-if ! id ultimatepr >/dev/null 2>&1; then
-  if command -v adduser >/dev/null 2>&1; then adduser -S -D -H -s /sbin/nologin -G ultimatepr ultimatepr 2>/dev/null || adduser --system --no-create-home --shell /usr/sbin/nologin --ingroup ultimatepr ultimatepr
-  else useradd --system --no-create-home --shell /usr/sbin/nologin --gid ultimatepr ultimatepr; fi
-elif ! id -Gn ultimatepr | tr ' ' '\n' | grep -qx ultimatepr; then
-  if command -v addgroup >/dev/null 2>&1; then addgroup ultimatepr ultimatepr
-  else usermod -a -G ultimatepr ultimatepr; fi
+ensure_group() {
+  if getent group ultimatepr >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v groupadd >/dev/null 2>&1; then
+    groupadd --system ultimatepr && return 0
+  fi
+  if command -v addgroup >/dev/null 2>&1; then
+    if addgroup --help 2>&1 | grep -q -- '--system'; then
+      addgroup --system ultimatepr && return 0
+    fi
+    addgroup -S ultimatepr && return 0
+  fi
+  echo "Nie udało się utworzyć grupy ultimatepr." >&2
+  exit 1
+}
+
+ensure_user() {
+  if id ultimatepr >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v useradd >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin --gid ultimatepr ultimatepr && return 0
+  fi
+  if command -v adduser >/dev/null 2>&1; then
+    if adduser --help 2>&1 | grep -q -- '--system'; then
+      adduser --system --no-create-home --shell /usr/sbin/nologin --ingroup ultimatepr ultimatepr && return 0
+    fi
+    adduser -S -D -H -s /sbin/nologin -G ultimatepr ultimatepr && return 0
+  fi
+  echo "Nie udało się utworzyć użytkownika ultimatepr." >&2
+  exit 1
+}
+
+ensure_group
+ensure_user
+if ! id -Gn ultimatepr 2>/dev/null | tr ' ' '\n' | grep -qx ultimatepr; then
+  if command -v usermod >/dev/null 2>&1; then
+    usermod -a -G ultimatepr ultimatepr
+  elif command -v addgroup >/dev/null 2>&1; then
+    addgroup ultimatepr ultimatepr
+  fi
 fi
 install -d -m 0755 /opt/ultimatepr /etc/ultimatepr /usr/local /usr/local/sbin
 install -d -m 0750 -o ultimatepr -g ultimatepr /var/lib/ultimatepr /var/lib/ultimatepr/backups
