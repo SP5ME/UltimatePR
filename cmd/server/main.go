@@ -238,7 +238,9 @@ func main() {
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {
-				result = append(result, p.Status())
+				st := p.Status()
+				st.Enabled = runtimes[p.ID()].enabled
+				result = append(result, st)
 			}
 			return result
 		},
