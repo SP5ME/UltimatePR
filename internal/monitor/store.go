@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ type Entry struct {
 	Destination string    `json:"destination"`
 	Type        string    `json:"type"`
 	Bytes       int       `json:"bytes"`
+	Raw         string    `json:"raw"`
 }
 type Store struct {
 	mu    sync.Mutex
@@ -29,9 +31,13 @@ func New(n int) *Store {
 	return &Store{limit: n}
 }
 func (s *Store) Add(direction, port string, f ax25.Frame, n int) {
+	raw := ""
+	if b, err := ax25.Encode(f); err == nil {
+		raw = fmt.Sprintf("% X", b)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items = append(s.items, Entry{time.Now(), direction, port, f.Source.String(), f.Destination.String(), typeName(f.Type), n})
+	s.items = append(s.items, Entry{Time: time.Now(), Direction: direction, Port: port, Source: f.Source.String(), Destination: f.Destination.String(), Type: typeName(f.Type), Bytes: n, Raw: raw})
 	if len(s.items) > s.limit {
 		s.items = s.items[len(s.items)-s.limit:]
 	}

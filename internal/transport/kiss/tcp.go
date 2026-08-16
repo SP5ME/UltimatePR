@@ -96,7 +96,7 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 			fs, es := d.Feed(b[:n])
 			p.stats.DecodeErrors.Add(uint64(len(es)))
 			for _, f := range fs {
-				if f.Command != 0 || f.Port != p.cfg.Channel {
+				if !acceptFrame(f, p.cfg.Channel) {
 					continue
 				}
 				p.stats.RXFrames.Add(1)
@@ -114,6 +114,13 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 			return
 		}
 	}
+}
+
+func acceptFrame(f Frame, channel uint8) bool {
+	if f.Command != 0 {
+		return false
+	}
+	return f.Port == 0 || f.Port == channel
 }
 func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error) {
 	for {
