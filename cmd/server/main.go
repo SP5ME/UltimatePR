@@ -135,11 +135,11 @@ func main() {
 		if cfgPort.Type == "axudp" {
 			p = axudp.New(axudp.Config{ID: cfgPort.ID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
 		} else {
-			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), Channel: cfgPort.Channel, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256}, log)
+			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256}, log)
 		}
 		runtime := &runningPort{port: p, enabled: enabled}
 		runtimes[cfgPort.ID] = runtime
-		senders[cfgPort.ID] = func(port transport.Port, channel uint8, active bool, id string) session.Sender {
+		senders[cfgPort.ID] = func(port transport.Port, active bool, id string) session.Sender {
 			return func(ctx context.Context, b []byte) error {
 				if !active {
 					return fmt.Errorf("port %q is disabled", id)
@@ -147,9 +147,9 @@ func main() {
 				if f, err := ax25.Decode(b); err == nil {
 					mon.Add("TX", port.ID(), f, len(b))
 				}
-				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: channel, Data: b})
+				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: 0, Data: b})
 			}
-		}(p, cfgPort.Channel, enabled, cfgPort.ID)
+		}(p, enabled, cfgPort.ID)
 		ports = append(ports, p)
 		if enabled {
 			startPort(runtime)
@@ -188,19 +188,11 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	beaconPort := cfg.Beacon.Port
-	if beaconPort == "" && len(portIDs) > 0 {
-		beaconPort = portIDs[0]
-	}
 	beaconDestination := cfg.Beacon.Destination
 	if strings.TrimSpace(beaconDestination) == "" {
 		beaconDestination = "BEACON"
 	}
 	sendBeaconFrame := func(sendCtx context.Context, source ax25.Address, via []ax25.Address, text string) error {
-		send := senders[beaconPort]
-		if send == nil {
-			return fmt.Errorf("beacon port %q unavailable", beaconPort)
-		}
 		dst, err := ax25.ParseAddress(beaconDestination)
 		if err != nil {
 			return err
@@ -211,7 +203,33 @@ func main() {
 		if err != nil {
 			return err
 		}
-		return send(sendCtx, b)
+		sent := 0
+		failed := make([]string, 0)
+		for _, port := range ports {
+			runtime := runtimes[port.ID()]
+			if runtime == nil || !runtime.enabled || !port.Status().Connected {
+				continue
+			}
+			send := senders[port.ID()]
+			if send == nil {
+				continue
+			}
+			if err := send(sendCtx, b); err != nil {
+				failed = append(failed, port.ID()+": "+err.Error())
+				continue
+			}
+			sent++
+		}
+		if sent == 0 {
+			if len(failed) > 0 {
+				return fmt.Errorf("beacon failed on active TNC ports: %s", strings.Join(failed, "; "))
+			}
+			return fmt.Errorf("no active TNC ports available for beacon")
+		}
+		if len(failed) > 0 {
+			log.Warn("beacon failed on some active TNC ports", "errors", strings.Join(failed, "; "), "sent", sent)
+		}
+		return nil
 	}
 	sendBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}

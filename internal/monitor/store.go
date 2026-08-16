@@ -16,6 +16,7 @@ type Entry struct {
 	Destination string    `json:"destination"`
 	Type        string    `json:"type"`
 	Bytes       int       `json:"bytes"`
+	Content     string    `json:"content"`
 	Raw         string    `json:"raw"`
 }
 type Store struct {
@@ -37,7 +38,7 @@ func (s *Store) Add(direction, port string, f ax25.Frame, n int) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items = append(s.items, Entry{Time: time.Now(), Direction: direction, Port: port, Source: f.Source.String(), Destination: f.Destination.String(), Type: typeName(f.Type), Bytes: n, Raw: raw})
+	s.items = append(s.items, Entry{Time: time.Now(), Direction: direction, Port: port, Source: f.Source.String(), Destination: f.Destination.String(), Type: typeName(f.Type), Bytes: n, Content: string(f.Payload), Raw: raw})
 	if len(s.items) > s.limit {
 		s.items = s.items[len(s.items)-s.limit:]
 	}

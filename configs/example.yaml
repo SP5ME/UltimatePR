@@ -13,7 +13,6 @@ ports: []
 terminal: {callsign: N0CALL, ssid: 0}
 beacon:
   enabled: false
-  port: ""
   destination: BEACON
   via: ""
   text: N0CALL UltimatePR

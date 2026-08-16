@@ -44,7 +44,7 @@ func TestBeaconViaConfiguration(t *testing.T) {
 server: {callsign: SP5ME}
 terminal: {callsign: SP5ME}
 web: {listen: 127.0.0.1:8080}
-beacon: {enabled: true, port: p1, destination: BEACON, via: "SR5AAA-1, SR5BBB-2", text: hi, interval_minutes: 10}
+beacon: {enabled: true, destination: BEACON, via: "SR5AAA-1, SR5BBB-2", text: hi, interval_minutes: 10}
 node: {enabled: true, alias: SP5ME, listen: 127.0.0.1:8010, language: pl}
 bbs: {enabled: true, listen: 127.0.0.1:8023, forward_listen: 127.0.0.1:8024, database: data/bbs.json, callsign: SP5ME, language: pl, beacon_via: "SR5CCC-3"}
 `)

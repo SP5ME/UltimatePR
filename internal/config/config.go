@@ -29,7 +29,6 @@ type Application struct {
 }
 type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
-	Port            string `yaml:"port"`
 	Destination     string `yaml:"destination"`
 	Via             string `yaml:"via,omitempty"`
 	Text            string `yaml:"text"`
@@ -113,7 +112,6 @@ type Port struct {
 	Enabled          *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Host             string   `yaml:"host"`
 	Port             uint16   `yaml:"port"`
-	Channel          uint8    `yaml:"channel"`
 	MaxFrameBytes    int      `yaml:"max_frame_bytes"`
 	ReconnectSeconds int      `yaml:"reconnect_seconds"`
 	Listen           string   `yaml:"listen"`
@@ -238,8 +236,8 @@ func (c Config) Validate() error {
 	if _, err := ax25.ParseDigipeaters(c.Beacon.Via); err != nil {
 		return fmt.Errorf("beacon.via: %w", err)
 	}
-	if c.Beacon.Enabled && (c.Beacon.Port == "" || strings.TrimSpace(c.Beacon.Text) == "" || c.Beacon.IntervalMinutes < 1) {
-		return fmt.Errorf("beacon: port, text and interval >= 10 seconds are required")
+	if c.Beacon.Enabled && (strings.TrimSpace(c.Beacon.Text) == "" || c.Beacon.IntervalMinutes < 1) {
+		return fmt.Errorf("beacon: text and interval >= 10 seconds are required")
 	}
 	if c.History.Enabled {
 		if strings.TrimSpace(c.History.Database) == "" || c.History.MaxStations < 1 || c.History.MaxSessionsPerStation < 1 || c.History.MaxLinesPerStation < 1 || c.History.MaxBytes < 1024 || c.History.RetentionDays < 1 {
@@ -298,8 +296,8 @@ func (c Config) Validate() error {
 		if p.Enabled != nil && !*p.Enabled {
 			continue
 		}
-		if p.Type == "kiss-tcp" && (p.Host == "" || p.Port == 0 || p.Channel > 15) {
-			return fmt.Errorf("ports[%d]: invalid KISS host, port or channel", i)
+		if p.Type == "kiss-tcp" && (p.Host == "" || p.Port == 0) {
+			return fmt.Errorf("ports[%d]: invalid KISS host or port", i)
 		}
 		if p.Type == "axudp" {
 			if _, _, err := net.SplitHostPort(p.Listen); err != nil {

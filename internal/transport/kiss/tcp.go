@@ -14,7 +14,6 @@ import (
 
 type TCPConfig struct {
 	ID, Address string
-	Channel     uint8
 	MaxFrame    int
 	Reconnect   time.Duration
 	Queue       int
@@ -96,11 +95,11 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 			fs, es := d.Feed(b[:n])
 			p.stats.DecodeErrors.Add(uint64(len(es)))
 			for _, f := range fs {
-				if !acceptFrame(f, p.cfg.Channel) {
+				if !acceptFrame(f) {
 					continue
 				}
 				p.stats.RXFrames.Add(1)
-				pkt := transport.Packet{PortID: p.ID(), Channel: f.Port, Data: f.Data}
+				pkt := transport.Packet{PortID: p.ID(), Channel: 0, Data: f.Data}
 				select {
 				case out <- pkt:
 				case <-ctx.Done():
@@ -116,17 +115,17 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 	}
 }
 
-func acceptFrame(f Frame, channel uint8) bool {
+func acceptFrame(f Frame) bool {
 	if f.Command != 0 {
 		return false
 	}
-	return f.Port == 0 || f.Port == channel
+	return f.Port == 0
 }
 func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error) {
 	for {
 		select {
 		case pkt := <-p.tx:
-			b, err := Encode(Frame{Port: pkt.Channel, Data: pkt.Data})
+			b, err := Encode(Frame{Port: 0, Data: pkt.Data})
 			if err == nil {
 				_, err = writeAll(c, b)
 			}
