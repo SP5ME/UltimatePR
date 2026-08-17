@@ -15,9 +15,23 @@ func TestOnlyConnectedConversationReceivesLines(t *testing.T) {
 		t.Fatal("failed attempt entered history")
 	}
 	s.Connected("tnc", "SR5DDD", "radio", "")
-	s.Add("tnc", "SR5DDD", "radio", "", "rx", "one\r\ntwo\rthree")
+	s.Add("tnc", "SR5DDD", "radio", "", "rx", "one\r\n\r\ntwo\rthree")
 	c, ok := s.Get(Key("tnc", "SR5DDD", "radio", ""))
-	if !ok || c.Sessions != 1 || len(c.Lines) != 2 || c.Lines[1].Text != "three" {
+	if !ok || c.Sessions != 1 || len(c.Lines) != 1 || c.Lines[0].Text != "one\r\n\r\ntwo\rthree" {
 		t.Fatalf("conversation=%+v", c)
+	}
+}
+
+func TestHistoryPreservesPacketBoundariesAndBlankLines(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "history.json"), Limits{MaxStations: 2, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Connected("tnc", "SR5DDD", "radio", "")
+	s.Add("tnc", "SR5DDD", "radio", "", "rx", "  ASCII\r\n")
+	s.Add("tnc", "SR5DDD", "radio", "", "rx", "\r\n   ART\r\n")
+	c, _ := s.Get(Key("tnc", "SR5DDD", "radio", ""))
+	if got := c.Lines[0].Text + c.Lines[1].Text; got != "  ASCII\r\n\r\n   ART\r\n" {
+		t.Fatalf("history changed terminal stream: %q", got)
 	}
 }

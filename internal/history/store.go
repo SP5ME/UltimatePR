@@ -78,13 +78,19 @@ func (s *Store) Add(mode, station, port, digi, direction, text string) {
 	if c == nil {
 		return
 	}
-	for _, line := range splitLines(text) {
-		if len(line) > 512 {
-			line = line[:512]
+	// Store the terminal stream verbatim. Splitting it into non-empty lines used
+	// to discard blank lines and packet-boundary information, corrupting ASCII
+	// art when a conversation was reopened from history.
+	for len(text) > 0 {
+		n := len(text)
+		if n > 512 {
+			n = 512
+			for n > 0 && n < len(text) && (text[n]&0xc0) == 0x80 {
+				n--
+			}
 		}
-		if strings.TrimSpace(line) != "" {
-			c.Lines = append(c.Lines, Line{time.Now(), direction, line})
-		}
+		c.Lines = append(c.Lines, Line{time.Now(), direction, text[:n]})
+		text = text[n:]
 	}
 	if len(c.Lines) > s.limits.MaxLines {
 		c.Lines = c.Lines[len(c.Lines)-s.limits.MaxLines:]
@@ -169,9 +175,6 @@ func (s *Store) saveLocked() error {
 		return err
 	}
 	return os.Rename(tmp, s.path)
-}
-func splitLines(v string) []string {
-	return strings.FieldsFunc(strings.ReplaceAll(v, "\r\n", "\n"), func(r rune) bool { return r == '\r' || r == '\n' })
 }
 func dir(p string) string {
 	i := strings.LastIndexAny(p, "/\\")
