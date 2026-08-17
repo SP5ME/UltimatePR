@@ -24,8 +24,8 @@
 [data-theme="light"] .config-tabs button.active { background: #dceadf; color: #1f6b3a; }
 [data-theme="light"] form { background: #f5f8f5; }
 [data-theme="light"] .chat-screen { background-color: #f8fbf8; background-image: repeating-linear-gradient(0deg, transparent, transparent 23px, #17251b08 24px); }
-[data-theme="light"] .message-bubble { background: #eaf2ec; color: #173724; }
-[data-theme="light"] .message-row.tx .message-bubble { background: #dcefe2; color: #153d24; }
+[data-theme="light"] .message-bubble { background: transparent; color: #173724; }
+[data-theme="light"] .message-row.tx .message-bubble { background: transparent; color: #153d24; }
 [data-theme="light"] .history-row strong,
 [data-theme="light"] .heard-row strong,
 [data-theme="light"] .terminal-state strong { color: var(--text); }
