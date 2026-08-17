@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -90,20 +90,6 @@ func writeUpdateJobStatus(state updateJobStatus) error {
 		return err
 	}
 	return os.Rename(tmp, updateJobStatusPath)
-}
-
-func updateJobIsFresh(state updateJobStatus, since time.Time) bool {
-	if state.Status == "" || state.Status == "idle" {
-		return false
-	}
-	if state.UpdatedAt == "" {
-		return true
-	}
-	t, err := time.Parse(time.RFC3339, state.UpdatedAt)
-	if err != nil {
-		return true
-	}
-	return !t.Before(since)
 }
 
 func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
@@ -207,32 +193,37 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Aktualizacja już trwa", http.StatusConflict)
 		return
 	}
-	args := []string{"/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel}
-	cmd := exec.CommandContext(context.Background(), launcher, args...)
-	if err = cmd.Start(); err != nil {
+	if err = writeUpdateJobStatus(updateJobStatus{Status: "queued", Message: "Uruchamianie aktualizatora.", Progress: "1", Stage: "launching"}); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	go func() { _ = cmd.Wait() }()
-	started := false
-	startedAt := time.Now()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		state := loadUpdateJobStatus()
-		if updateJobIsFresh(state, startedAt) {
-			started = true
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !started {
-		if err := writeUpdateJobStatus(updateJobStatus{Status: "error", Message: "Aktualizacja nie wystartowała.", ExitCode: "1", Progress: "0", Stage: "start-failed"}); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		http.Error(w, "Aktualizacja nie wystartowała", http.StatusGatewayTimeout)
+	args := []string{"/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel}
+	// Both sudo and doas support -n. An updater launched from the web panel must
+	// fail immediately instead of waiting forever for an unavailable password.
+	cmd := exec.CommandContext(context.Background(), launcher, append([]string{"-n"}, args...)...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err = cmd.Start(); err != nil {
+		_ = writeUpdateJobStatus(updateJobStatus{Status: "error", Message: "Nie udało się uruchomić aktualizatora: " + err.Error(), ExitCode: "1", Progress: "0", Stage: "start-failed"})
+		http.Error(w, err.Error(), 500)
 		return
 	}
+	go func() {
+		if waitErr := cmd.Wait(); waitErr != nil {
+			// Do not overwrite a more useful status already written by the updater.
+			state := loadUpdateJobStatus()
+			if state.Stage == "launching" {
+				detail := strings.Join(strings.Fields(stderr.String()), " ")
+				if detail == "" {
+					detail = waitErr.Error()
+				}
+				if len(detail) > 500 {
+					detail = detail[:500]
+				}
+				_ = writeUpdateJobStatus(updateJobStatus{Status: "error", Message: "Aktualizator nie uruchomił się: " + detail, ExitCode: "1", Progress: "0", Stage: "start-failed"})
+			}
+		}
+	}()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{"started": true, "status_path": filepath.Base(updateJobStatusPath)})
