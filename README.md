@@ -15,9 +15,14 @@ OpenRC (m.in. Alpine Linux). Domyślnym kanałem instalacji jest `main`:
 (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
-Opcjonalnie możesz użyć kanału `dev`, podmieniając `main` na `dev` w adresie i
-ostatnim argumencie skryptu. Gdy masz `sudo`, instalator użyje go
-automatycznie.
+Kanał `dev` zainstalujesz poleceniem:
+
+```sh
+(command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/dev/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/dev/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh dev
+```
+
+Końcowy argument `dev` jest wymagany — bez niego instalator wybiera domyślny
+kanał `main`. Gdy masz `sudo`, instalator użyje go automatycznie.
 
 Jeżeli wolisz zainstalować z pobranej paczki, rozpakuj archiwum właściwe dla
 architektury i jako root uruchom:
@@ -89,10 +94,16 @@ The default install channel is `main`:
 (command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/main/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh
 ```
 
-Optionally replace `main` with `dev` to install the dev channel. If you already
-unpacked a release archive, run `./install.sh` as root instead. If `sudo` is
-available, the installer will use it automatically. Then open
-`http://SERVER_ADDRESS:8080`. The first-run
+Install the `dev` channel with:
+
+```sh
+(command -v curl >/dev/null 2>&1 && curl -fsSLo /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/dev/install-ultimatepr.sh || wget -qO /tmp/install-ultimatepr.sh https://raw.githubusercontent.com/SP5ME/UltimatePR/dev/install-ultimatepr.sh) && sh /tmp/install-ultimatepr.sh dev
+```
+
+The final `dev` argument is required; without it, the installer selects the
+default `main` channel. If you already unpacked a release archive, run
+`./install.sh` as root instead. If `sudo` is available, the installer will use
+it automatically. Then open `http://SERVER_ADDRESS:8080`. The first-run
 wizard can create a clean configuration or import a configuration-only YAML
 backup. Stable and rolling dev updates preserve configuration and data and
 automatically roll back when the service fails its restart check.

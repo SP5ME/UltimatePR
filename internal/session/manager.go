@@ -27,6 +27,14 @@ type Event struct {
 }
 type Sender func(context.Context, []byte) error
 
+type SendPacketProgress struct {
+	Packet int
+	Total  int
+	Data   []byte
+	State  string
+	Error  string
+}
+
 type Manager struct {
 	mu          sync.Mutex
 	local       ax25.Address
@@ -176,13 +184,32 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 }
 
 func (m *Manager) Send(ctx context.Context, data []byte) error {
+	return m.SendWithProgress(ctx, data, nil)
+}
+
+// SendWithProgress splits data according to paclen and reports the actual
+// acknowledgement state of every AX.25 I frame.
+func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress func(SendPacketProgress)) error {
+	total := (len(data) + m.paclen - 1) / m.paclen
+	packet := 0
 	for len(data) > 0 {
 		n := len(data)
 		if n > m.paclen {
 			n = m.paclen
 		}
-		if err := m.sendChunk(ctx, data[:n]); err != nil {
+		packet++
+		chunk := append([]byte(nil), data[:n]...)
+		if progress != nil {
+			progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "sending"})
+		}
+		if err := m.sendChunk(ctx, chunk); err != nil {
+			if progress != nil {
+				progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "error", Error: err.Error()})
+			}
 			return err
+		}
+		if progress != nil {
+			progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "sent"})
 		}
 		data = data[n:]
 	}

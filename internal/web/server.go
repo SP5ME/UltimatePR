@@ -538,12 +538,16 @@ type clientMessage struct {
 	Digi    string `json:"digi"`
 	Data    string `json:"data"`
 	Inbound uint64 `json:"inbound"`
+	ID      string `json:"id"`
 }
 type serverMessage struct {
-	Type  string `json:"type"`
-	State string `json:"state,omitempty"`
-	Data  string `json:"data,omitempty"`
-	Error string `json:"error,omitempty"`
+	Type   string `json:"type"`
+	State  string `json:"state,omitempty"`
+	Data   string `json:"data,omitempty"`
+	Error  string `json:"error,omitempty"`
+	ID     string `json:"id,omitempty"`
+	Packet int    `json:"packet,omitempty"`
+	Total  int    `json:"total,omitempty"`
 }
 
 func terminalMessageFromEvent(e session.Event) serverMessage {
@@ -740,13 +744,20 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
 			}
 			if activeMode == "incoming" && incoming != nil {
+				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sending"})
 				if _, err := incoming.w.Write([]byte(m.Data)); err != nil {
+					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "error", Error: err.Error()})
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+				} else {
+					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 				}
 				continue
 			}
 			if activeMode == "tnc" && radioSession != nil {
-				if err := radioSession.Send(r.Context(), []byte(m.Data)); err != nil {
+				progress := func(p session.SendPacketProgress) {
+					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: p.Packet, Total: p.Total, Data: string(p.Data), State: p.State, Error: p.Error})
+				}
+				if err := radioSession.SendWithProgress(r.Context(), []byte(m.Data), progress); err != nil {
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
 				}
 				continue
@@ -759,9 +770,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				_ = out.write(serverMessage{Type: "error", Error: "Dane sa zbyt dlugie."})
 				continue
 			}
+			_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sending"})
 			if _, err := remote.Write([]byte(m.Data)); err != nil {
+				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "error", Error: err.Error()})
 				closeRemote()
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: err.Error()})
+			} else {
+				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 			}
 		case "disconnect":
 			if incoming != nil {

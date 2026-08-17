@@ -91,6 +91,43 @@ received:
 	}
 }
 
+func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
+	m, sent := testManager(t)
+	m.paclen = 4
+	connectManager(t, m, sent)
+
+	var progress []SendPacketProgress
+	done := make(chan error, 1)
+	go func() {
+		done <- m.SendWithProgress(context.Background(), []byte("abcdefghij"), func(p SendPacketProgress) {
+			progress = append(progress, p)
+		})
+	}()
+
+	for packet, want := range []string{"abcd", "efgh", "ij"} {
+		f, err := ax25.Decode(<-sent)
+		if err != nil || string(f.Payload) != want {
+			t.Fatalf("packet %d payload=%q err=%v", packet+1, f.Payload, err)
+		}
+		m.Handle("radio", response(ax25.TypeRR, uint8(packet+1)&7))
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if len(progress) != 6 {
+		t.Fatalf("progress events=%d, want 6", len(progress))
+	}
+	for packet := 1; packet <= 3; packet++ {
+		sending, sentState := progress[(packet-1)*2], progress[(packet-1)*2+1]
+		if sending.Packet != packet || sending.Total != 3 || sending.State != "sending" {
+			t.Fatalf("sending progress=%+v", sending)
+		}
+		if sentState.Packet != packet || sentState.Total != 3 || sentState.State != "sent" {
+			t.Fatalf("sent progress=%+v", sentState)
+		}
+	}
+}
+
 func TestConnectTimeout(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)
