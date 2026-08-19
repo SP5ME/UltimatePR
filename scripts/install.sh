@@ -85,6 +85,9 @@ elif command -v sudo >/dev/null 2>&1; then
   install -d -m 0755 /etc/sudoers.d
   printf '%s\n' 'ultimatepr ALL=(root) NOPASSWD: /usr/local/sbin/ultimatepr-update main, /usr/local/sbin/ultimatepr-update dev' > /etc/sudoers.d/ultimatepr
   chmod 0440 /etc/sudoers.d/ultimatepr
+  if command -v visudo >/dev/null 2>&1; then
+    visudo -cf /etc/sudoers.d/ultimatepr >/dev/null
+  fi
 else
   echo "Aktualizacja z panelu wymaga pakietu doas albo sudo; sama aplikacja i autostart działają bez niego." >&2
 fi

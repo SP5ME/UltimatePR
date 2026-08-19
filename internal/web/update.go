@@ -180,13 +180,10 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	launcher := "doas"
-	if _, err = exec.LookPath(launcher); err != nil {
-		launcher = "sudo"
-		if _, err = exec.LookPath(launcher); err != nil {
-			http.Error(w, "Aktualizacja wymaga doas albo sudo skonfigurowanego przez install.sh", 503)
-			return
-		}
+	launcher, launcherArgs, err := privilegedUpdateRunner()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
 	}
 	state := loadUpdateJobStatus()
 	if state.Status == "running" || state.Status == "queued" {
@@ -197,10 +194,8 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	args := []string{"/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel}
-	// Both sudo and doas support -n. An updater launched from the web panel must
-	// fail immediately instead of waiting forever for an unavailable password.
-	cmd := exec.CommandContext(context.Background(), launcher, append([]string{"-n"}, args...)...)
+	args := append(launcherArgs, "/usr/local/sbin/ultimatepr-update", c.Application.UpdateChannel)
+	cmd := exec.CommandContext(context.Background(), launcher, args...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	if err = cmd.Start(); err != nil {
@@ -227,6 +222,28 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{"started": true, "status_path": filepath.Base(updateJobStatusPath)})
+}
+
+// privilegedUpdateRunner follows the APRSBox model: a root-owned service unit
+// may select a non-interactive runner, with an automatic sudo/doas fallback.
+// Only these two known runners are accepted; sudoers/doas still restrict the
+// command itself to ultimatepr-update with the main or dev argument.
+func privilegedUpdateRunner() (string, []string, error) {
+	configured := strings.Fields(strings.TrimSpace(os.Getenv("ULTIMATEPR_PRIVILEGED_RUNNER")))
+	candidates := [][]string{}
+	if len(configured) > 0 {
+		candidates = append(candidates, configured)
+	}
+	candidates = append(candidates, []string{"sudo", "-n"}, []string{"doas", "-n"})
+	for _, candidate := range candidates {
+		if len(candidate) == 0 || (candidate[0] != "sudo" && candidate[0] != "doas") {
+			continue
+		}
+		if path, lookupErr := exec.LookPath(candidate[0]); lookupErr == nil {
+			return path, candidate[1:], nil
+		}
+	}
+	return "", nil, fmt.Errorf("aktualizacja wymaga doas albo sudo skonfigurowanego przez install.sh")
 }
 
 func (s *Server) updateJobStatus(w http.ResponseWriter, _ *http.Request) {

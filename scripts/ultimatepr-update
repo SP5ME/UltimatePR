@@ -148,6 +148,9 @@ tar -xzf "$TMP/package.tar.gz" -C "$TMP"
 NEW=$(find "$TMP" -type f -name ultimatepr | head -n 1)
 [ -n "$NEW" ] || exit 7
 chmod 0755 "$NEW"
+NEW_UPDATER=$(find "$TMP" -type f -name ultimatepr-update | head -n 1)
+[ -n "$NEW_UPDATER" ] || exit 7
+chmod 0755 "$NEW_UPDATER"
 
 status_write running "Tworzenie kopii poprzedniej wersji." "" 45 backing-up
 cp -p /opt/ultimatepr/ultimatepr /var/lib/ultimatepr/backups/ultimatepr.previous
@@ -156,6 +159,8 @@ cp -p /opt/ultimatepr/ultimatepr /var/lib/ultimatepr/backups/ultimatepr.previous
 status_write running "Instalowanie nowej wersji." "" 60 replacing
 install -m 0755 "$NEW" /opt/ultimatepr/ultimatepr.new
 mv /opt/ultimatepr/ultimatepr.new /opt/ultimatepr/ultimatepr
+install -m 0755 "$NEW_UPDATER" /usr/local/sbin/ultimatepr-update.new
+mv /usr/local/sbin/ultimatepr-update.new /usr/local/sbin/ultimatepr-update
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   [ -f "$TMP/ultimatepr.service" ] && install -m 0644 "$TMP/ultimatepr.service" /etc/systemd/system/ultimatepr.service

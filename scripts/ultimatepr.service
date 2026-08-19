@@ -8,10 +8,10 @@ Type=simple
 User=ultimatepr
 Group=ultimatepr
 WorkingDirectory=/var/lib/ultimatepr
+Environment="ULTIMATEPR_PRIVILEGED_RUNNER=sudo -n"
 ExecStart=/opt/ultimatepr/ultimatepr -config /etc/ultimatepr/config.yaml
 Restart=on-failure
 RestartSec=3
-NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
