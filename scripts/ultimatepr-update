@@ -151,6 +151,8 @@ chmod 0755 "$NEW"
 NEW_UPDATER=$(find "$TMP" -type f -name ultimatepr-update | head -n 1)
 [ -n "$NEW_UPDATER" ] || exit 7
 chmod 0755 "$NEW_UPDATER"
+NEW_SYSTEMD_SERVICE=$(find "$TMP" -type f -name ultimatepr.service | head -n 1)
+NEW_OPENRC_SERVICE=$(find "$TMP" -type f -name ultimatepr.openrc | head -n 1)
 
 status_write running "Tworzenie kopii poprzedniej wersji." "" 45 backing-up
 cp -p /opt/ultimatepr/ultimatepr /var/lib/ultimatepr/backups/ultimatepr.previous
@@ -163,7 +165,7 @@ install -m 0755 "$NEW_UPDATER" /usr/local/sbin/ultimatepr-update.new
 mv /usr/local/sbin/ultimatepr-update.new /usr/local/sbin/ultimatepr-update
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-  [ -f "$TMP/ultimatepr.service" ] && install -m 0644 "$TMP/ultimatepr.service" /etc/systemd/system/ultimatepr.service
+  [ -n "$NEW_SYSTEMD_SERVICE" ] && install -m 0644 "$NEW_SYSTEMD_SERVICE" /etc/systemd/system/ultimatepr.service
   status_write running "Restartowanie usługi systemd." "" 80 restarting-web
   systemctl daemon-reload
   systemctl stop ultimatepr || true
@@ -191,7 +193,7 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl is-active --quiet ultimatepr || exit 8
   fi
 else
-  [ -f "$TMP/ultimatepr.openrc" ] && install -m 0755 "$TMP/ultimatepr.openrc" /etc/init.d/ultimatepr
+  [ -n "$NEW_OPENRC_SERVICE" ] && install -m 0755 "$NEW_OPENRC_SERVICE" /etc/init.d/ultimatepr
   status_write running "Restartowanie usługi OpenRC." "" 80 restarting-services
   rc-service ultimatepr stop || true
   wait_for_openrc_stop || true
