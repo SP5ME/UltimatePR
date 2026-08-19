@@ -25,6 +25,11 @@ func TestAutoUsesUTF8OrCP437(t *testing.T) {
 	if got := c.Decode([]byte("Zażółć")); got != "Zażółć" {
 		t.Fatalf("UTF-8: %q", got)
 	}
+	cp1250, _ := New("windows-1250")
+	polishWire, _ := cp1250.Encode("Zażółć gęślą jaźń")
+	if got := c.Decode(polishWire); got != "Zażółć gęślą jaźń" {
+		t.Fatalf("CP1250 fallback: %q", got)
+	}
 	cp437, _ := New("cp437")
 	wire, _ := cp437.Encode("─")
 	if bytes.Equal(wire, []byte("─")) {

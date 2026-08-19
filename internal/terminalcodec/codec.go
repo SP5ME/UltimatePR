@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
+	"unicode"
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -14,6 +15,12 @@ import (
 const Default = "auto"
 
 var supported = []string{"auto", "utf-8", "cp437", "cp850", "windows-1250", "iso-8859-2"}
+var autoFallbacks = []encoding.Encoding{
+	charmap.Windows1250,
+	charmap.ISO8859_2,
+	charmap.CodePage850,
+	charmap.CodePage437,
+}
 
 type Codec struct {
 	name     string
@@ -64,16 +71,66 @@ func (c *Codec) Decode(data []byte) string {
 			return strings.ToValidUTF8(string(complete), "�")
 		}
 		data = combined
+		best := decodeLegacyAuto(data)
+		if best != "" {
+			return best
+		}
 	}
 	enc := c.encoding
 	if c.name == "auto" {
-		enc = charmap.CodePage437
+		enc = charmap.Windows1250
 	}
 	out, _, err := transform.Bytes(enc.NewDecoder(), data)
 	if err != nil {
 		return strings.ToValidUTF8(string(data), "�")
 	}
 	return string(out)
+}
+
+func decodeLegacyAuto(data []byte) string {
+	best := ""
+	bestScore := -1 << 30
+	for _, enc := range autoFallbacks {
+		out, _, err := transform.Bytes(enc.NewDecoder(), data)
+		if err != nil {
+			continue
+		}
+		score := scoreDecodedText(string(out))
+		if score > bestScore {
+			bestScore = score
+			best = string(out)
+		}
+	}
+	return best
+}
+
+func scoreDecodedText(text string) int {
+	score := 0
+	for _, r := range text {
+		switch {
+		case r == utf8.RuneError:
+			score -= 8
+		case r == '\n' || r == '\r' || r == '\t' || r == ' ':
+			score += 1
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			score += 4
+		case isBoxDrawingRune(r):
+			score += 5
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			score += 2
+		case unicode.IsControl(r):
+			score -= 4
+		case unicode.IsPrint(r):
+			score += 1
+		default:
+			score -= 2
+		}
+	}
+	return score
+}
+
+func isBoxDrawingRune(r rune) bool {
+	return r >= 0x2500 && r <= 0x257F
 }
 
 func splitTrailingUTF8(data []byte) ([]byte, []byte) {
