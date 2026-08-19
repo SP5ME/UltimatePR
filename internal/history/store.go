@@ -26,6 +26,7 @@ type Conversation struct {
 	Lines    []Line    `json:"lines"`
 }
 type fileData struct {
+	Version       int            `json:"version,omitempty"`
 	Conversations []Conversation `json:"conversations"`
 }
 type Store struct {
@@ -45,6 +46,9 @@ func Open(path string, limits Limits) (*Store, error) {
 		var d fileData
 		if err = json.Unmarshal(b, &d); err != nil {
 			return nil, err
+		}
+		if d.Version < 2 {
+			migrateLegacyLines(d.Conversations)
 		}
 		for i := range d.Conversations {
 			c := d.Conversations[i]
@@ -156,11 +160,26 @@ func (s *Store) pruneLocked() {
 }
 func (s *Store) encodedSize() int { b, _ := json.Marshal(s.data()); return len(b) }
 func (s *Store) data() fileData {
-	d := fileData{}
+	d := fileData{Version: 2}
 	for _, c := range s.items {
 		d.Conversations = append(d.Conversations, *c)
 	}
 	return d
+}
+
+// Version 1 stored every non-empty terminal line as a separate record and
+// discarded its delimiter. Version 2 stores the byte stream verbatim. Restore
+// the missing delimiter while loading legacy data so the web UI can safely
+// concatenate records without turning the whole conversation into one line.
+func migrateLegacyLines(conversations []Conversation) {
+	for conversationIndex := range conversations {
+		for lineIndex := range conversations[conversationIndex].Lines {
+			line := &conversations[conversationIndex].Lines[lineIndex]
+			if line.Text != "" && !strings.HasSuffix(line.Text, "\r") && !strings.HasSuffix(line.Text, "\n") {
+				line.Text += "\n"
+			}
+		}
+	}
 }
 func (s *Store) saveLocked() error {
 	if err := os.MkdirAll(dir(s.path), 0750); err != nil {

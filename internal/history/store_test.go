@@ -1,6 +1,7 @@
 package history
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -19,6 +20,22 @@ func TestOnlyConnectedConversationReceivesLines(t *testing.T) {
 	c, ok := s.Get(Key("tnc", "SR5DDD", "radio", ""))
 	if !ok || c.Sessions != 1 || len(c.Lines) != 1 || c.Lines[0].Text != "one\r\n\r\ntwo\rthree" {
 		t.Fatalf("conversation=%+v", c)
+	}
+}
+
+func TestLegacyHistoryRestoresLineEndings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	legacy := `{"conversations":[{"key":"TNC|SR5DDD|RADIO|","station":"SR5DDD","mode":"tnc","port":"radio","last_seen":"2026-08-19T10:00:00Z","sessions":1,"lines":[{"time":"2026-08-19T10:00:00Z","direction":"rx","text":"  ASCII"},{"time":"2026-08-19T10:00:01Z","direction":"rx","text":"   ART"}]}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path, Limits{MaxStations: 2, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 3650})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok := s.Get(Key("tnc", "SR5DDD", "radio", ""))
+	if !ok || len(c.Lines) != 2 || c.Lines[0].Text != "  ASCII\n" || c.Lines[1].Text != "   ART\n" {
+		t.Fatalf("legacy conversation not migrated: %+v", c)
 	}
 }
 
