@@ -689,7 +689,18 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				events, cancel := radioSession.Subscribe()
 				cancelRadio = cancel
 				go func() {
+					initialState := true
 					for e := range events {
+						// A freshly created manager publishes its initial disconnected
+						// snapshot before Connect advances to awaiting_connection. Sending
+						// that snapshot to the browser makes it close the WebSocket and the
+						// deferred cleanup immediately transmits DISC after SABM.
+						if initialState {
+							initialState = false
+							if e.Type == "state" && e.State == session.Disconnected {
+								continue
+							}
+						}
 						if e.State == session.Connected && !historyConnected && s.cfg.History != nil {
 							historyConnected = true
 							s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
