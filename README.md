@@ -50,6 +50,9 @@ YAML. Nowa konfiguracja nie zawiera znaku ani danych autora projektu.
 
 ## Kopia i aktualizacja
 
+Szczegóły zgodności KISS, obsługiwanych komend TNC, portów KISS 0–15 oraz
+kodowań terminala znajdują się w [docs/kiss-terminal.md](docs/kiss-terminal.md).
+
 W **Konfiguracja → Aplikacja** można pobrać lub odtworzyć kopię samych ustawień.
 Wiadomości BBS i historia nie są częścią tej kopii.
 

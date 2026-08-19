@@ -114,6 +114,12 @@ type Port struct {
 	Port             uint16   `yaml:"port"`
 	MaxFrameBytes    int      `yaml:"max_frame_bytes"`
 	ReconnectSeconds int      `yaml:"reconnect_seconds"`
+	KISSPort         uint8    `yaml:"kiss_port"`
+	KISSTXDelay      *uint8   `yaml:"kiss_txdelay,omitempty"`
+	KISSPersistence  *uint8   `yaml:"kiss_persistence,omitempty"`
+	KISSSlotTime     *uint8   `yaml:"kiss_slottime,omitempty"`
+	KISSTXTail       *uint8   `yaml:"kiss_txtail,omitempty"`
+	KISSFullDuplex   *bool    `yaml:"kiss_full_duplex,omitempty"`
 	Listen           string   `yaml:"listen"`
 	RemoteHost       string   `yaml:"remote_host"`
 	RemotePort       uint16   `yaml:"remote_port"`
@@ -292,6 +298,9 @@ func (c Config) Validate() error {
 		}
 		if p.Type == "kiss-tcp" && (p.ReconnectSeconds < 1 || p.ReconnectSeconds > 3600) {
 			return fmt.Errorf("ports[%d]: reconnect_seconds out of range", i)
+		}
+		if p.Type == "kiss-tcp" && p.KISSPort > 15 {
+			return fmt.Errorf("ports[%d]: kiss_port must be 0..15", i)
 		}
 		if p.Enabled != nil && !*p.Enabled {
 			continue

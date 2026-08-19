@@ -7,6 +7,15 @@ const (
 	FESC  byte = 0xDB
 	TFEND byte = 0xDC
 	TFESC byte = 0xDD
+
+	CommandData        uint8 = 0x00
+	CommandTXDelay     uint8 = 0x01
+	CommandPersistence uint8 = 0x02
+	CommandSlotTime    uint8 = 0x03
+	CommandTXTail      uint8 = 0x04
+	CommandFullDuplex  uint8 = 0x05
+	CommandSetHardware uint8 = 0x06
+	CommandReturn      uint8 = 0x0F
 )
 
 var ErrFrameTooLarge = errors.New("KISS frame too large")
@@ -47,6 +56,7 @@ type Decoder struct {
 	buf      []byte
 	escaped  bool
 	dropping bool
+	synced   bool
 }
 
 func NewDecoder(max int) *Decoder { return &Decoder{max: max, buf: make([]byte, 0, max)} }
@@ -56,14 +66,18 @@ func (d *Decoder) Feed(input []byte) ([]Frame, []error) {
 	var errs []error
 	for _, b := range input {
 		if b == FEND {
+			if !d.synced {
+				d.synced = true
+				d.reset()
+				continue
+			}
 			if d.dropping {
 				d.reset()
 				continue
 			}
 			if d.escaped {
 				errs = append(errs, ErrInvalidEscape)
-				d.reset()
-				continue
+				d.escaped = false
 			}
 			if len(d.buf) > 0 {
 				cmd := d.buf[0]
@@ -84,7 +98,6 @@ func (d *Decoder) Feed(input []byte) ([]Frame, []error) {
 				b = FESC
 			default:
 				errs = append(errs, ErrInvalidEscape)
-				d.dropping = true
 				d.escaped = false
 				continue
 			}

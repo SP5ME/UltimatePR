@@ -24,6 +24,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
+	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 	"github.com/packet-radio/ultimatepr/internal/transport"
 )
 
@@ -529,16 +530,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type clientMessage struct {
-	Type    string `json:"type"`
-	Mode    string `json:"mode"`
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	TNC     string `json:"tnc"`
-	Target  string `json:"target"`
-	Digi    string `json:"digi"`
-	Data    string `json:"data"`
-	Inbound uint64 `json:"inbound"`
-	ID      string `json:"id"`
+	Type     string `json:"type"`
+	Mode     string `json:"mode"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	TNC      string `json:"tnc"`
+	Target   string `json:"target"`
+	Digi     string `json:"digi"`
+	Data     string `json:"data"`
+	Encoding string `json:"encoding"`
+	Inbound  uint64 `json:"inbound"`
+	ID       string `json:"id"`
 }
 type serverMessage struct {
 	Type   string `json:"type"`
@@ -551,9 +553,14 @@ type serverMessage struct {
 }
 
 func terminalMessageFromEvent(e session.Event) serverMessage {
+	codec, _ := terminalcodec.New(terminalcodec.Default)
+	return terminalMessageFromEventWithCodec(e, codec)
+}
+
+func terminalMessageFromEventWithCodec(e session.Event, codec *terminalcodec.Codec) serverMessage {
 	msg := serverMessage{Type: e.Type, State: string(e.State)}
 	if len(e.Data) > 0 {
-		msg.Data = string(e.Data)
+		msg.Data = codec.Decode(e.Data)
 	} else {
 		msg.Data = e.Message
 	}
@@ -591,6 +598,8 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	var releaseRadio func()
 	var cancelKeepAlive context.CancelFunc
 	var incoming *operatorSession
+	terminalCodec, _ := terminalcodec.New(terminalcodec.Default)
+	terminalTXCodec, _ := terminalcodec.New(terminalcodec.Default)
 	remoteDone := make(chan struct{}, 1)
 	closeRemote := func() {
 		if remote != nil {
@@ -635,6 +644,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.Type {
 		case "connect":
+			selectedCodec, codecErr := terminalcodec.New(m.Encoding)
+			if codecErr != nil {
+				_ = out.write(serverMessage{Type: "state", State: "error", Error: codecErr.Error()})
+				continue
+			}
+			terminalCodec = selectedCodec
+			terminalTXCodec, _ = terminalcodec.New(selectedCodec.Name())
 			// Keep the operator workflow in TNC/Radio, but short-circuit a call
 			// addressed to this server's own BBS. No AX.25 frame reaches the TNC.
 			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)
@@ -674,7 +690,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 				}
 				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczenie przychodzace od " + incoming.call + "\r\n"})
-				go s.copyOperatorToWS(out, incoming, historyStation)
+				go s.copyOperatorToWS(out, incoming, historyStation, terminalCodec)
 				continue
 			}
 			if m.Mode == "tnc" {
@@ -688,6 +704,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				go radioSession.KeepAlive(keepAliveCtx, 5*time.Minute)
 				events, cancel := radioSession.Subscribe()
 				cancelRadio = cancel
+				sessionCodec := terminalCodec
 				go func() {
 					initialState := true
 					for e := range events {
@@ -706,9 +723,9 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 							s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 						}
 						if e.Type == "data" && historyConnected && s.cfg.History != nil {
-							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", string(e.Data))
+							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", sessionCodec.Decode(e.Data))
 						}
-						msg := terminalMessageFromEvent(e)
+						msg := terminalMessageFromEventWithCodec(e, sessionCodec)
 						if e.State == session.Disconnected && !historyConnected {
 							msg.Error = string(e.Message)
 						}
@@ -755,8 +772,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
 			}
 			if activeMode == "incoming" && incoming != nil {
+				wireData, encodeErr := terminalTXCodec.Encode(m.Data)
+				if encodeErr != nil {
+					_ = out.write(serverMessage{Type: "error", Error: encodeErr.Error()})
+					continue
+				}
 				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sending"})
-				if _, err := incoming.w.Write([]byte(m.Data)); err != nil {
+				if _, err := incoming.w.Write(wireData); err != nil {
 					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "error", Error: err.Error()})
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
 				} else {
@@ -765,10 +787,15 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if activeMode == "tnc" && radioSession != nil {
-				progress := func(p session.SendPacketProgress) {
-					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: p.Packet, Total: p.Total, Data: string(p.Data), State: p.State, Error: p.Error})
+				wireData, encodeErr := terminalTXCodec.Encode(m.Data)
+				if encodeErr != nil {
+					_ = out.write(serverMessage{Type: "error", Error: encodeErr.Error()})
+					continue
 				}
-				if err := radioSession.SendWithProgress(r.Context(), []byte(m.Data), progress); err != nil {
+				progress := func(p session.SendPacketProgress) {
+					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: p.Packet, Total: p.Total, Data: terminalTXCodec.Decode(p.Data), State: p.State, Error: p.Error})
+				}
+				if err := radioSession.SendWithProgress(r.Context(), wireData, progress); err != nil {
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
 				}
 				continue
@@ -810,12 +837,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string) {
+func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := in.r.Read(buf)
 		if n > 0 {
-			data := string(buf[:n])
+			data := codec.Decode(buf[:n])
 			if s.cfg.History != nil {
 				s.cfg.History.Add("tnc", station, "radio", "", "rx", data)
 			}

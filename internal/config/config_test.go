@@ -63,7 +63,7 @@ server: {callsign: SP5ME}
 terminal: {callsign: SP5ME}
 web: {listen: 127.0.0.1:8080}
 ports:
-  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, channel: 0, max_frame_bytes: 4096, reconnect_seconds: 5}
+  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, kiss_port: 7, max_frame_bytes: 4096, reconnect_seconds: 5}
   - {id: p2, type: kiss-tcp, enabled: false, max_frame_bytes: 4096, reconnect_seconds: 5}
 `)
 	c, err := Parse(raw)
@@ -76,8 +76,24 @@ ports:
 	if c.Ports[0].Enabled == nil || !*c.Ports[0].Enabled {
 		t.Fatal("enabled port did not default to true")
 	}
+	if c.Ports[0].KISSPort != 7 {
+		t.Fatalf("KISS port = %d, want 7", c.Ports[0].KISSPort)
+	}
 	if c.Ports[1].Enabled == nil || *c.Ports[1].Enabled {
 		t.Fatal("disabled port was not preserved")
+	}
+}
+
+func TestRejectsKISSPortAbove15(t *testing.T) {
+	raw := []byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, kiss_port: 16, max_frame_bytes: 4096, reconnect_seconds: 5}
+`)
+	if _, err := Parse(raw); err == nil {
+		t.Fatal("KISS port above 15 accepted")
 	}
 }
 

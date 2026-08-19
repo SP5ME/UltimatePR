@@ -135,11 +135,11 @@ func main() {
 		if cfgPort.Type == "axudp" {
 			p = axudp.New(axudp.Config{ID: cfgPort.ID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
 		} else {
-			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256}, log)
+			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
 		}
 		runtime := &runningPort{port: p, enabled: enabled}
 		runtimes[cfgPort.ID] = runtime
-		senders[cfgPort.ID] = func(port transport.Port, active bool, id string) session.Sender {
+		senders[cfgPort.ID] = func(port transport.Port, active bool, id string, channel uint8) session.Sender {
 			return func(ctx context.Context, b []byte) error {
 				if !active {
 					return fmt.Errorf("port %q is disabled", id)
@@ -147,9 +147,9 @@ func main() {
 				if f, err := ax25.Decode(b); err == nil {
 					mon.Add("TX", port.ID(), f, len(b))
 				}
-				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: 0, Data: b})
+				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: channel, Data: b})
 			}
-		}(p, enabled, cfgPort.ID)
+		}(p, enabled, cfgPort.ID, cfgPort.KISSPort)
 		ports = append(ports, p)
 		if enabled {
 			startPort(runtime)

@@ -17,6 +17,12 @@ type TCPConfig struct {
 	MaxFrame    int
 	Reconnect   time.Duration
 	Queue       int
+	Port        uint8
+	TXDelay     *uint8
+	Persistence *uint8
+	SlotTime    *uint8
+	TXTail      *uint8
+	FullDuplex  *bool
 }
 type Stats struct{ RXFrames, TXFrames, RXBytes, TXBytes, DecodeErrors, DroppedTX atomic.Uint64 }
 type TCPPort struct {
@@ -95,11 +101,11 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 			fs, es := d.Feed(b[:n])
 			p.stats.DecodeErrors.Add(uint64(len(es)))
 			for _, f := range fs {
-				if !acceptFrame(f) {
+				if !acceptFrame(f, p.cfg.Port) {
 					continue
 				}
 				p.stats.RXFrames.Add(1)
-				pkt := transport.Packet{PortID: p.ID(), Channel: 0, Data: f.Data}
+				pkt := transport.Packet{PortID: p.ID(), Channel: p.cfg.Port, Data: f.Data}
 				select {
 				case out <- pkt:
 				case <-ctx.Done():
@@ -115,17 +121,21 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 	}
 }
 
-func acceptFrame(f Frame) bool {
+func acceptFrame(f Frame, port uint8) bool {
 	if f.Command != 0 {
 		return false
 	}
-	return f.Port == 0
+	return f.Port == port
 }
 func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error) {
+	if err := p.writeParameters(c); err != nil {
+		errch <- err
+		return
+	}
 	for {
 		select {
 		case pkt := <-p.tx:
-			b, err := Encode(Frame{Port: 0, Data: pkt.Data})
+			b, err := Encode(Frame{Port: p.cfg.Port, Command: CommandData, Data: pkt.Data})
 			if err == nil {
 				_, err = writeAll(c, b)
 			}
@@ -140,6 +150,43 @@ func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error)
 			return
 		}
 	}
+}
+
+func (p *TCPPort) writeParameters(w io.Writer) error {
+	commands := []struct {
+		command uint8
+		value   *uint8
+	}{
+		{CommandTXDelay, p.cfg.TXDelay},
+		{CommandPersistence, p.cfg.Persistence},
+		{CommandSlotTime, p.cfg.SlotTime},
+		{CommandTXTail, p.cfg.TXTail},
+	}
+	for _, item := range commands {
+		if item.value == nil {
+			continue
+		}
+		frame, err := Encode(Frame{Port: p.cfg.Port, Command: item.command, Data: []byte{*item.value}})
+		if err != nil {
+			return err
+		}
+		if _, err = writeAll(w, frame); err != nil {
+			return err
+		}
+	}
+	if p.cfg.FullDuplex != nil {
+		value := byte(0)
+		if *p.cfg.FullDuplex {
+			value = 1
+		}
+		frame, err := Encode(Frame{Port: p.cfg.Port, Command: CommandFullDuplex, Data: []byte{value}})
+		if err != nil {
+			return err
+		}
+		_, err = writeAll(w, frame)
+		return err
+	}
+	return nil
 }
 func writeAll(w io.Writer, b []byte) (int, error) {
 	total := 0
