@@ -76,7 +76,7 @@ jobs:
           fi
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" * --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease --title "$title" --notes "$notes"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --title "$title" --notes "$notes"
           else
             gh release create "$tag" * --repo "$GITHUB_REPOSITORY" --prerelease --verify-tag --title "$title" --notes "$notes"
           fi
