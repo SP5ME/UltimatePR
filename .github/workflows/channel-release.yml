@@ -67,5 +67,16 @@ jobs:
           cd release
           sha256sum *.tar.gz > SHA256SUMS.txt
           tag="$GITHUB_REF_NAME-latest"
-          gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
-          gh release create "$tag" * --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" --title "$GITHUB_REF_NAME-${GITHUB_SHA::7}" --notes "Automatyczny pakiet aktualizacyjny z gałęzi $GITHUB_REF_NAME. Konfiguracja użytkownika nie jest częścią pakietu."
+          title="$GITHUB_REF_NAME-${GITHUB_SHA::7}"
+          notes="Automatyczny pakiet aktualizacyjny z gałęzi $GITHUB_REF_NAME. Konfiguracja użytkownika nie jest częścią pakietu."
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" * --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease --title "$title" --notes "$notes"
+          else
+            gh release create "$tag" * --repo "$GITHUB_REPOSITORY" --prerelease --verify-tag --title "$title" --notes "$notes"
+          fi
