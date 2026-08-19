@@ -173,6 +173,21 @@ func (s *Store) data() fileData {
 // concatenate records without turning the whole conversation into one line.
 func migrateLegacyLines(conversations []Conversation) {
 	for conversationIndex := range conversations {
+		// Builds between the original line-based store and the versioned format
+		// already wrote raw AX.25 chunks but did not yet put a version marker in
+		// history.json. A real CR/LF anywhere in the conversation identifies that
+		// format; adding delimiters to its other chunks would split ASCII art at
+		// the 128-byte packet boundary.
+		rawStream := false
+		for lineIndex := range conversations[conversationIndex].Lines {
+			if strings.ContainsAny(conversations[conversationIndex].Lines[lineIndex].Text, "\r\n") {
+				rawStream = true
+				break
+			}
+		}
+		if rawStream {
+			continue
+		}
 		for lineIndex := range conversations[conversationIndex].Lines {
 			line := &conversations[conversationIndex].Lines[lineIndex]
 			if line.Text != "" && !strings.HasSuffix(line.Text, "\r") && !strings.HasSuffix(line.Text, "\n") {
