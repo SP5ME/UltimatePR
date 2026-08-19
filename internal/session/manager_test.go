@@ -139,6 +139,21 @@ func TestConnectTimeout(t *testing.T) {
 	}
 }
 
+func TestConnectRequiresTargetCallsign(t *testing.T) {
+	m, sent := testManager(t)
+	if err := m.Connect(context.Background(), "radio", "   "); err == nil {
+		t.Fatal("expected error for empty target")
+	}
+	select {
+	case frame := <-sent:
+		t.Fatalf("unexpected frame sent: %#v", frame)
+	default:
+	}
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
 func TestConnectIncludesDigipeaterPath(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)

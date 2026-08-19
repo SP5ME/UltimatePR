@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,6 +95,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	send, ok := m.ports[port]
 	if !ok {
 		return fmt.Errorf("unknown port %q", port)
+	}
+	if strings.TrimSpace(target) == "" {
+		return errors.New("target station callsign is required")
 	}
 	remote, err := ax25.ParseAddress(target)
 	if err != nil {

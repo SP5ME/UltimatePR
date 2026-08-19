@@ -657,6 +657,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			if m.Mode == "tnc" && s.cfg.BBSListen != "" && strings.EqualFold(strings.TrimSpace(m.Target), localBBS) {
 				m.Mode = "bbs"
 			}
+			if m.Mode == "tnc" && strings.TrimSpace(m.Target) == "" {
+				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Podaj znak korespondenta."})
+				continue
+			}
 			closeRemote()
 			if cancelRadio != nil {
 				cancelRadio()
