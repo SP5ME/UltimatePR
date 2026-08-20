@@ -2,7 +2,7 @@
 <html lang="pl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UltimatePR</title><link rel="stylesheet" href="/app.css?v=7"><link rel="stylesheet" href="/bbs.css?v=19"><link rel="stylesheet" href="/readability.css?v=3"><link rel="stylesheet" href="/theme.css?v=6"></head>
 <body>
-<header><div><span class="eyebrow">THE ULTIMATE PACKET RADIO STATION</span><h1>UltimatePR</h1></div><div class="system-status"><div id="serviceStatus" class="service-status"></div><div id="connectionStatus" class="connection-status"></div><small id="uptime">uruchamianie…</small><span id="nodeCall" hidden>—</span></div></header>
+<header><div><span class="eyebrow">THE ULTIMATE PACKET RADIO STATION</span><h1>UltimatePR</h1></div><div class="system-status"><div id="serviceStatus" class="service-status"></div><div id="connectionStatus" class="connection-status"></div><span id="nodeCall" hidden>—</span></div></header>
 <nav><button id="navTerminal" class="active">Terminal</button><button id="sendBeacon">Beacon</button><button id="navMonitor">Monitor</button><span class="nav-spacer"></span><button id="themeToggle" class="nav-icon" title="Zmień jasny lub ciemny motyw" aria-label="Zmień jasny lub ciemny motyw"></button><button id="soundToggle" class="nav-icon" title="Powiadomienia dźwiękowe terminala" aria-label="Powiadomienia dźwiękowe terminala"></button><button id="navInfo" class="nav-icon" title="Informacje o aplikacji" aria-label="Informacje o aplikacji">ⓘ</button><button id="navConfig" class="nav-icon" title="Konfiguracja" aria-label="Konfiguracja">⚙</button><button id="logout">Wyloguj</button></nav>
 <main id="terminalView">
   <section class="terminal-workspace">
@@ -25,18 +25,6 @@
     <button id="infoChangelogTab" type="button">Changelog</button>
   </div>
   <div id="infoOverviewPanel" class="info-panel">
-  <div class="info-grid">
-    <div class="settings-card">
-      <h3>Stan aplikacji</h3>
-      <dl class="info-list">
-        <div><dt>Wersja</dt><dd id="infoVersion">—</dd></div>
-        <div><dt>Tryb</dt><dd id="infoMode">—</dd></div>
-        <div><dt>Terminal</dt><dd id="infoTerminal">—</dd></div>
-        <div><dt>NODE</dt><dd id="infoNode">—</dd></div>
-        <div><dt>BBS</dt><dd id="infoBBS">—</dd></div>
-        <div><dt>Uptime</dt><dd id="infoUptime">—</dd></div>
-      </dl>
-    </div>
     <div class="settings-card">
       <h3>Manual</h3>
       <ul class="info-manual">
@@ -61,6 +49,11 @@
     <div class="settings-card">
       <pre id="changelogContent">Ładowanie…</pre>
     </div>
+  </div>
+  <div class="settings-card info-link-card">
+    <h3>GitHub</h3>
+    <p>Kod źródłowy i historia projektu są dostępne w repozytorium.</p>
+    <a class="button secondary info-link" href="https://github.com/SP5ME/UltimatePR" target="_blank" rel="noreferrer">github.com/SP5ME/UltimatePR</a>
   </div>
 </section>
 <section id="configView" class="config-view" hidden>

@@ -13,3 +13,9 @@
 - Jaśniejsze i czytelniejsze karty w widoku `Info`.
 - Jasne pola edycji wiadomości terminala: powitanie, pożegnanie i info.
 - Lepszy kontrast tekstu changelogu.
+
+## 2026-08-20 - info cleanup
+
+- Usunięty panel stanu aplikacji z `Info`.
+- Usunięte `uptime` z górnego paska i z `Info`.
+- Dodany link do repozytorium GitHub na dole widoku `Info`.
