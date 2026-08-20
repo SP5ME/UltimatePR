@@ -241,18 +241,24 @@ func main() {
 	}
 	inbound := session.NewInboundMux(senders, log)
 	web := webui.New(webui.Config{
-		Listen:           cfg.Web.Listen,
-		Username:         cfg.Web.Username,
-		PasswordHash:     cfg.Web.PasswordHash,
-		AllowedAddresses: cfg.Web.AllowedAddresses,
-		NodeCallsign:     cfg.Server.Callsign,
-		NodeSSID:         cfg.Server.SSID,
-		BBSCallsign:      cfg.BBS.Callsign,
-		BSSSID:           cfg.BBS.SSID,
-		TerminalCallsign: cfg.Terminal.Callsign,
-		TerminalSSID:     cfg.Terminal.SSID,
-		Ports:            portIDs,
-		NodeEnabled:      cfg.Node.Enabled,
+		Listen:             cfg.Web.Listen,
+		Username:           cfg.Web.Username,
+		PasswordHash:       cfg.Web.PasswordHash,
+		AllowedAddresses:   cfg.Web.AllowedAddresses,
+		NodeCallsign:       cfg.Server.Callsign,
+		NodeSSID:           cfg.Server.SSID,
+		BBSCallsign:        cfg.BBS.Callsign,
+		BSSSID:             cfg.BBS.SSID,
+		TerminalCallsign:   cfg.Terminal.Callsign,
+		TerminalSSID:       cfg.Terminal.SSID,
+		OperatorName:       cfg.Application.OperatorName,
+		ApplicationLocator: cfg.Application.Locator,
+		ApplicationQTH:     cfg.Application.QTH,
+		TerminalWelcome:    cfg.Application.WelcomeMessage,
+		TerminalGoodbye:    cfg.Application.GoodbyeMessage,
+		TerminalInfo:       cfg.Application.InfoMessage,
+		Ports:              portIDs,
+		NodeEnabled:        cfg.Node.Enabled,
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {

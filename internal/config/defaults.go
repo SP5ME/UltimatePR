@@ -1,6 +1,8 @@
 package config
 
-import "strings"
+import (
+	"strings"
+)
 
 const (
 	ModeStation = "station"
@@ -16,7 +18,7 @@ func New(mode, callsign, locator, qth, language string, stationSSID, nodeSSID, b
 	}
 	full := mode == ModeFull
 	c := Config{
-		Application: Application{Mode: mode, Locator: strings.ToUpper(strings.TrimSpace(locator)), QTH: strings.TrimSpace(qth), Language: lang, UpdateChannel: "main"},
+		Application: Application{Mode: mode, OperatorName: "", Locator: strings.ToUpper(strings.TrimSpace(locator)), QTH: strings.TrimSpace(qth), Language: lang, UpdateChannel: "main"},
 		Server:      Station{Callsign: call, SSID: nodeSSID},
 		Terminal:    Station{Callsign: call, SSID: stationSSID},
 		Web:         Web{Listen: "0.0.0.0:8080", Username: "admin", AllowedAddresses: []string{"0.0.0.0", "::"}},
@@ -26,6 +28,7 @@ func New(mode, callsign, locator, qth, language string, stationSSID, nodeSSID, b
 			Forwarding: BBSForwarding{Enabled: false, IntervalMinutes: 15, ConnectTimeoutSeconds: 15, SessionTimeoutSeconds: 120, MaxMessages: 50, MaxBodyBytes: 131072}},
 		Node: Node{Enabled: full, Alias: shortAlias(call), Listen: "127.0.0.1:8010", Language: lang},
 	}
+	c.applyTerminalMessageDefaults()
 	if full {
 		c.Node.Services = []NodeService{{Name: "BBS", Callsign: stationText(call, bbsSSID), Command: "BBS", Enabled: true}}
 	}
@@ -48,4 +51,24 @@ func stationText(call string, ssid uint8) string {
 		return call + "-" + string(digits[ssid])
 	}
 	return call + "-1" + string(digits[ssid-10])
+}
+
+func (c *Config) applyTerminalMessageDefaults() {
+	if strings.TrimSpace(c.Application.WelcomeMessage) == "" {
+		c.Application.WelcomeMessage = "Witaj {REMOTE}, de {CALL}."
+	}
+	if strings.TrimSpace(c.Application.GoodbyeMessage) == "" {
+		c.Application.GoodbyeMessage = "73 {REMOTE}, de {CALL}."
+	}
+	if strings.TrimSpace(c.Application.InfoMessage) == "" {
+		lines := []string{"Call: " + stationText(c.Terminal.Callsign, c.Terminal.SSID), "Imię: {NAME}"}
+		if loc := strings.ToUpper(strings.TrimSpace(c.Application.Locator)); loc != "" {
+			lines = append(lines, "LOC: "+loc)
+		}
+		if qth := strings.TrimSpace(c.Application.QTH); qth != "" {
+			lines = append(lines, "QTH: "+qth)
+		}
+		lines = append(lines, "73")
+		c.Application.InfoMessage = strings.Join(lines, "\r\n")
+	}
 }

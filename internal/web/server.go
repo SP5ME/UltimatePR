@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -32,30 +33,36 @@ import (
 var assets embed.FS
 
 type Config struct {
-	Listen           string
-	Username         string
-	PasswordHash     string
-	AllowedAddresses []string
-	NodeCallsign     string
-	NodeSSID         uint8
-	BBSCallsign      string
-	BSSSID           uint8
-	TerminalCallsign string
-	TerminalSSID     uint8
-	Ports            []string
-	PortStatus       func() []transport.Status
-	NodeEnabled      bool
-	Radio            *session.Hub
-	MHeard           *mheard.Store
-	History          *history.Store
-	Monitor          *monitor.Store
-	SendBeacon       func(context.Context) error
-	BBSListen        string
-	BBS              *bbs.Store
-	ConfigPath       string
-	ReconnectPort    func(string) error
-	RequestRestart   func()
-	Version          string
+	Listen             string
+	Username           string
+	PasswordHash       string
+	AllowedAddresses   []string
+	NodeCallsign       string
+	NodeSSID           uint8
+	BBSCallsign        string
+	BSSSID             uint8
+	TerminalCallsign   string
+	TerminalSSID       uint8
+	OperatorName       string
+	ApplicationLocator string
+	ApplicationQTH     string
+	TerminalWelcome    string
+	TerminalGoodbye    string
+	TerminalInfo       string
+	Ports              []string
+	PortStatus         func() []transport.Status
+	NodeEnabled        bool
+	Radio              *session.Hub
+	MHeard             *mheard.Store
+	History            *history.Store
+	Monitor            *monitor.Store
+	SendBeacon         func(context.Context) error
+	BBSListen          string
+	BBS                *bbs.Store
+	ConfigPath         string
+	ReconnectPort      func(string) error
+	RequestRestart     func()
+	Version            string
 }
 
 type Server struct {
@@ -85,6 +92,7 @@ type operatorSession struct {
 	call    string
 	r       io.Reader
 	w       io.Writer
+	mu      sync.Mutex
 	done    chan struct{}
 	claimed chan struct{}
 	once    sync.Once
@@ -499,7 +507,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
+		"version": s.cfg.Version, "node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
 		"ports": s.cfg.Ports, "uptime_seconds": int(time.Since(s.started).Seconds()), "terminal_clients": s.wsClients.Load(),
 		"bbs_enabled": s.cfg.BBSListen != "", "node_enabled": s.cfg.NodeEnabled, "port_status": ports,
 	})
@@ -600,6 +608,77 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	var incoming *operatorSession
 	terminalCodec, _ := terminalcodec.New(terminalcodec.Default)
 	terminalTXCodec, _ := terminalcodec.New(terminalcodec.Default)
+	remoteCommandBuffer := &terminalLineBuffer{}
+	var sendMu sync.Mutex
+	terminalCall := callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)
+	expandReply := func(template, remote string) string {
+		return terminalReplyText(template, terminalMacroContext(terminalCall, remote, s.cfg))
+	}
+	terminalWelcome := s.cfg.TerminalWelcome
+	terminalGoodbye := s.cfg.TerminalGoodbye
+	terminalInfo := s.cfg.TerminalInfo
+	handleRemoteCommand := func(text string, reply func(string)) {
+		for _, line := range remoteCommandBuffer.Push(text) {
+			switch strings.ToUpper(strings.TrimSpace(line)) {
+			case "MH":
+				if s.cfg.MHeard != nil {
+					reply(formatMHeardResponse(s.cfg.MHeard.List()))
+				} else {
+					reply("Brak odebranych stacji.\r\n")
+				}
+			case "I", "INFO":
+				reply(expandReply(terminalInfo, historyStation))
+			}
+		}
+	}
+	sendIncomingReply := func(text string, id string, remote string) {
+		text = expandReply(text, remote)
+		if text == "" || incoming == nil {
+			return
+		}
+		if id == "" {
+			id = fmt.Sprintf("auto-%d", time.Now().UnixNano())
+		}
+		wireData, encodeErr := terminalTXCodec.Encode(text)
+		if encodeErr != nil {
+			_ = out.write(serverMessage{Type: "error", Error: encodeErr.Error()})
+			return
+		}
+		_ = out.write(serverMessage{Type: "tx_packet", ID: id, Packet: 1, Total: 1, Data: text, State: "sending"})
+		incoming.mu.Lock()
+		if _, err := incoming.w.Write(wireData); err != nil {
+			incoming.mu.Unlock()
+			_ = out.write(serverMessage{Type: "tx_packet", ID: id, Packet: 1, Total: 1, Data: text, State: "error", Error: err.Error()})
+			_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+			return
+		}
+		incoming.mu.Unlock()
+		_ = out.write(serverMessage{Type: "tx_packet", ID: id, Packet: 1, Total: 1, Data: text, State: "sent"})
+	}
+	sendRadioReply := func(text string) {
+		text = terminalResponseText(text)
+		if text == "" || radioSession == nil {
+			return
+		}
+		wireData, encodeErr := terminalTXCodec.Encode(text)
+		if encodeErr != nil {
+			_ = out.write(serverMessage{Type: "error", Error: encodeErr.Error()})
+			return
+		}
+		txID := fmt.Sprintf("auto-%d", time.Now().UnixNano())
+		progress := func(p session.SendPacketProgress) {
+			_ = out.write(serverMessage{Type: "tx_packet", ID: txID, Packet: p.Packet, Total: p.Total, Data: terminalTXCodec.Decode(p.Data), State: p.State, Error: p.Error})
+		}
+		go func() {
+			sendMu.Lock()
+			if err := radioSession.SendWithProgress(r.Context(), wireData, progress); err != nil {
+				sendMu.Unlock()
+				_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+				return
+			}
+			sendMu.Unlock()
+		}()
+	}
 	remoteDone := make(chan struct{}, 1)
 	closeRemote := func() {
 		if remote != nil {
@@ -690,6 +769,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 				}
 				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczenie przychodzace od " + incoming.call + "\r\n"})
+				sendIncomingReply(terminalWelcome, fmt.Sprintf("welcome-%d", time.Now().UnixNano()), incoming.call)
 				go s.copyOperatorToWS(out, incoming, historyStation, terminalCodec)
 				continue
 			}
@@ -724,6 +804,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						}
 						if e.Type == "data" && historyConnected && s.cfg.History != nil {
 							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", sessionCodec.Decode(e.Data))
+						}
+						if e.Type == "data" {
+							handleRemoteCommand(sessionCodec.Decode(e.Data), sendRadioReply)
+						}
+						if e.State == session.Disconnected && strings.EqualFold(strings.TrimSpace(e.Message), "Zdalna stacja rozlaczyla sesje") {
+							_ = out.write(serverMessage{Type: "data", State: "connected", Data: terminalGoodbye})
 						}
 						msg := terminalMessageFromEventWithCodec(e, sessionCodec)
 						if e.State == session.Disconnected && !historyConnected {
@@ -778,10 +864,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sending"})
+				incoming.mu.Lock()
 				if _, err := incoming.w.Write(wireData); err != nil {
+					incoming.mu.Unlock()
 					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "error", Error: err.Error()})
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
 				} else {
+					incoming.mu.Unlock()
 					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 				}
 				continue
@@ -795,8 +884,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				progress := func(p session.SendPacketProgress) {
 					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: p.Packet, Total: p.Total, Data: terminalTXCodec.Decode(p.Data), State: p.State, Error: p.Error})
 				}
+				sendMu.Lock()
 				if err := radioSession.SendWithProgress(r.Context(), wireData, progress); err != nil {
+					sendMu.Unlock()
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+				} else {
+					sendMu.Unlock()
 				}
 				continue
 			}
@@ -839,6 +932,8 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec) {
 	buf := make([]byte, 4096)
+	commandBuffer := &terminalLineBuffer{}
+	terminalCall := callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)
 	for {
 		n, err := in.r.Read(buf)
 		if n > 0 {
@@ -850,8 +945,23 @@ func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station strin
 				in.close()
 				return
 			}
+			for _, line := range commandBuffer.Push(data) {
+				switch strings.ToUpper(strings.TrimSpace(line)) {
+				case "MH":
+					if s.cfg.MHeard != nil {
+						writeOperatorReply(ws, in, codec, formatMHeardResponse(s.cfg.MHeard.List()))
+					} else {
+						writeOperatorReply(ws, in, codec, "Brak odebranych stacji.\r\n")
+					}
+				case "I", "INFO":
+					writeOperatorReply(ws, in, codec, terminalReplyText(s.cfg.TerminalInfo, terminalMacroContext(terminalCall, station, s.cfg)))
+				}
+			}
 		}
 		if err != nil {
+			if goodbye := terminalReplyText(s.cfg.TerminalGoodbye, terminalMacroContext(terminalCall, station, s.cfg)); goodbye != "" {
+				_ = ws.write(serverMessage{Type: "data", State: "connected", Data: goodbye})
+			}
 			_ = ws.write(serverMessage{Type: "state", State: "idle", Data: "Stacja zdalna zakonczyla polaczenie.\r\n"})
 			in.close()
 			return

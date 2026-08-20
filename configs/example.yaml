@@ -1,9 +1,13 @@
 application:
   mode: station-node-bbs
+  operator_name: Jan
   locator: AA00AA
   qth: Example
   language: en
   update_channel: main
+  welcome_message: "Witaj {REMOTE}, de {CALL}."
+  goodbye_message: "73 {REMOTE}, de {CALL}."
+  info_message: "Call: {CALL}\r\nImię: {NAME}\r\nLOC: {LOC}\r\nQTH: {QTH}\r\n73"
 server: {callsign: N0CALL, ssid: 7}
 web:
   listen: 0.0.0.0:8080

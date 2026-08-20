@@ -39,6 +39,16 @@ func TestExampleConfiguration(t *testing.T) {
 	}
 }
 
+func TestTerminalMessageDefaults(t *testing.T) {
+	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(c.Application.WelcomeMessage) == "" || strings.TrimSpace(c.Application.GoodbyeMessage) == "" || strings.TrimSpace(c.Application.InfoMessage) == "" {
+		t.Fatalf("terminal message defaults missing: %+v", c.Application)
+	}
+}
+
 func TestBeaconViaConfiguration(t *testing.T) {
 	raw := []byte(`
 server: {callsign: SP5ME}

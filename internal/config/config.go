@@ -21,11 +21,15 @@ type Web struct {
 	AllowedAddresses []string `yaml:"allowed_addresses"`
 }
 type Application struct {
-	Mode          string `yaml:"mode"`
-	Locator       string `yaml:"locator"`
-	QTH           string `yaml:"qth"`
-	Language      string `yaml:"language"`
-	UpdateChannel string `yaml:"update_channel"`
+	Mode           string `yaml:"mode"`
+	OperatorName   string `yaml:"operator_name"`
+	Locator        string `yaml:"locator"`
+	QTH            string `yaml:"qth"`
+	Language       string `yaml:"language"`
+	UpdateChannel  string `yaml:"update_channel"`
+	WelcomeMessage string `yaml:"welcome_message"`
+	GoodbyeMessage string `yaml:"goodbye_message"`
+	InfoMessage    string `yaml:"info_message"`
 }
 type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
@@ -184,6 +188,7 @@ func (c *Config) applyDefaults() {
 	if len(c.Web.AllowedAddresses) == 0 {
 		c.Web.AllowedAddresses = []string{"0.0.0.0"}
 	}
+	c.applyTerminalMessageDefaults()
 }
 
 func Save(path string, raw []byte) error {

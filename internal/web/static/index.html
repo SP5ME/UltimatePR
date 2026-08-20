@@ -1,23 +1,75 @@
 ﻿<!doctype html>
 <html lang="pl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UltimatePR</title><link rel="stylesheet" href="/app.css?v=7"><link rel="stylesheet" href="/bbs.css?v=17"><link rel="stylesheet" href="/readability.css?v=3"><link rel="stylesheet" href="/theme.css?v=6"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UltimatePR</title><link rel="stylesheet" href="/app.css?v=7"><link rel="stylesheet" href="/bbs.css?v=19"><link rel="stylesheet" href="/readability.css?v=3"><link rel="stylesheet" href="/theme.css?v=6"></head>
 <body>
 <header><div><span class="eyebrow">THE ULTIMATE PACKET RADIO STATION</span><h1>UltimatePR</h1></div><div class="system-status"><div id="serviceStatus" class="service-status"></div><div id="connectionStatus" class="connection-status"></div><small id="uptime">uruchamianie…</small><span id="nodeCall" hidden>—</span></div></header>
-<nav><button id="navTerminal" class="active">Terminal</button><button id="sendBeacon">Beacon</button><button id="navMonitor">Monitor</button><span class="nav-spacer"></span><button id="themeToggle" title="Zmień jasny lub ciemny motyw">Motyw: ciemny</button><button id="soundToggle" title="Powiadomienia dźwiękowe terminala">Dźwięk: WŁ.</button><button id="navConfig">Konfiguracja</button><button id="logout">Wyloguj</button></nav>
+<nav><button id="navTerminal" class="active">Terminal</button><button id="sendBeacon">Beacon</button><button id="navMonitor">Monitor</button><span class="nav-spacer"></span><button id="themeToggle" class="nav-icon" title="Zmień jasny lub ciemny motyw" aria-label="Zmień jasny lub ciemny motyw"></button><button id="soundToggle" class="nav-icon" title="Powiadomienia dźwiękowe terminala" aria-label="Powiadomienia dźwiękowe terminala"></button><button id="navInfo" class="nav-icon" title="Informacje o aplikacji" aria-label="Informacje o aplikacji">ⓘ</button><button id="navConfig" class="nav-icon" title="Konfiguracja" aria-label="Konfiguracja">⚙</button><button id="logout">Wyloguj</button></nav>
 <main id="terminalView">
   <section class="terminal-workspace">
-    <div class="connection-bar"><div class="segmented"><button id="modeBBS" hidden>Lokalny BBS</button><button id="modeTNC" class="active">TNC / Radio</button></div><div id="bbsFields" hidden><span class="hint">Bezpośrednie połączenie z lokalnym BBS</span></div><div id="tncFields"><select id="tncPort" title="Port radiowy"></select><input id="target" placeholder="Znak docelowy"><input id="digi" placeholder="DIGI / VIA (opcjonalnie)" title="Znaki digipeaterów oddzielone przecinkami"><span class="hint" title="Kodowanie sesji jest zablokowane na UTF-8">Kodowanie: UTF-8</span></div><label class="auto-reconnect" title="Ponawiaj rozłączone zapisane sesje co 5 minut"><input id="autoReconnect" type="checkbox"><span>Auto reconnect<small>co 5 min</small></span></label><button id="connect" class="primary">Połącz</button></div>
+    <div class="connection-bar"><div class="segmented"><button id="modeBBS" hidden>Lokalny BBS</button><button id="modeTNC" class="active">TNC / Radio</button></div><div id="bbsFields" hidden><span class="hint">Bezpośrednie połączenie z lokalnym BBS</span></div><div id="tncFields"><select id="tncPort" title="Port radiowy"></select><input id="target" placeholder="Znak docelowy"><input id="digi" placeholder="DIGI / VIA (opcjonalnie)" title="Znaki digipeaterów oddzielone przecinkami"></div><label class="auto-reconnect" title="Ponawiaj rozłączone zapisane sesje co 5 minut"><input id="autoReconnect" type="checkbox"><span>Auto reconnect<small>co 5 min</small></span></label><button id="connect" class="primary">Połącz</button></div>
     <div class="terminal-body"><aside class="history-panel"><div class="side-head"><span>HISTORIA</span><small>ROZMOWY</small></div><div id="historyList" class="history-list"><p>Brak zapisanych rozmów.</p></div></aside><section class="terminal-panel"><div class="terminal-head"><div><span>LIVE TERMINAL</span><strong id="sessionLabel">Brak aktywnej sesji</strong></div><div class="terminal-state"><i id="terminalStateLED"></i><strong id="terminalState">Gotowy</strong></div><button id="clear">Wyczyść ekran</button></div><div id="screen" class="chat-screen" tabindex="0"></div><form id="sendForm"><span>&gt;</span><input id="command" autocomplete="off" placeholder="Wpisz tekst i naciśnij Enter" disabled><button disabled>Wyślij</button></form></section><aside class="mheard-panel"><div class="side-head"><span>MHEARD</span><small>NA ŻYWO</small></div><div id="mheardList" class="mheard-list"><p>Brak odebranych stacji.</p></div></aside></div>
     <div class="session-dock"><div class="dock-title">SESJE</div><div id="sessionTabs" class="session-tabs"></div><button id="reconnectSession" class="session-reconnect" disabled>Połącz ponownie</button><button id="disconnect" class="session-close" disabled>Zamknij sesję</button></div>
   </section>
 </main>
 <section id="monitorView" class="monitor-view" hidden><div class="monitor-head"><div class="monitor-title"><span class="eyebrow">MONITOR PORTÓW</span><h2>Ramki AX.25 RX / TX</h2></div><div class="monitor-frame-legend" aria-label="Opis typów ramek AX.25"><span><b>I</b> dane</span><span><b>UI</b> dane bez potwierdzenia / beacon</span><span><b>RR</b> gotowość odbioru</span><span><b>RNR</b> odbiorca zajęty</span><span><b>REJ</b> ponowienie</span><span><b>SABM</b> połączenie</span><span><b>DISC</b> rozłączenie</span><span><b>UA</b> potwierdzenie</span><span><b>DM</b> tryb rozłączony</span><span class="monitor-direction-help"><b>RX</b> odebrana · <b>TX</b> wysłana</span></div></div><div id="monitorList" class="monitor-list"><p class="empty-list">Brak ramek.</p></div></section>
+<section id="infoView" class="info-view" hidden>
+  <div class="info-head">
+    <div>
+      <span class="eyebrow">INFORMACJE</span>
+      <h2>Założenia i manual</h2>
+      <p>Krótki przewodnik po całej aplikacji i podstawowych zasadach pracy.</p>
+    </div>
+  </div>
+  <div class="segmented info-tabs">
+    <button id="infoOverviewTab" class="active" type="button">Info</button>
+    <button id="infoChangelogTab" type="button">Changelog</button>
+  </div>
+  <div id="infoOverviewPanel" class="info-panel">
+  <div class="info-grid">
+    <div class="settings-card">
+      <h3>Stan aplikacji</h3>
+      <dl class="info-list">
+        <div><dt>Wersja</dt><dd id="infoVersion">—</dd></div>
+        <div><dt>Tryb</dt><dd id="infoMode">—</dd></div>
+        <div><dt>Terminal</dt><dd id="infoTerminal">—</dd></div>
+        <div><dt>NODE</dt><dd id="infoNode">—</dd></div>
+        <div><dt>BBS</dt><dd id="infoBBS">—</dd></div>
+        <div><dt>Uptime</dt><dd id="infoUptime">—</dd></div>
+      </dl>
+    </div>
+    <div class="settings-card">
+      <h3>Manual</h3>
+      <ul class="info-manual">
+        <li>Terminal jest głównym miejscem pracy. Najpierw wybierz port radiowy i połącz się z korespondentem.</li>
+        <li>W trakcie rozmowy możesz wpisać <code>MH</code>, aby zobaczyć ostatnie stacje z MHEARD.</li>
+        <li>Komenda <code>I</code> lub <code>INFO</code> zwraca podstawowe dane stacji.</li>
+        <li>W zakładce <strong>Stacja</strong> edytujesz znak, imię operatora, lokator, QTH oraz gotowe wiadomości.</li>
+        <li>Ikony w górnym pasku służą do motywu, dźwięku, informacji i historii zmian.</li>
+        <li>BBS i NODE są nadal w tle rozwoju, więc na razie skupiamy się na terminalu.</li>
+      </ul>
+    </div>
+  </div>
+  </div>
+  <div id="infoChangelogPanel" class="info-panel" hidden>
+    <div class="changelog-head">
+      <div>
+        <h3>Changelog</h3>
+        <p>Źródło: <code>internal/web/static/changelog.md</code>.</p>
+      </div>
+      <button id="reloadChangelog" class="secondary" type="button">Odśwież</button>
+    </div>
+    <div class="settings-card">
+      <pre id="changelogContent">Ładowanie…</pre>
+    </div>
+  </div>
+</section>
 <section id="configView" class="config-view" hidden>
   <div class="config-head"><div><span class="eyebrow">KONFIGURACJA SERWERA</span><h2>Stacja, NODE, BBS i TNC</h2><p>Konfiguracja jest zapisywana po sprawdzeniu wszystkich pól.</p></div><div><button id="reloadConfig" class="secondary">Cofnij zmiany</button><button id="saveConfig" class="primary">Sprawdź i zapisz</button></div></div>
   <div id="configNotice" class="config-notice">Zmiany wymagają ponownego uruchomienia serwera.</div>
   <div class="config-tabs"><button id="configStationTab" class="active">Stacja</button><button id="configBBSTab" hidden>BBS</button><button id="configNodeTab" hidden>NODE</button><button id="configTNCTab">TNC / Radio</button><button id="configApplicationTab">Aplikacja</button></div>
   <div id="stationConfigPanel" class="settings-panel">
-    <div class="settings-card"><h3>Stacja operatora</h3><p>Dane stacji używane przez terminal, DIGI oraz automatyczny beacon AX.25.</p><div class="field-grid"><label>Znak terminala<input id="terminalCallsign" maxlength="6"></label><label>SSID terminala<input id="terminalSSID" type="number" min="0" max="15"></label><label>Lokator (opcjonalnie)<input id="applicationLocator" placeholder="KO02JD" title="Format: AA99AA, np. KO02JD"></label><label>QTH (opcjonalnie)<input id="applicationQTH"></label></div></div>
+    <div class="settings-card"><h3>Stacja operatora</h3><p>Dane stacji używane przez terminal, DIGI oraz automatyczny beacon AX.25.</p><div class="field-grid"><label>Znak terminala<input id="terminalCallsign" maxlength="6"></label><label>SSID terminala<input id="terminalSSID" type="number" min="0" max="15"></label><label>Imię operatora (opcjonalnie)<input id="applicationOperatorName" placeholder="Jan"></label><label>Lokator (opcjonalnie)<input id="applicationLocator" placeholder="KO02JD" title="Format: AA99AA, np. KO02JD"></label><label>QTH (opcjonalnie)<input id="applicationQTH"></label></div></div>
+    <div class="settings-card"><div class="card-head"><div><h3>Wiadomości terminala</h3><p>Przyciski wybierają edytowany tekst. Powitanie idzie po połączeniu przychodzącym, pożegnanie przy zdalnym rozłączeniu, a info odpowiada na MH / INFO.</p></div></div><div class="segmented message-tabs"><button id="stationMessageWelcomeTab" class="active" type="button">Powitanie</button><button id="stationMessageGoodbyeTab" type="button">Pożegnanie</button><button id="stationMessageInfoTab" type="button">Info</button></div><label id="stationMessageLabel">Powitanie</label><textarea id="stationMessageText" rows="7" spellcheck="false"></textarea><div class="message-hint"><button id="stationMessagePreset" class="secondary" type="button">Wstaw gotowiec</button><small>Makra: {CALL} {NAME} {LOC} {QTH} {REMOTE}</small></div></div>
     <div class="settings-card"><h3>Beacon stacji</h3><p>Gdy beacon stacji jest włączony, jest wysyłany automatycznie co 10 minut, gdy strona UltimatePR jest otwarta. Używa znaku stacji operatora i danych stacji.</p><div class="field-grid"><label>VIA / DIGI<input id="beaconVia" placeholder="SR5XYZ-1, SR5ABC-2"></label></div></div>
     <div hidden><select id="beaconPort"></select><input id="beaconDestination"><input id="beaconText"><input id="beaconInterval"><input id="beaconEnabled" type="checkbox"><input id="historyDatabase"><input id="historyMaxStations"><input id="historyMaxSessions"><input id="historyMaxLines"><input id="historyMaxMB"><input id="historyRetention"><input id="historyEnabled" type="checkbox"></div>
   </div>
@@ -62,5 +114,5 @@
     </div>
   </div>
 </div>
-<footer><span>LOCAL WEB UI</span><span>BBS + KISS + UTF-8</span><span id="terminalCall">TERMINAL —</span></footer>
-<script src="/app.js?v=52"></script></body></html>
+<footer><span>TERMINAL</span><span>LOCAL WEB UI</span><span>BBS + KISS + UTF-8</span><span id="terminalCall">TERMINAL —</span></footer>
+<script src="/app.js?v=54"></script></body></html>
