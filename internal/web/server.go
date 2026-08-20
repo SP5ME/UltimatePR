@@ -644,13 +644,9 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.Type {
 		case "connect":
-			selectedCodec, codecErr := terminalcodec.New(m.Encoding)
-			if codecErr != nil {
-				_ = out.write(serverMessage{Type: "state", State: "error", Error: codecErr.Error()})
-				continue
-			}
+			selectedCodec, _ := terminalcodec.New(terminalcodec.Default)
 			terminalCodec = selectedCodec
-			terminalTXCodec, _ = terminalcodec.New(selectedCodec.Name())
+			terminalTXCodec, _ = terminalcodec.New(terminalcodec.Default)
 			// Keep the operator workflow in TNC/Radio, but short-circuit a call
 			// addressed to this server's own BBS. No AX.25 frame reaches the TNC.
 			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)

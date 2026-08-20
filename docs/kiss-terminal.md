@@ -37,22 +37,14 @@ komendy są wysyłane po każdym ponownym zestawieniu połączenia z TNC.
 
 ## Kodowanie tekstu
 
-Kodowanie jest właściwością sesji terminala, a nie ramki KISS. KISS i AX.25
-przenoszą bajty, dlatego konwersja następuje dopiero pomiędzy sesją radiową a
-interfejsem WWW.
+Kodowanie jest na sztywno ustawione na `UTF-8`. KISS i AX.25 przenoszą bajty,
+dopiero warstwa terminala interpretuje je jako tekst, ale w tej aplikacji nie ma
+już wyboru innego kodowania.
 
-Dostępne tryby:
+To oznacza, że:
 
-- `auto` — poprawny UTF-8 pozostaje UTF-8, inne bajty są dekodowane jako CP437;
-- `utf-8`;
-- `cp437` — grafika i tekst starych systemów DOS/BBS;
-- `cp850`;
-- `windows-1250`;
-- `iso-8859-2`.
-
-Wybrane kodowanie jest zapisywane razem z kartą sesji. Dotyczy zarówno
-odbioru, jak i nadawania oraz tekstu zapisywanego w historii. Gdy automatyczne
-rozpoznanie nie odpowiada konkretnemu BBS-owi, należy wybrać kodowanie jawnie
-przed połączeniem.
+- interfejs WWW zawsze pokazuje i wysyła tekst jako UTF-8;
+- zapis sesji nie przechowuje alternatywnego kodowania;
+- historia i monitor korzystają z tego samego założenia.
 
 Źródło specyfikacji: <https://www.ax25.net/kiss.aspx>.
