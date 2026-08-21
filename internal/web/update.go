@@ -34,6 +34,51 @@ func branchReleaseEndpoint(channel string) string {
 	return "https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/" + channel + "-latest"
 }
 
+func loadBranchRelease(ctx context.Context, channel string) (githubRelease, error) {
+	endpoint := branchReleaseEndpoint(channel)
+	request := func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("User-Agent", "UltimatePR-updater")
+		return http.DefaultClient.Do(req)
+	}
+	resp, err := request()
+	if err != nil {
+		return githubRelease{}, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		resp.Body.Close()
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			return githubRelease{}, ctx.Err()
+		}
+		resp, err = request()
+		if err != nil {
+			return githubRelease{}, err
+		}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return githubRelease{}, fmt.Errorf("GitHub zwrócił status %d", resp.StatusCode)
+	}
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return githubRelease{}, fmt.Errorf("nieprawidłowa odpowiedź GitHub: %w", err)
+	}
+	return release, nil
+}
+
+func releaseVersion(release githubRelease) string {
+	if name := strings.TrimSpace(release.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(release.TagName)
+}
+
 func loadUpdateJobStatus() updateJobStatus {
 	b, err := os.ReadFile(updateJobStatusPath)
 	if err != nil {
@@ -99,56 +144,18 @@ func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	channel := c.Application.UpdateChannel
-	endpoint := branchReleaseEndpoint(channel)
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "UltimatePR-updater")
-	resp, err := http.DefaultClient.Do(req)
+	rel, err := loadBranchRelease(ctx, channel)
 	if err != nil {
-		http.Error(w, "Nie można połączyć się z GitHub: "+err.Error(), 502)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		// A rolling branch release is briefly absent while GitHub replaces its
-		// tag and assets. One delayed retry avoids exposing that publication
-		// window as a permanent error in the panel.
-		resp.Body.Close()
-		select {
-		case <-time.After(2 * time.Second):
-		case <-ctx.Done():
-			http.Error(w, "Przekroczono czas sprawdzania aktualizacji", 504)
-			return
-		}
-		req, _ = http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("User-Agent", "UltimatePR-updater")
-		resp, err = http.DefaultClient.Do(req)
-		if err != nil {
-			http.Error(w, "Nie można połączyć się z GitHub: "+err.Error(), 502)
-			return
-		}
-		defer resp.Body.Close()
-	}
-	if resp.StatusCode != 200 {
-		http.Error(w, fmt.Sprintf("GitHub zwrócił status %d", resp.StatusCode), 502)
-		return
-	}
-	var rel githubRelease
-	if json.NewDecoder(resp.Body).Decode(&rel) != nil {
-		http.Error(w, "Nieprawidłowa odpowiedź GitHub", 502)
+		http.Error(w, err.Error(), 502)
 		return
 	}
 	installed := strings.TrimSpace(s.cfg.Version)
 	if installed == "" {
 		installed = "development"
 	}
-	available := rel.TagName
-	if rel.Name != "" {
-		available = rel.Name
-	}
+	available := releaseVersion(rel)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"installed": installed, "available": available, "channel": channel, "update_available": installed != available})
 }
@@ -178,6 +185,19 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 	c, err := appconfig.Load(s.cfg.ConfigPath)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	release, err := loadBranchRelease(ctx, c.Application.UpdateChannel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	installed := strings.TrimSpace(s.cfg.Version)
+	available := releaseVersion(release)
+	if installed != "" && available != "" && installed == available {
+		http.Error(w, "Wersja "+installed+" jest już aktualna.", http.StatusConflict)
 		return
 	}
 	launcher, launcherArgs, err := privilegedUpdateRunner()
