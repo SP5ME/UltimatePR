@@ -2,10 +2,9 @@
 
 /* Keep the volume control attached to the bell without widening the navigation bar. */
 .sound-control{position:relative;display:inline-flex;align-items:center;height:47px}
-.sound-control>input{position:absolute;z-index:3;left:50%;bottom:43px;width:112px;height:24px;margin:0;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 8px 20px #0006;opacity:0;pointer-events:none;transform:translateX(-50%) rotate(-90deg);transform-origin:center;transition:opacity .15s ease}
+.sound-control>input{position:absolute;z-index:3;left:50%;bottom:calc(100% + 8px);width:24px;height:84px;margin:0;padding:6px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 8px 20px #0006;opacity:0;pointer-events:none;writing-mode:vertical-lr;direction:rtl;transform:translateX(-50%);transition:opacity .15s ease}
 .sound-control:hover>input,.sound-control:focus-within>input{opacity:1;pointer-events:auto}
 .sound-control>input::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:var(--line)}
 .sound-control>input::-webkit-slider-thumb{width:14px;height:14px;margin-top:-5px;border:0;border-radius:50%;background:var(--green);appearance:none}
 .sound-control>input::-moz-range-track{height:4px;border-radius:4px;background:var(--line)}
 .sound-control>input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--green)}
-@media(max-width:800px){.sound-control>input{bottom:43px}}
