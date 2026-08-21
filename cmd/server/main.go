@@ -138,11 +138,12 @@ func main() {
 		} else {
 			address := net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port))
 			if cfgPort.TNCProxyEnabled {
-				if err := tncproxy.Start(ctx, cfgPort.TNCProxyListen, address, log); err != nil {
+				listen := net.JoinHostPort("0.0.0.0", fmtPort(cfgPort.TNCProxyPort))
+				if err := tncproxy.Start(ctx, listen, address, cfg.Web.AllowedAddresses, log); err != nil {
 					log.Error("TNC proxy failed to start", "port", cfgPort.ID, "error", err)
 					os.Exit(2)
 				}
-				address = cfgPort.TNCProxyListen
+				address = net.JoinHostPort("127.0.0.1", fmtPort(cfgPort.TNCProxyPort))
 			}
 			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: address, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
 		}

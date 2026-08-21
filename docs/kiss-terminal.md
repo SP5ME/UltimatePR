@@ -46,17 +46,18 @@ ports:
     host: 127.0.0.1
     port: 8001
     tncproxy_enabled: true
-    tncproxy_listen: 127.0.0.1:8101
+    tncproxy_port: 8101
 ```
 
-W tym trybie UltimatePR łączy się z proxy na porcie `8101`, a proxy łączy się
-z właściwym TNC na porcie `8001`. Na `8101` mogą równocześnie łączyć się
-UltimatePR i zewnętrzne aplikacje KISS TCP. Gdy `tncproxy_enabled` jest
-wyłączone, UltimatePR łączy się bezpośrednio z `host:port`.
+W tym trybie proxy nasłuchuje na `0.0.0.0:8101`, UltimatePR łączy się lokalnie
+z proxy, a zewnętrzne aplikacje KISS TCP mogą łączyć się z adresem IP
+Raspberry Pi na porcie `8101`. Proxy łączy się z właściwym TNC na porcie
+`8001`. Gdy `tncproxy_enabled` jest wyłączone, UltimatePR łączy się
+bezpośrednio z `host:port`.
 
-Port `tncproxy_listen` musi być unikalny dla każdego włączonego portu TNC.
-Jeśli aplikacja zewnętrzna działa na innym komputerze, użyj np.
-`0.0.0.0:8101` i ogranicz dostęp regułami zapory sieciowej.
+Port `tncproxy_port` musi być unikalny dla każdego włączonego portu TNC.
+Połączenia proxy są ograniczane przez wspólną listę `web.allowed_addresses`,
+która kontroluje również dostęp do panelu WWW.
 
 ## Kodowanie tekstu
 

@@ -5,7 +5,8 @@
 - Dodano opcjonalny, wbudowany proxy KISS TCP dla każdego portu TNC.
 - Przy wyłączonym proxy UltimatePR łączy się bezpośrednio z TNC, np. na porcie `8001`.
 - Przy włączonym proxy UltimatePR i zewnętrzne aplikacje KISS mogą korzystać wspólnie z portu klientów, domyślnie `127.0.0.1:8101`.
-- Dodano konfigurację `tncproxy_enabled` oraz `tncproxy_listen` w zakładce TNC i w YAML.
+- Dodano konfigurację `tncproxy_enabled` oraz `tncproxy_port` w zakładce TNC i w YAML.
+- Lista `web.allowed_addresses` ogranicza również klientów TNC Proxy.
 - Proxy przekazuje ramki między TNC a wszystkimi podłączonymi klientami.
 
 ## 2026-08-21 - bezpieczne polecenia zdalne

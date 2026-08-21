@@ -137,16 +137,22 @@ ports:
 	if !c.Ports[0].TNCProxyEnabled || c.Ports[0].TNCProxyListen != "127.0.0.1:8101" {
 		t.Fatalf("unexpected proxy config: %+v", c.Ports[0])
 	}
+	if c.Ports[0].TNCProxyPort != 8101 {
+		t.Fatalf("proxy port = %d, want 8101", c.Ports[0].TNCProxyPort)
+	}
 }
 
-func TestRejectsTNCProxyWithoutListenAddress(t *testing.T) {
-	_, err := Parse([]byte(`server: {callsign: SP5ME}
+func TestTNCProxyDefaultsToPort8101(t *testing.T) {
+	c, err := Parse([]byte(`server: {callsign: SP5ME}
 terminal: {callsign: SP5ME}
 web: {listen: 127.0.0.1:8080}
 ports:
   - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, tncproxy_enabled: true, max_frame_bytes: 4096, reconnect_seconds: 5}`))
-	if err == nil {
-		t.Fatal("expected missing proxy listen address error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Ports[0].TNCProxyPort != 8101 {
+		t.Fatalf("proxy port = %d, want 8101", c.Ports[0].TNCProxyPort)
 	}
 }
 

@@ -25,7 +25,7 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	proxyAddr := freeAddress(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := Start(ctx, proxyAddr, upListener.Addr().String(), slog.Default()); err != nil {
+	if err := Start(ctx, proxyAddr, upListener.Addr().String(), []string{"127.0.0.1"}, slog.Default()); err != nil {
 		t.Fatal(err)
 	}
 

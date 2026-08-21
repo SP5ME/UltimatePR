@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +15,7 @@ import (
 type Proxy struct {
 	listen   string
 	upstream string
+	allowed  []string
 	log      *slog.Logger
 	mu       sync.Mutex
 	clients  map[net.Conn]*client
@@ -26,12 +28,12 @@ type client struct {
 	mu   sync.Mutex
 }
 
-func Start(ctx context.Context, listen, upstream string, log *slog.Logger) error {
+func Start(ctx context.Context, listen, upstream string, allowed []string, log *slog.Logger) error {
 	l, err := net.Listen("tcp", listen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", listen, err)
 	}
-	p := &Proxy{listen: listen, upstream: upstream, log: log, clients: make(map[net.Conn]*client)}
+	p := &Proxy{listen: listen, upstream: upstream, allowed: append([]string(nil), allowed...), log: log, clients: make(map[net.Conn]*client)}
 	log.Info("TNC proxy started", "listen", listen, "upstream", upstream)
 	go p.run(ctx, l)
 	return nil
@@ -53,6 +55,11 @@ func (p *Proxy) run(ctx context.Context, listener net.Listener) {
 			}
 			return
 		}
+		if !addressAllowed(conn.RemoteAddr(), p.allowed) {
+			p.log.Warn("TNC proxy client rejected", "remote", conn.RemoteAddr())
+			_ = conn.Close()
+			continue
+		}
 		c := &client{conn: conn}
 		p.mu.Lock()
 		p.clients[conn] = c
@@ -60,6 +67,30 @@ func (p *Proxy) run(ctx context.Context, listener net.Listener) {
 		p.log.Info("TNC proxy client connected", "remote", conn.RemoteAddr())
 		go p.clientLoop(ctx, c)
 	}
+}
+
+func addressAllowed(address net.Addr, allowed []string) bool {
+	host, _, err := net.SplitHostPort(address.String())
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	for _, raw := range allowed {
+		entry := net.ParseIP(strings.TrimSpace(raw))
+		if entry != nil {
+			if (entry.IsUnspecified() && ((entry.To4() != nil) == (ip.To4() != nil))) || entry.Equal(ip) {
+				return true
+			}
+			continue
+		}
+		if _, network, err := net.ParseCIDR(strings.TrimSpace(raw)); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Proxy) clientLoop(ctx context.Context, c *client) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
@@ -125,7 +126,8 @@ type Port struct {
 	KISSTXTail       *uint8   `yaml:"kiss_txtail,omitempty"`
 	KISSFullDuplex   *bool    `yaml:"kiss_full_duplex,omitempty"`
 	TNCProxyEnabled  bool     `yaml:"tncproxy_enabled,omitempty" json:"tncproxy_enabled,omitempty"`
-	TNCProxyListen   string   `yaml:"tncproxy_listen,omitempty" json:"tncproxy_listen,omitempty"`
+	TNCProxyPort     uint16   `yaml:"tncproxy_port,omitempty" json:"tncproxy_port,omitempty"`
+	TNCProxyListen   string   `yaml:"tncproxy_listen,omitempty" json:"-"` // legacy address form
 	Listen           string   `yaml:"listen"`
 	RemoteHost       string   `yaml:"remote_host"`
 	RemotePort       uint16   `yaml:"remote_port"`
@@ -189,6 +191,19 @@ func (c *Config) applyDefaults() {
 	}
 	if len(c.Web.AllowedAddresses) == 0 {
 		c.Web.AllowedAddresses = []string{"0.0.0.0"}
+	}
+	for i := range c.Ports {
+		p := &c.Ports[i]
+		if p.TNCProxyPort == 0 && p.TNCProxyListen != "" {
+			if _, rawPort, err := net.SplitHostPort(p.TNCProxyListen); err == nil {
+				if port, err := strconv.ParseUint(rawPort, 10, 16); err == nil {
+					p.TNCProxyPort = uint16(port)
+				}
+			}
+		}
+		if p.TNCProxyEnabled && p.TNCProxyPort == 0 {
+			p.TNCProxyPort = 8101
+		}
 	}
 	c.applyTerminalMessageDefaults()
 }
@@ -310,11 +325,8 @@ func (c Config) Validate() error {
 			return fmt.Errorf("ports[%d]: kiss_port must be 0..15", i)
 		}
 		if p.Type == "kiss-tcp" && p.TNCProxyEnabled {
-			if strings.TrimSpace(p.TNCProxyListen) == "" {
-				return fmt.Errorf("ports[%d]: tncproxy_listen is required when tncproxy_enabled is true", i)
-			}
-			if _, _, err := net.SplitHostPort(p.TNCProxyListen); err != nil {
-				return fmt.Errorf("ports[%d].tncproxy_listen: %w", i, err)
+			if p.TNCProxyPort == 0 {
+				return fmt.Errorf("ports[%d]: tncproxy_port must be between 1 and 65535", i)
 			}
 		}
 		if p.Enabled != nil && !*p.Enabled {
