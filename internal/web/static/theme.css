@@ -78,6 +78,9 @@ input[type="file"]::file-selector-button { height: 29px; margin-right: 12px; pad
 .update-status dd { margin: 7px 0 0; font: 700 13px ui-monospace, Consolas, monospace; }
 .settings-card .config-notice:empty { display: none; }
 .settings-card .config-notice { margin: 14px 0 0; }
+.file-picker { display: flex; align-items: center; gap: 10px; min-width: 0; height: 43px; margin-top: 7px; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel2); }
+.file-picker button { flex: 0 0 auto; width: auto; min-width: 120px; height: 31px; margin: 0; padding: 0 12px; }
+.file-picker span { min-width: 0; overflow: hidden; color: var(--muted); font: 12px ui-monospace, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .action-row { grid-template-columns: 1fr; align-items: stretch; }
   .action-row > * { width: 100% !important; }
