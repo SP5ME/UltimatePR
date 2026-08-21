@@ -196,33 +196,50 @@ func (m *Manager) Send(ctx context.Context, data []byte) error {
 	return m.SendWithProgress(ctx, data, nil)
 }
 
-// SendWithProgress splits data according to paclen and reports the actual
-// acknowledgement state of every AX.25 I frame.
+// SendWithProgress splits data according to paclen, preferring whitespace
+// boundaries so words remain intact, and reports every AX.25 I frame.
 func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress func(SendPacketProgress)) error {
-	total := (len(data) + m.paclen - 1) / m.paclen
-	packet := 0
-	for len(data) > 0 {
-		n := len(data)
-		if n > m.paclen {
-			n = m.paclen
-		}
-		packet++
-		chunk := append([]byte(nil), data[:n]...)
+	chunks := splitAX25Payload(data, m.paclen)
+	for packet, chunk := range chunks {
 		if progress != nil {
-			progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "sending"})
+			progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "sending"})
 		}
 		if err := m.sendChunk(ctx, chunk); err != nil {
 			if progress != nil {
-				progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "error", Error: err.Error()})
+				progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "error", Error: err.Error()})
 			}
 			return err
 		}
 		if progress != nil {
-			progress(SendPacketProgress{Packet: packet, Total: total, Data: chunk, State: "sent"})
+			progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "sent"})
 		}
-		data = data[n:]
 	}
 	return nil
+}
+
+func splitAX25Payload(data []byte, paclen int) [][]byte {
+	if len(data) == 0 {
+		return nil
+	}
+	if paclen < 1 {
+		paclen = 1
+	}
+	chunks := make([][]byte, 0, (len(data)+paclen-1)/paclen)
+	for len(data) > 0 {
+		n := len(data)
+		if n > paclen {
+			n = paclen
+			for i := paclen - 1; i > 0; i-- {
+				if data[i] == ' ' || data[i] == '\t' || data[i] == '\r' || data[i] == '\n' {
+					n = i + 1
+					break
+				}
+			}
+		}
+		chunks = append(chunks, append([]byte(nil), data[:n]...))
+		data = data[n:]
+	}
+	return chunks
 }
 
 // KeepAlive sends AX.25 supervisory polls while an established link is idle.

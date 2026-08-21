@@ -29,7 +29,7 @@
       <h3>Manual</h3>
       <ul class="info-manual">
         <li>Terminal jest głównym miejscem pracy. Najpierw wybierz port radiowy i połącz się z korespondentem.</li>
-        <li>W trakcie rozmowy możesz wpisać <code>MH</code>, aby zobaczyć ostatnie stacje z MHEARD.</li>
+        <li>Korespondent może wysłać w osobnej linii <code>/I</code>, <code>/MH</code>, <code>/H</code> lub <code>/?</code>, aby otrzymać automatyczną odpowiedź.</li>
         <li>Komenda <code>I</code> lub <code>INFO</code> zwraca podstawowe dane stacji.</li>
         <li>W zakładce <strong>Stacja</strong> edytujesz znak, imię operatora, lokator, QTH oraz gotowe wiadomości.</li>
         <li>Ikony w górnym pasku służą do motywu, dźwięku, informacji i historii zmian.</li>
@@ -62,7 +62,7 @@
   <div class="config-tabs"><button id="configStationTab" class="active">Stacja</button><button id="configBBSTab" hidden>BBS</button><button id="configNodeTab" hidden>NODE</button><button id="configTNCTab">TNC / Radio</button><button id="configApplicationTab">Aplikacja</button></div>
   <div id="stationConfigPanel" class="settings-panel">
     <div class="settings-card"><h3>Stacja operatora</h3><p>Dane stacji używane przez terminal, DIGI oraz automatyczny beacon AX.25.</p><div class="field-grid"><label>Znak terminala<input id="terminalCallsign" maxlength="6"></label><label>SSID terminala<input id="terminalSSID" type="number" min="0" max="15"></label><label>Imię operatora (opcjonalnie)<input id="applicationOperatorName" placeholder="Jan"></label><label>Lokator (opcjonalnie)<input id="applicationLocator" placeholder="KO02JD" title="Format: AA99AA, np. KO02JD"></label><label>QTH (opcjonalnie)<input id="applicationQTH"></label></div></div>
-    <div class="settings-card"><div class="card-head"><div><h3>Wiadomości terminala</h3><p>Przyciski wybierają edytowany tekst. Powitanie idzie po połączeniu przychodzącym, pożegnanie przy zdalnym rozłączeniu, a info odpowiada na MH / INFO.</p></div></div><div class="segmented message-tabs"><button id="stationMessageWelcomeTab" class="active" type="button">Powitanie</button><button id="stationMessageGoodbyeTab" type="button">Pożegnanie</button><button id="stationMessageInfoTab" type="button">Info</button></div><label id="stationMessageLabel">Powitanie</label><textarea id="stationMessageText" rows="7" spellcheck="false"></textarea><div class="message-hint"><button id="stationMessagePreset" class="secondary" type="button">Wstaw gotowiec</button><small>Makra: {CALL} {NAME} {LOC} {QTH} {REMOTE}</small></div></div>
+    <div class="settings-card"><div class="card-head"><div><h3>Wiadomości terminala</h3><p>Przyciski wybierają edytowany tekst. Powitanie idzie po połączeniu przychodzącym, pożegnanie przy zdalnym rozłączeniu, a info odpowiada na zdalne polecenie /I.</p></div></div><div class="segmented message-tabs"><button id="stationMessageWelcomeTab" class="active" type="button">Powitanie</button><button id="stationMessageGoodbyeTab" type="button">Pożegnanie</button><button id="stationMessageInfoTab" type="button">Info</button></div><label id="stationMessageLabel">Powitanie</label><textarea id="stationMessageText" rows="7" spellcheck="false"></textarea><div class="message-hint"><button id="stationMessagePreset" class="secondary" type="button">Wstaw gotowiec</button><small>Makra: {CALL} {NAME} {LOC} {QTH} {REMOTE}</small></div></div>
     <div class="settings-card"><h3>Beacon stacji</h3><p>Gdy beacon stacji jest włączony, jest wysyłany automatycznie co 10 minut, gdy strona UltimatePR jest otwarta. Używa znaku stacji operatora i danych stacji.</p><div class="field-grid"><label>VIA / DIGI<input id="beaconVia" placeholder="SR5XYZ-1, SR5ABC-2"></label></div></div>
     <div hidden><select id="beaconPort"></select><input id="beaconDestination"><input id="beaconText"><input id="beaconInterval"><input id="beaconEnabled" type="checkbox"><input id="historyDatabase"><input id="historyMaxStations"><input id="historyMaxSessions"><input id="historyMaxLines"><input id="historyMaxMB"><input id="historyRetention"><input id="historyEnabled" type="checkbox"></div>
   </div>
@@ -108,4 +108,4 @@
   </div>
 </div>
 <footer><span>TERMINAL</span><span>LOCAL WEB UI</span><span>BBS + KISS + UTF-8</span><span id="terminalCall">TERMINAL —</span></footer>
-<script src="/app.js?v=55"></script></body></html>
+<script src="/app.js?v=56"></script></body></html>

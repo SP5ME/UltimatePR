@@ -619,15 +619,17 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	terminalInfo := s.cfg.TerminalInfo
 	handleRemoteCommand := func(text string, reply func(string)) {
 		for _, line := range remoteCommandBuffer.Push(text) {
-			switch strings.ToUpper(strings.TrimSpace(line)) {
-			case "MH":
+			switch terminalRemoteCommand(line) {
+			case "mheard":
 				if s.cfg.MHeard != nil {
 					reply(formatMHeardResponse(s.cfg.MHeard.List()))
 				} else {
 					reply("Brak odebranych stacji.\r\n")
 				}
-			case "I", "INFO":
+			case "info":
 				reply(expandReply(terminalInfo, historyStation))
+			case "help":
+				reply(terminalHelpResponse())
 			}
 		}
 	}
@@ -947,15 +949,17 @@ func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station strin
 				return
 			}
 			for _, line := range commandBuffer.Push(data) {
-				switch strings.ToUpper(strings.TrimSpace(line)) {
-				case "MH":
+				switch terminalRemoteCommand(line) {
+				case "mheard":
 					if s.cfg.MHeard != nil {
 						writeOperatorReply(ws, in, codec, formatMHeardResponse(s.cfg.MHeard.List()))
 					} else {
 						writeOperatorReply(ws, in, codec, "Brak odebranych stacji.\r\n")
 					}
-				case "I", "INFO":
+				case "info":
 					writeOperatorReply(ws, in, codec, terminalReplyText(s.cfg.TerminalInfo, terminalMacroContext(terminalCall, station, s.cfg)))
+				case "help":
+					writeOperatorReply(ws, in, codec, terminalHelpResponse())
 				}
 			}
 		}

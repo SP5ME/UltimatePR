@@ -70,7 +70,7 @@ let activeConfigPart='station';
 let infoPart='overview';
 const stationMessageFieldByKey={welcome:'WelcomeMessage',goodbye:'GoodbyeMessage',info:'InfoMessage'};
 const stationMessageLabelByKey={welcome:'Powitanie',goodbye:'Pożegnanie',info:'Info'};
-const stationMessagePresetByKey={welcome:'Witaj {REMOTE}, de {CALL}.',goodbye:'73 {REMOTE}, de {CALL}.',info:'Call: {CALL}\r\nImię: {NAME}\r\nLOC: {LOC}\r\nQTH: {QTH}\r\n73'};
+const stationMessagePresetByKey={welcome:'Witaj {REMOTE}, de {CALL}.\r\nDostepne komendy: /I, /MH, /H lub /?.',goodbye:'73 {REMOTE}, de {CALL}.',info:'Call: {CALL}\r\nImię: {NAME}\r\nLOC: {LOC}\r\nQTH: {QTH}\r\n73'};
 let stationMessageKey='welcome';
 function stationMessageField(key){return stationMessageFieldByKey[key]||stationMessageFieldByKey.welcome}
 function syncStationMessageEditor(){const textarea=$('stationMessageText'),label=$('stationMessageLabel');const buttons={welcome:$('stationMessageWelcomeTab'),goodbye:$('stationMessageGoodbyeTab'),info:$('stationMessageInfoTab')};for(const [key,button] of Object.entries(buttons)){button?.classList.toggle('active',key===stationMessageKey)}if(label)label.textContent=stationMessageLabelByKey[stationMessageKey]||stationMessageLabelByKey.welcome;if(!textarea)return;const field=stationMessageField(stationMessageKey);textarea.value=configModel?.Application?.[field]||''}

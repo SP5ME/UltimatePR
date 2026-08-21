@@ -71,3 +71,31 @@ func TestPrepareTerminalMessageReplacesPolishCharacters(t *testing.T) {
 		t.Fatalf("prepared terminal message = %q, want %q", got, want)
 	}
 }
+
+func TestTerminalRemoteCommandsRequireSlashAndSeparateLine(t *testing.T) {
+	tests := map[string]string{
+		"/i":        "info",
+		" /MH ":     "mheard",
+		"/h":        "help",
+		"/?":        "help",
+		"I":         "",
+		"INFO":      "",
+		"MH":        "",
+		"tekst /I":  "",
+		"/MH teraz": "",
+	}
+	for input, want := range tests {
+		if got := terminalRemoteCommand(input); got != want {
+			t.Errorf("terminalRemoteCommand(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestTerminalHelpListsRemoteCommands(t *testing.T) {
+	help := terminalHelpResponse()
+	for _, command := range []string{"/I", "/MH", "/H", "/?"} {
+		if !strings.Contains(help, command) {
+			t.Errorf("help does not list %s: %q", command, help)
+		}
+	}
+}

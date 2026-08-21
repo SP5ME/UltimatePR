@@ -49,6 +49,24 @@ func TestTerminalMessageDefaults(t *testing.T) {
 	}
 }
 
+func TestLegacyWelcomeGetsCommandHintWithoutOverwritingCustomWelcome(t *testing.T) {
+	legacy, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\napplication: {welcome_message: 'Witaj {REMOTE}, de {CALL}.'}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(legacy.Application.WelcomeMessage, "/I") || !strings.Contains(legacy.Application.WelcomeMessage, "/MH") {
+		t.Fatalf("legacy welcome was not migrated: %q", legacy.Application.WelcomeMessage)
+	}
+
+	custom, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\napplication: {welcome_message: 'Moje powitanie'}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if custom.Application.WelcomeMessage != "Moje powitanie" {
+		t.Fatalf("custom welcome was overwritten: %q", custom.Application.WelcomeMessage)
+	}
+}
+
 func TestBeaconViaConfiguration(t *testing.T) {
 	raw := []byte(`
 server: {callsign: SP5ME}

@@ -5,7 +5,7 @@ application:
   qth: Example
   language: en
   update_channel: main
-  welcome_message: "Witaj {REMOTE}, de {CALL}."
+  welcome_message: "Witaj {REMOTE}, de {CALL}.\r\nDostepne komendy: /I, /MH, /H lub /?."
   goodbye_message: "73 {REMOTE}, de {CALL}."
   info_message: "Call: {CALL}\r\nImię: {NAME}\r\nLOC: {LOC}\r\nQTH: {QTH}\r\n73"
 server: {callsign: N0CALL, ssid: 7}

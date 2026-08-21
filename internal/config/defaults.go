@@ -54,8 +54,10 @@ func stationText(call string, ssid uint8) string {
 }
 
 func (c *Config) applyTerminalMessageDefaults() {
-	if strings.TrimSpace(c.Application.WelcomeMessage) == "" {
-		c.Application.WelcomeMessage = "Witaj {REMOTE}, de {CALL}."
+	const legacyWelcome = "Witaj {REMOTE}, de {CALL}."
+	const welcome = legacyWelcome + "\r\nDostepne komendy: /I, /MH, /H lub /?."
+	if current := strings.TrimSpace(c.Application.WelcomeMessage); current == "" || current == legacyWelcome {
+		c.Application.WelcomeMessage = welcome
 	}
 	if strings.TrimSpace(c.Application.GoodbyeMessage) == "" {
 		c.Application.GoodbyeMessage = "73 {REMOTE}, de {CALL}."

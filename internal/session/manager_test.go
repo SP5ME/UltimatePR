@@ -129,6 +129,42 @@ func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
 	}
 }
 
+func TestSendSplitsAtSpacesAndPreservesOriginalText(t *testing.T) {
+	m, sent := testManager(t)
+	m.paclen = 12
+	connectManager(t, m, sent)
+	text := "test dlugiej wiadomosci"
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte(text)) }()
+
+	want := []string{"test ", "dlugiej ", "wiadomosci"}
+	var joined []byte
+	for i, expected := range want {
+		f, err := ax25.Decode(<-sent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(f.Payload); got != expected {
+			t.Fatalf("chunk %d = %q, want %q", i+1, got, expected)
+		}
+		joined = append(joined, f.Payload...)
+		m.Handle("radio", response(ax25.TypeRR, uint8(i+1)&7))
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if string(joined) != text {
+		t.Fatalf("joined payload = %q, want %q", joined, text)
+	}
+}
+
+func TestPayloadWithoutWhitespaceUsesHardPaclenLimit(t *testing.T) {
+	chunks := splitAX25Payload([]byte("abcdefghijkl"), 5)
+	if len(chunks) != 3 || string(chunks[0]) != "abcde" || string(chunks[1]) != "fghij" || string(chunks[2]) != "kl" {
+		t.Fatalf("hard-split chunks=%q", chunks)
+	}
+}
+
 func TestSendIgnoresStaleAcknowledgementWithoutImmediateRetry(t *testing.T) {
 	m, sent := testManager(t)
 	m.t1 = 80 * time.Millisecond

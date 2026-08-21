@@ -106,6 +106,23 @@ func prepareTerminalMessage(text string, values map[string]string) string {
 	return language.ASCII(expandTerminalMessage(text, values))
 }
 
+func terminalRemoteCommand(line string) string {
+	switch strings.ToUpper(strings.TrimSpace(line)) {
+	case "/I":
+		return "info"
+	case "/MH":
+		return "mheard"
+	case "/H", "/?":
+		return "help"
+	default:
+		return ""
+	}
+}
+
+func terminalHelpResponse() string {
+	return "Komendy UltimatePR:\r\n/I - informacje o stacji\r\n/MH - ostatnio slyszane stacje\r\n/H lub /? - ta pomoc\r\n"
+}
+
 func formatMHeardResponse(entries []mheard.Entry) string {
 	if len(entries) == 0 {
 		return "Brak odebranych stacji.\r\n"

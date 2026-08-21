@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-21 - bezpieczne polecenia zdalne
+
+- Polecenia zdalne wymagają teraz prefiksu `/` i osobnej linii: `/I` oraz `/MH`.
+- Dodano pomoc dostępną przez `/H` i `/?`.
+- Domyślne powitanie informuje korespondenta o dostępnych poleceniach; własne powitania nie są nadpisywane.
+- Długie wiadomości są dzielone na ramki w miejscu ostatniej spacji lub końca linii przed limitem `paclen`, bez przecinania zwykłych słów.
+
 ## 2026-08-21 - stabilność sesji i eksport monitora
 
 - Stare lub niepasujące potwierdzenia `RR` nie powodują już natychmiastowych, wielokrotnych retransmisji tej samej wiadomości.
