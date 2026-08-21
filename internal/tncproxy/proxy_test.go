@@ -33,13 +33,25 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	defer client1.Close()
 	client2 := dialEventually(t, proxyAddr)
 	defer client2.Close()
+	time.Sleep(50 * time.Millisecond)
+
+	// Register the second client before testing the shared frame path.
+	if _, err := client2.Write([]byte("ready")); err != nil {
+		t.Fatal(err)
+	}
+	if got := readWithDeadline(t, client1); string(got) != "ready" {
+		t.Fatalf("client registration data = %q, want %q", got, "ready")
+	}
+	upstream := <-upConnCh
+	defer upstream.Close()
+	if got := readWithDeadline(t, upstream); string(got) != "ready" {
+		t.Fatalf("upstream registration data = %q, want %q", got, "ready")
+	}
 
 	want := []byte("client-frame")
 	if _, err := client1.Write(want); err != nil {
 		t.Fatal(err)
 	}
-	upstream := <-upConnCh
-	defer upstream.Close()
 	got := readWithDeadline(t, upstream)
 	if string(got) != string(want) {
 		t.Fatalf("upstream data = %q, want %q", got, want)
