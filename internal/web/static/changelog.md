@@ -6,6 +6,7 @@
 - Dodano pomoc dostępną przez `/H` i `/?`.
 - Domyślne powitanie informuje korespondenta o dostępnych poleceniach; własne powitania nie są nadpisywane.
 - Długie wiadomości są dzielone na ramki w miejscu ostatniej spacji lub końca linii przed limitem `paclen`, bez przecinania zwykłych słów.
+- Wychodzący tekst i status transmisji są wyrównane do prawej; po zakończeniu wieloramkowej wiadomości pozostaje tylko końcowy status ostatniej paczki.
 
 ## 2026-08-21 - stabilność sesji i eksport monitora
 
