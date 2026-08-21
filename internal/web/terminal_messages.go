@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/packet-radio/ultimatepr/internal/language"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 )
@@ -99,6 +100,10 @@ func expandTerminalMessage(text string, values map[string]string) string {
 		}
 	}
 	return text
+}
+
+func prepareTerminalMessage(text string, values map[string]string) string {
+	return language.ASCII(expandTerminalMessage(text, values))
 }
 
 func formatMHeardResponse(entries []mheard.Entry) string {

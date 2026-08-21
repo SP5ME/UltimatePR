@@ -62,3 +62,12 @@ func TestExpandTerminalMessageAtSendTime(t *testing.T) {
 		t.Fatalf("plain message changed: %q", got)
 	}
 }
+
+func TestPrepareTerminalMessageReplacesPolishCharacters(t *testing.T) {
+	values := map[string]string{"NAME": "Mikołaj"}
+	got := prepareTerminalMessage("Zażółć gęślą jaźń, {NAME}!\r\n", values)
+	want := "Zazolc gesla jazn, Mikolaj!\r\n"
+	if got != want {
+		t.Fatalf("prepared terminal message = %q, want %q", got, want)
+	}
+}

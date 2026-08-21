@@ -31,6 +31,7 @@ type inboundLink struct {
 	mux           *InboundMux
 	port          string
 	local, remote ax25.Address
+	digipeaters   []ax25.Address
 	vr, vs        uint8
 	in            chan []byte
 	tx            chan []byte
@@ -62,7 +63,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		if f.Type != ax25.TypeSABM || service == nil {
 			return false
 		}
-		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan uint8, 8), closed: make(chan struct{})}
+		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan uint8, 8), closed: make(chan struct{})}
 		created := false
 		m.mu.Lock()
 		if existing := m.links[key]; existing != nil {
@@ -86,6 +87,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	case ax25.TypeSABM:
 		link.mu.Lock()
 		link.vr, link.vs = 0, 0
+		link.digipeaters = reverseDigipeaters(f.Digipeaters)
 		link.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
 	case ax25.TypeDISC:
@@ -228,9 +230,26 @@ func (l *inboundLink) sendControl(t ax25.Type, pf bool, nr uint8) error {
 	return l.send(l.response(t, pf, nr))
 }
 func (l *inboundLink) response(t ax25.Type, pf bool, nr uint8) ax25.Frame {
+	l.mu.Lock()
 	d, s := l.remote, l.local
+	digis := append([]ax25.Address(nil), l.digipeaters...)
+	l.mu.Unlock()
 	d.CommandResponse, s.CommandResponse = false, true
-	return ax25.Frame{Destination: d, Source: s, Type: t, PollFinal: pf, NR: nr}
+	return ax25.Frame{Destination: d, Source: s, Digipeaters: digis, Type: t, PollFinal: pf, NR: nr}
+}
+
+func reverseDigipeaters(path []ax25.Address) []ax25.Address {
+	if len(path) == 0 {
+		return nil
+	}
+	reversed := make([]ax25.Address, len(path))
+	for i := range path {
+		digi := path[len(path)-1-i]
+		digi.Repeated = false
+		digi.CommandResponse = false
+		reversed[i] = digi
+	}
+	return reversed
 }
 func (l *inboundLink) send(f ax25.Frame) error {
 	b, err := ax25.Encode(f)

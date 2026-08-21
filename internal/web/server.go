@@ -854,7 +854,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
 			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort)
 		case "data":
-			m.Data = expandTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
+			m.Data = prepareTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
 			if historyConnected && s.cfg.History != nil {
 				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
 			}
