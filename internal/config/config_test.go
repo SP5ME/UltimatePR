@@ -26,6 +26,22 @@ func TestWebDefaultsAndPasswordHashIsPrivate(t *testing.T) {
 	}
 }
 
+func TestPortProxyJSONFieldsRoundTrip(t *testing.T) {
+	var enabled = false
+	want := Config{Ports: []Port{{ID: "p1", Type: "kiss-tcp", Enabled: &enabled, TNCProxyEnabled: true, TNCProxyPort: 8101}}}
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Config
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Ports[0].Enabled == nil || *got.Ports[0].Enabled || !got.Ports[0].TNCProxyEnabled || got.Ports[0].TNCProxyPort != 8101 {
+		t.Fatalf("unexpected port after JSON round trip: %+v", got.Ports[0])
+	}
+}
+
 func TestExampleConfiguration(t *testing.T) {
 	c, err := Load("../../configs/example.yaml")
 	if err != nil {
