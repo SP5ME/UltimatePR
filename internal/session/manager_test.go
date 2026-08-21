@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -125,6 +126,49 @@ func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
 		if sentState.Packet != packet || sentState.Total != 3 || sentState.State != "sent" {
 			t.Fatalf("sent progress=%+v", sentState)
 		}
+	}
+}
+
+func TestSendIgnoresStaleAcknowledgementWithoutImmediateRetry(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 80 * time.Millisecond
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
+
+	first := <-sent
+	m.Handle("radio", response(ax25.TypeRR, 0))
+	select {
+	case duplicate := <-sent:
+		t.Fatalf("stale RR caused immediate retry: first=% X duplicate=% X", first, duplicate)
+	case <-time.After(30 * time.Millisecond):
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSendRetriesImmediatelyOnRejectForCurrentSequence(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = time.Second
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
+
+	first := <-sent
+	m.Handle("radio", response(ax25.TypeREJ, 0))
+	select {
+	case duplicate := <-sent:
+		if !bytes.Equal(first, duplicate) {
+			t.Fatalf("REJ retry differs from original: first=% X duplicate=% X", first, duplicate)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("REJ did not trigger immediate retry")
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 

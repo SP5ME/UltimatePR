@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-21 - stabilność sesji i eksport monitora
+
+- Stare lub niepasujące potwierdzenia `RR` nie powodują już natychmiastowych, wielokrotnych retransmisji tej samej wiadomości.
+- `REJ` nadal uruchamia kontrolowane ponowienie właściwej ramki zgodnie z numerem sekwencji.
+- Monitor ramek można wyeksportować do czytelnego pliku TXT w kolejności chronologicznej.
+
 ## 2026-08-21 - makra terminala
 
 - Makra `{CALL}`, `{NAME}`, `{LOC}`, `{QTH}` i `{REMOTE}` są rozwijane również w wiadomościach wpisywanych podczas rozmowy, bezpośrednio przed wysłaniem.

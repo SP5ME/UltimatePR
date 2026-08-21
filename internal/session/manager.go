@@ -36,6 +36,11 @@ type SendPacketProgress struct {
 	Error  string
 }
 
+type acknowledgement struct {
+	type_ ax25.Type
+	nr    uint8
+}
+
 type Manager struct {
 	mu          sync.Mutex
 	local       ax25.Address
@@ -46,7 +51,7 @@ type Manager struct {
 	ports       map[string]Sender
 	vs, vr      uint8
 	control     chan ax25.Type
-	ack         chan uint8
+	ack         chan acknowledgement
 	subs        map[chan Event]struct{}
 	t1          time.Duration
 	n2          int
@@ -54,7 +59,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan ax25.Type, 8), ack: make(chan uint8, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan ax25.Type, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
 }
 
 func (m *Manager) Subscribe() (<-chan Event, func()) {
@@ -262,17 +267,45 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			return err
 		}
-		select {
-		case nr := <-m.ack:
-			if nr == expected {
-				m.mu.Lock()
-				m.vs = expected
-				m.mu.Unlock()
-				return nil
+		timer := time.NewTimer(m.t1)
+	waitForAck:
+		for {
+			select {
+			case ack := <-m.ack:
+				if ack.type_ != ax25.TypeREJ && ack.nr == expected {
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					m.mu.Lock()
+					m.vs = expected
+					m.mu.Unlock()
+					return nil
+				}
+				if ack.type_ == ax25.TypeREJ && ack.nr == ns {
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					break waitForAck
+				}
+				// A stale RR or piggybacked N(R) does not acknowledge this
+				// frame and must not trigger an immediate retransmission.
+			case <-timer.C:
+				break waitForAck
+			case <-ctx.Done():
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				return ctx.Err()
 			}
-		case <-time.After(m.t1):
-		case <-ctx.Done():
-			return ctx.Err()
 		}
 	}
 	return errors.New("AX.25 data acknowledgement timeout")
@@ -297,7 +330,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.setState(Disconnected, "Zdalna stacja rozlaczyla sesje")
 	case ax25.TypeRR:
 		select {
-		case m.ack <- f.NR:
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
 		default:
 		}
 		if f.PollFinal && f.Destination.CommandResponse {
@@ -310,7 +343,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.emit(Event{Type: "notice", Message: "Zdalna stacja chwilowo nie moze odbierac"})
 	case ax25.TypeREJ:
 		select {
-		case m.ack <- f.NR:
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
 		default:
 		}
 	case ax25.TypeI:
@@ -327,7 +360,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		}
 		if f.NR <= 7 {
 			select {
-			case m.ack <- f.NR:
+			case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
 			default:
 			}
 		}
