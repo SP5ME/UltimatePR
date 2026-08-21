@@ -35,6 +35,29 @@ Parametry pozostawione puste nie są wysyłane. Dzięki temu domyślna
 konfiguracja nie nadpisuje ustawień Dire Wolfa ani fizycznego TNC. Ustawione
 komendy są wysyłane po każdym ponownym zestawieniu połączenia z TNC.
 
+## Współdzielenie TNC przez TNC Proxy
+
+Dla portu typu `kiss-tcp` można włączyć wbudowany proxy KISS:
+
+```yaml
+ports:
+  - id: radio-2m
+    type: kiss-tcp
+    host: 127.0.0.1
+    port: 8001
+    tncproxy_enabled: true
+    tncproxy_listen: 127.0.0.1:8101
+```
+
+W tym trybie UltimatePR łączy się z proxy na porcie `8101`, a proxy łączy się
+z właściwym TNC na porcie `8001`. Na `8101` mogą równocześnie łączyć się
+UltimatePR i zewnętrzne aplikacje KISS TCP. Gdy `tncproxy_enabled` jest
+wyłączone, UltimatePR łączy się bezpośrednio z `host:port`.
+
+Port `tncproxy_listen` musi być unikalny dla każdego włączonego portu TNC.
+Jeśli aplikacja zewnętrzna działa na innym komputerze, użyj np.
+`0.0.0.0:8101` i ogranicz dostęp regułami zapory sieciowej.
+
 ## Kodowanie tekstu
 
 Kodowanie jest na sztywno ustawione na `UTF-8`. KISS i AX.25 przenoszą bajty,

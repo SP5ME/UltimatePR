@@ -125,6 +125,31 @@ ports:
 	}
 }
 
+func TestAcceptsTNCProxy(t *testing.T) {
+	c, err := Parse([]byte(`server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, tncproxy_enabled: true, tncproxy_listen: 127.0.0.1:8101, max_frame_bytes: 4096, reconnect_seconds: 5}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !c.Ports[0].TNCProxyEnabled || c.Ports[0].TNCProxyListen != "127.0.0.1:8101" {
+		t.Fatalf("unexpected proxy config: %+v", c.Ports[0])
+	}
+}
+
+func TestRejectsTNCProxyWithoutListenAddress(t *testing.T) {
+	_, err := Parse([]byte(`server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: p1, type: kiss-tcp, host: 127.0.0.1, port: 8001, tncproxy_enabled: true, max_frame_bytes: 4096, reconnect_seconds: 5}`))
+	if err == nil {
+		t.Fatal("expected missing proxy listen address error")
+	}
+}
+
 func TestSaveRejectsInvalidWithoutChangingFile(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.yaml")
 	good, err := os.ReadFile("../../configs/example.yaml")

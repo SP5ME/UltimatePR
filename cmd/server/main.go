@@ -23,6 +23,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
 	"github.com/packet-radio/ultimatepr/internal/session"
+	"github.com/packet-radio/ultimatepr/internal/tncproxy"
 	"github.com/packet-radio/ultimatepr/internal/transport"
 	"github.com/packet-radio/ultimatepr/internal/transport/axudp"
 	"github.com/packet-radio/ultimatepr/internal/transport/kiss"
@@ -135,7 +136,15 @@ func main() {
 		if cfgPort.Type == "axudp" {
 			p = axudp.New(axudp.Config{ID: cfgPort.ID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
 		} else {
-			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port)), MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
+			address := net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port))
+			if cfgPort.TNCProxyEnabled {
+				if err := tncproxy.Start(ctx, cfgPort.TNCProxyListen, address, log); err != nil {
+					log.Error("TNC proxy failed to start", "port", cfgPort.ID, "error", err)
+					os.Exit(2)
+				}
+				address = cfgPort.TNCProxyListen
+			}
+			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: address, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
 		}
 		runtime := &runningPort{port: p, enabled: enabled}
 		runtimes[cfgPort.ID] = runtime

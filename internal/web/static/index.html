@@ -77,7 +77,7 @@
     <div class="settings-card"><div class="card-head"><div><h3>Sąsiedzi noda</h3><p>Bezpośrednie stacje osiągalne przez KISS lub AXUDP.</p></div><button id="addNeighbor" class="secondary">Dodaj sąsiada</button></div><div id="neighborRows" class="edit-rows"></div></div>
   </div>
   <div id="tncConfigPanel" class="settings-panel" hidden>
-    <div class="settings-card"><div class="card-head"><div><h3>Porty TNC i radiowe</h3><p>Podstawowa konfiguracja KISS TCP wymaga tylko hosta i portu TCP. Numer portu KISS 0–15 oraz komendy radiowe są dostępne w ustawieniach zaawansowanych i domyślnie nie zmieniają parametrów TNC.</p></div><button id="addTNCPort" class="secondary">Dodaj port</button></div><div id="tncPortRows" class="edit-rows"></div></div>
+    <div class="settings-card"><div class="card-head"><div><h3>Porty TNC i radiowe</h3><p>Podaj adres i port TNC. Włączenie TNC Proxy udostępnia ten sam KISS TNC wielu aplikacjom; aplikacje zewnętrzne łączą się wtedy z portem klientów, domyślnie 127.0.0.1:8101.</p></div><button id="addTNCPort" class="secondary">Dodaj port</button></div><div id="tncPortRows" class="edit-rows"></div></div>
   </div>
   <div id="applicationConfigPanel" class="settings-panel" hidden>
     <div class="settings-card"><h3>Tryb pracy</h3><p>NODE i BBS stanowią jeden wspólny tryb i są zawsze włączane lub wyłączane razem.</p><div class="field-grid"><label>Tryb pracy<select id="applicationMode"><option value="station">Tylko stacja</option><option value="station-node-bbs" disabled>Stacja + NODE + BBS (work in progress)</option></select></label><label>Język<select id="applicationLanguage"><option value="pl">Polski</option><option value="en">English</option></select></label></div></div>
