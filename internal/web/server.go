@@ -809,7 +809,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 							handleRemoteCommand(sessionCodec.Decode(e.Data), sendRadioReply)
 						}
 						if e.State == session.Disconnected && strings.EqualFold(strings.TrimSpace(e.Message), "Zdalna stacja rozlaczyla sesje") {
-							_ = out.write(serverMessage{Type: "data", State: "connected", Data: terminalGoodbye})
+							_ = out.write(serverMessage{Type: "data", State: "connected", Data: expandReply(terminalGoodbye, historyStation)})
 						}
 						msg := terminalMessageFromEventWithCodec(e, sessionCodec)
 						if e.State == session.Disconnected && !historyConnected {
@@ -854,6 +854,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
 			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort)
 		case "data":
+			m.Data = expandTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
 			if historyConnected && s.cfg.History != nil {
 				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
 			}

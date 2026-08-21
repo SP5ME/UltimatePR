@@ -89,6 +89,18 @@ func terminalReplyText(template string, values map[string]string) string {
 	return terminalResponseText(expandTerminalTemplate(template, values))
 }
 
+// expandTerminalMessage expands configured station macros in operator-entered
+// text immediately before it is sent. Messages without known macros are kept
+// byte-for-byte unchanged.
+func expandTerminalMessage(text string, values map[string]string) string {
+	for key := range values {
+		if strings.Contains(text, "{"+key+"}") {
+			return terminalReplyText(text, values)
+		}
+	}
+	return text
+}
+
 func formatMHeardResponse(entries []mheard.Entry) string {
 	if len(entries) == 0 {
 		return "Brak odebranych stacji.\r\n"

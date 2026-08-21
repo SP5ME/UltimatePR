@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-21 - makra terminala
+
+- Makra `{CALL}`, `{NAME}`, `{LOC}`, `{QTH}` i `{REMOTE}` są rozwijane również w wiadomościach wpisywanych podczas rozmowy, bezpośrednio przed wysłaniem.
+- Dane makr są pobierane z aktualnej konfiguracji w sekcji `Stacja operatora`.
+- Pożegnanie wyświetlane po zdalnym rozłączeniu pokazuje już podstawione wartości zamiast surowych nazw makr.
+
 ## 2026-08-20
 
 - Ikony w górnym pasku zamiast napisów dla motywu, dźwięku, informacji i konfiguracji.

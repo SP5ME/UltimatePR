@@ -46,3 +46,19 @@ func TestTerminalTemplateExpansion(t *testing.T) {
 		t.Fatalf("blank macro handling failed: %q", cleaned)
 	}
 }
+
+func TestExpandTerminalMessageAtSendTime(t *testing.T) {
+	cfg := Config{TerminalCallsign: "SP5ME", TerminalSSID: 3, OperatorName: "Miki", ApplicationLocator: "KO02MD", ApplicationQTH: "Warszawa"}
+	values := terminalMacroContext(callsign(cfg.TerminalCallsign, cfg.TerminalSSID), "SQ9ABC-7", cfg)
+
+	got := expandTerminalMessage("Czesc {REMOTE}, tu {NAME} z {QTH}, {LOC}, de {CALL}.\r\n", values)
+	want := "Czesc SQ9ABC-7, tu Miki z Warszawa, KO02MD, de SP5ME-3.\r\n"
+	if got != want {
+		t.Fatalf("send-time macro expansion = %q, want %q", got, want)
+	}
+
+	plain := "Tekst {NIEZNANE} pozostaje bez zmian.\r\n"
+	if got := expandTerminalMessage(plain, values); got != plain {
+		t.Fatalf("plain message changed: %q", got)
+	}
+}
