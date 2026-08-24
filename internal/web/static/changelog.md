@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-24 - diagnostyczny eksport monitora
+
+- Dodano wybór formatu eksportu monitora: dotychczasowy TXT czytelny dla człowieka oraz RAW w formacie JSONL do diagnostyki ramek AX.25.
+- Eksport RAW zachowuje pełne wpisy monitora w kolejności chronologicznej, w tym zapis zakodowanych bajtów ramki.
+
 ## 2026-08-24 - zgodność i stabilność AX.25
 
 - Ujednolicono obsługę protokołu AX.25 dla połączeń wychodzących terminala i połączeń przychodzących do usług; warstwa protokołu nie zależy od funkcji terminala, BBS ani NODE.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-24 - diagnostic monitor export
+
+- Added a monitor export format selector: the existing human-readable TXT format and RAW JSONL for AX.25 frame diagnostics.
+- RAW exports preserve complete monitor entries in chronological order, including the encoded frame bytes.
+
 ## 2026-08-24 - AX.25 compliance and stability
 
 - Unified AX.25 protocol handling for outgoing terminal links and incoming service links; the protocol layer is independent of terminal, BBS, and NODE application functions.
