@@ -61,23 +61,24 @@ type controlEvent struct {
 }
 
 type Manager struct {
-	mu          sync.Mutex
-	operation   sync.Mutex
-	local       ax25.Address
-	state       State
-	port        string
-	remote      ax25.Address
-	digipeaters []ax25.Address
-	ports       map[string]Sender
-	vs, va, vr  uint8
-	control     chan controlEvent
-	ack         chan acknowledgement
-	subs        map[chan Event]struct{}
-	t1          time.Duration
-	n2          int
-	paclen      int
-	peerBusy    bool
-	rejectSent  bool
+	mu           sync.Mutex
+	operation    sync.Mutex
+	local        ax25.Address
+	state        State
+	port         string
+	remote       ax25.Address
+	digipeaters  []ax25.Address
+	ports        map[string]Sender
+	vs, va, vr   uint8
+	control      chan controlEvent
+	ack          chan acknowledgement
+	subs         map[chan Event]struct{}
+	t1           time.Duration
+	n2           int
+	paclen       int
+	peerBusy     bool
+	rejectSent   bool
+	uaGraceUntil time.Time
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
@@ -173,6 +174,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 			// AX.25 v2.2 SDL state 1: UA/DM answering SABM(P=1) is valid
 			// only as a response with F=1. UA(F=0) is error D and is ignored.
 			if event.type_ == ax25.TypeUA && event.response && event.final {
+				m.mu.Lock()
+				m.uaGraceUntil = time.Now().Add(time.Duration(m.n2) * m.t1)
+				m.mu.Unlock()
 				m.setState(Connected, "Sesja AX.25 polaczona")
 				return nil
 			}
@@ -534,13 +538,17 @@ func (m *Manager) waitRemoteReady(ctx context.Context) error {
 	return errors.New("AX.25 remote receiver remains busy")
 }
 
-func (m *Manager) Handle(port string, f ax25.Frame) {
+// Handle processes a frame and reports whether it belongs to this outgoing
+// link. This allows the dispatcher to route established outgoing traffic
+// before offering unrelated frames to inbound services using the same call.
+func (m *Manager) Handle(port string, f ax25.Frame) bool {
 	m.mu.Lock()
-	active := port == m.port && f.Source.String() == m.remote.String() && f.Destination.String() == m.local.String()
+	active := m.state != Disconnected && port == m.port && f.Source.String() == m.remote.String() && f.Destination.String() == m.local.String()
 	state := m.state
+	uaGraceUntil := m.uaGraceUntil
 	m.mu.Unlock()
 	if !active {
-		return
+		return false
 	}
 	switch f.Type {
 	case ax25.TypeTEST:
@@ -578,6 +586,11 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeDM {
 			m.failLink("Zdalna stacja zakonczyla lacze (DM)")
 			m.queueAck(acknowledgement{type_: ax25.TypeDM, final: f.PollFinal, response: response})
+		} else if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeUA && f.PollFinal && response && time.Now().Before(uaGraceUntil) {
+			// Multiple SABM retries can produce delayed duplicate UA responses.
+			// They still answer our outstanding mode-setting commands and must
+			// not tear down the newly established data link.
+			m.emit(Event{Type: "notice", Message: "Pominieto opozniona odpowiedz UA na zestawianie lacza"})
 		} else if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeUA {
 			// Error C. The SDL requires re-establishment rather than silently
 			// continuing with potentially different sequence state.
@@ -652,7 +665,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		}
 	case ax25.TypeI:
 		if (state != Connected && state != TimerRecovery) || !isCommand(f) || len(f.Payload) > m.paclen {
-			return
+			return true
 		}
 		m.mu.Lock()
 		if f.NS == m.vr {
@@ -670,7 +683,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 				m.mu.Unlock()
 				_ = m.sendResponse(context.Background(), port, ax25.TypeREJ, f.PollFinal, nr)
 			}
-			return
+			return true
 		}
 		if f.NR <= 7 {
 			select {
@@ -683,6 +696,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.mu.Unlock()
 		_ = m.sendResponse(context.Background(), port, ax25.TypeRR, f.PollFinal, nr)
 	}
+	return true
 }
 
 func (m *Manager) command(t ax25.Type, pf bool, pid *byte, ns, nr uint8) ax25.Frame {
@@ -748,6 +762,7 @@ func (m *Manager) failLink(message string) {
 	m.vs, m.va, m.vr = 0, 0, 0
 	m.peerBusy = false
 	m.rejectSent = false
+	m.uaGraceUntil = time.Time{}
 	m.mu.Unlock()
 	m.emit(Event{Type: "state", State: Disconnected, Message: message})
 }

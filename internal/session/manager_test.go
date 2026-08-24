@@ -611,6 +611,39 @@ func TestRepeatedSABMResetsConnectedLink(t *testing.T) {
 	}
 }
 
+func TestDelayedDuplicateUAAfterRetriedSABMDoesNotDropLink(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	duplicate := response(ax25.TypeUA, 0)
+	duplicate.PollFinal = true
+	if !m.Handle("radio", duplicate) {
+		t.Fatal("duplicate UA was not claimed by active link")
+	}
+	if m.State() != Connected {
+		t.Fatalf("state=%s after delayed duplicate UA", m.State())
+	}
+}
+
+func TestHubClaimsOutgoingInformationBeforeInboundMux(t *testing.T) {
+	sent := make(chan []byte, 8)
+	hub := NewHub(ax25.Address{Callsign: "LOCAL", SSID: 9}, map[string]Sender{
+		"radio": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil },
+	})
+	m, release := hub.NewSession()
+	defer release()
+	m.t1, m.n2 = 30*time.Millisecond, 2
+	connectManager(t, m, sent)
+	pid := byte(0xF0)
+	incoming := commandFromRemote(ax25.TypeI, 0)
+	incoming.PID, incoming.Payload = &pid, []byte("banner")
+	if !hub.Handle("radio", incoming) {
+		t.Fatal("active outgoing information frame was not claimed")
+	}
+	if rr := decodeFrame(t, <-sent); rr.Type != ax25.TypeRR || rr.NR != 1 {
+		t.Fatalf("RR=%+v", rr)
+	}
+}
+
 func decodeFrame(t *testing.T, b []byte) ax25.Frame {
 	t.Helper()
 	f, err := ax25.Decode(b)

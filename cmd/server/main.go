@@ -386,8 +386,8 @@ func main() {
 				}
 				continue
 			}
-			if !inbound.Handle(pkt.PortID, f) {
-				radio.Handle(pkt.PortID, f)
+			if !radio.Handle(pkt.PortID, f) {
+				inbound.Handle(pkt.PortID, f)
 			}
 		case <-ctx.Done():
 			log.Info("server stopped")

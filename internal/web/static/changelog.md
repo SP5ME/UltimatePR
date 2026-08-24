@@ -3,6 +3,8 @@
 ## 2026-08-24 - zgodność i stabilność AX.25
 
 - Ujednolicono obsługę protokołu AX.25 dla połączeń wychodzących terminala i połączeń przychodzących do usług; warstwa protokołu nie zależy od funkcji terminala, BBS ani NODE.
+- Naprawiono routing ramek adresowanych do aktywnego połączenia wychodzącego: banner i pozostałe ramki `I` z LinBPQ trafiają teraz do właściwej sesji terminala i otrzymują `RR`, zamiast zostać przejęte przez obsługę połączeń przychodzących i odrzucone ramką `DM`.
+- Opóźnione, poprawne `UA(F=1)` będące odpowiedziami na ponowione `SABM(P=1)` nie zrywają już świeżo zestawionego łącza; niezależne nieoczekiwane UA poza okresem zestawiania nadal uruchamiają obsługę błędu protokołu.
 - Naprawiono kierunek ramek informacyjnych wysyłanych w sesjach przychodzących: ramki `I` są teraz prawidłowo oznaczane jako `command`, a nie `response`.
 - Dodano stan `Timer Recovery` oraz pełne śledzenie zmiennych `V(S)`, `V(A)` i `V(R)` dla używanego profilu modulo 8.
 - Uzupełniono procedurę stacji abonenckiej po wygaśnięciu T1: przed retransmisją ramki I wysyłane jest zapytanie `RR(P=1)`, a po N2 nieudanych próbach łącze przechodzi do stanu rozłączonego i czyści liczniki oraz stany RNR/REJ.
@@ -24,7 +26,7 @@
 - Dodano odpowiedzi na ramki `TEST` z zachowaniem pola informacji oraz wymagane odpowiedzi na `UI(P=1)`.
 - Zgodnie z AX.25 v2.2 błędy łącza są obsługiwane przez reset połączenia; aplikacja nie generuje wycofanych z tej wersji odpowiedzi `FRMR`.
 - Enkoder odrzuca niedozwolone pole informacji w ramkach sterujących.
-- Dodano testy regresyjne procedur `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, nadzorczego odpytywania, odpowiedzi `DM` i kontrolowanego rozłączania.
+- Dodano testy regresyjne procedur `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, nadzorczego odpytywania, odpowiedzi `DM`, kontrolowanego rozłączania, routingu sesji wychodzącej i opóźnionych odpowiedzi UA.
 
 ## 2026-08-24 - hostnames, niezależne sesje i czytelna historia
 

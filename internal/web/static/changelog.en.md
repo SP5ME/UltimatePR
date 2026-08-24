@@ -3,6 +3,8 @@
 ## 2026-08-24 - AX.25 compliance and stability
 
 - Unified AX.25 protocol handling for outgoing terminal links and incoming service links; the protocol layer is independent of terminal, BBS, and NODE application functions.
+- Fixed routing for frames addressed to an active outgoing link: LinBPQ banners and other `I` frames now reach the correct terminal session and receive `RR`, instead of being claimed by inbound-service handling and rejected with `DM`.
+- Delayed valid `UA(F=1)` responses to retried `SABM(P=1)` commands no longer tear down a newly established link; unrelated unexpected UA frames outside the establishment period still invoke protocol error handling.
 - Fixed the direction of information frames sent by incoming sessions: `I` frames are now correctly marked as commands instead of responses.
 - Added the `Timer Recovery` state and complete `V(S)`, `V(A)`, and `V(R)` tracking for the active modulo-8 profile.
 - Completed personal-station T1 recovery: an `RR(P=1)` poll is sent before retransmitting an unacknowledged I frame, and N2 exhaustion disconnects the link and clears sequence, RNR, and REJ state.
@@ -24,7 +26,7 @@
 - Added `TEST` responses that preserve the information field and the required responses to `UI(P=1)`.
 - In accordance with AX.25 v2.2, link errors are handled through link reset; the application does not generate the `FRMR` response removed by this version.
 - The encoder rejects information fields on control frames that do not permit them.
-- Added regression coverage for `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, supervisory polling, `DM` responses, and controlled link release.
+- Added regression coverage for `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, supervisory polling, `DM` responses, controlled link release, outgoing-session routing, and delayed UA responses.
 
 ## 2026-08-24 - hostnames, independent sessions, and clearer history
 

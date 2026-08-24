@@ -30,7 +30,7 @@ func (h *Hub) NewSession() (*Manager, func()) {
 	}
 }
 
-func (h *Hub) Handle(port string, f ax25.Frame) {
+func (h *Hub) Handle(port string, f ax25.Frame) bool {
 	h.mu.RLock()
 	all := make([]*Manager, 0, len(h.sessions))
 	for m := range h.sessions {
@@ -38,6 +38,9 @@ func (h *Hub) Handle(port string, f ax25.Frame) {
 	}
 	h.mu.RUnlock()
 	for _, m := range all {
-		m.Handle(port, f)
+		if m.Handle(port, f) {
+			return true
+		}
 	}
+	return false
 }
