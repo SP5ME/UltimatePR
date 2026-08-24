@@ -308,11 +308,11 @@ func TestUAWithFinalThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
 
 func TestProtocolDefaults(t *testing.T) {
 	m := New(ax25.Address{Callsign: "LOCAL"}, nil)
-	if m.t1 != 3*time.Second || m.n2 != 10 || m.paclen != 256 {
+	if m.t1 != 10*time.Second || m.n2 != 10 || m.paclen != 256 {
 		t.Fatalf("manager defaults: T1=%s N2=%d N1=%d", m.t1, m.n2, m.paclen)
 	}
 	inbound := NewInboundMux(nil, nil)
-	if inbound.t1 != 3*time.Second || inbound.paclen != 256 {
+	if inbound.t1 != 10*time.Second || inbound.paclen != 256 {
 		t.Fatalf("inbound defaults: T1=%s N1=%d", inbound.t1, inbound.paclen)
 	}
 }

@@ -30,9 +30,9 @@ type Event struct {
 type Sender func(context.Context, []byte) error
 
 const (
-	// AX.25 v2.2 XID/default parameter set: T1=3000 ms and N2=10.
-	// T1 may later be increased for the selected signalling rate/digi path.
-	defaultT1 = 3 * time.Second
+	// AX.25 v2.2 default used by this implementation: T1=10 seconds and N2=10.
+	// T1 must cover the transmission and acknowledgement of a maximum N1 frame.
+	defaultT1 = 10 * time.Second
 	// T3 is locally defined but must be greater than T1.
 	defaultT3 = 5 * time.Minute
 	// AX.25 v2.2 defines 256 octets as the default N1.

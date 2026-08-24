@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24 - AX.25 recovery timer correction
+
+- Unified the default `T1` to 10 seconds for outgoing and incoming links and for the parameters advertised through `XID`. The 3-second value caused premature retransmissions with full `N1=256` frames and delayed remote stations.
+
 ## 2026-08-24 - AX.25 link release fix
 
 - Receiving a remote `DISC`, `DM`, or `SABM` now immediately ends the pending link-recovery procedure and prevents frames from being sent after the session has closed.
@@ -23,7 +27,7 @@
 - Added a confirmed Clear monitor action that removes all currently buffered frames without stopping subsequent monitoring.
 - Link establishment and release now strictly require `UA/DM` responses carrying `F=1` for transmitted `SABM/DISC` commands carrying `P=1`.
 - Fixed monitor frame names after extending the codec — `SABM`, `UA`, `RR`, `I`, and the remaining types are no longer shifted or incorrectly displayed as `?`.
-- Applied the AX.25 v2.2 defaults: T1=3000 ms, N2=10 retries, N1=256 octets, and T3=5 minutes.
+- Applied the AX.25 v2.2 defaults: T1=10 seconds, N2=10 retries, N1=256 octets, and T3=5 minutes.
 - Fixed `RNR` handling: information-frame transmission now pauses while the remote station reports receiver busy, and readiness is checked using `RR` frames with the `P` bit.
 - Out-of-sequence information frames now start controlled `REJ` recovery instead of receiving an ordinary `RR` acknowledgement.
 - Added `SREJ` handling for the current one-frame transmit window.
@@ -31,7 +35,7 @@
 - Incoming sessions answer supervisory polls carrying the `P` bit and send `DM` when a local service is in the disconnected state.
 - The codec recognizes additional AX.25 v2.2 frame types: `SABME`, `SREJ`, `FRMR`, `XID`, and `TEST`.
 - Added encoding and decoding of the two-octet control field used by optional modulo 128. The session engine continues to negotiate the stable modulo-8 profile and rejects unsupported `SABME` setup with `DM`.
-- Added `XID` handling that advertises the actual profile: half duplex, implicit REJ, modulo 8, N1=256, window k=1, T1=3000 ms, and N2=10.
+- Added `XID` handling that advertises the actual profile: half duplex, implicit REJ, modulo 8, N1=256, window k=1, T1=10 seconds, and N2=10.
 - Added `TEST` responses that preserve the information field and the required responses to `UI(P=1)`.
 - In accordance with AX.25 v2.2, link errors are handled through link reset; the application does not generate the `FRMR` response removed by this version.
 - The encoder rejects information fields on control frames that do not permit them.

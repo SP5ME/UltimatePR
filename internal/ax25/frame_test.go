@@ -89,7 +89,7 @@ func TestXIDRoundTripAndValidation(t *testing.T) {
 		{Identifier: 3, Value: []byte{0x86, 0xA8, 0x02}},
 		{Identifier: 6, Value: []byte{0x08, 0x00}},
 		{Identifier: 8, Value: []byte{7}},
-		{Identifier: 9, Value: []byte{0x0B, 0xB8}},
+		{Identifier: 9, Value: []byte{0x27, 0x10}},
 		{Identifier: 10, Value: []byte{10}},
 	}
 	encoded, err := EncodeXID(parameters)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24 - korekta czasu odzyskiwania AX.25
+
+- Ujednolicono domyślny czas `T1` do 10 sekund dla połączeń wychodzących i przychodzących oraz dla parametrów ogłaszanych przez `XID`. Wartość 3 sekund powodowała przedwczesne retransmisje przy pełnych ramkach `N1=256` i opóźnionej pracy stacji zdalnej.
+
 ## 2026-08-24 - poprawka kończenia sesji AX.25
 
 - Po odebraniu zdalnego `DISC`, `DM` lub `SABM` oczekująca procedura odzyskiwania łącza natychmiast się kończy i nie wysyła ramek po zamknięciu sesji.
@@ -23,7 +27,7 @@
 - Dodano przycisk „Wyczyść monitor” z potwierdzeniem, który usuwa wszystkie aktualnie buforowane ramki bez zatrzymywania dalszego monitorowania.
 - Zestawienie i zakończenie połączenia rygorystycznie sprawdza `UA/DM` jako odpowiedź z bitem `F=1` na wysłane `SABM/DISC` z bitem `P=1`.
 - Naprawiono nazwy typów ramek w monitorze po rozszerzeniu kodeka — `SABM`, `UA`, `RR`, `I` i pozostałe typy nie są już błędnie przesunięte ani pokazywane jako `?`.
-- Ustawiono parametry domyślne AX.25 v2.2: T1 na 3000 ms, N2 na 10 prób, N1 na 256 bajtów oraz T3 na 5 minut.
+- Ustawiono parametry domyślne AX.25 v2.2: T1 na 10 sekund, N2 na 10 prób, N1 na 256 bajtów oraz T3 na 5 minut.
 - Poprawiono obsługę `RNR`: wysyłanie ramek informacyjnych jest wstrzymywane, gdy zdalna stacja zgłasza zajętość odbiornika, a gotowość jest sprawdzana ramkami `RR` z bitem `P`.
 - Ramki informacyjne odebrane poza kolejnością uruchamiają teraz kontrolowaną procedurę `REJ` zamiast zwykłego potwierdzenia `RR`.
 - Dodano obsługę `SREJ` dla obecnego, jednoklatkowego okna transmisyjnego.
@@ -31,7 +35,7 @@
 - Sesje przychodzące odpowiadają na nadzorcze zapytania z bitem `P` oraz wysyłają `DM` do lokalnej usługi znajdującej się w stanie rozłączonym.
 - Kodek rozpoznaje dodatkowe typy ramek AX.25 v2.2: `SABME`, `SREJ`, `FRMR`, `XID` i `TEST`.
 - Dodano kodowanie i dekodowanie dwuoktetowego pola sterującego dla opcjonalnego modulo 128. Silnik sesji nadal negocjuje stabilny profil modulo 8, a nieobsługiwane zestawienie `SABME` odrzuca odpowiedzią `DM`.
-- Dodano obsługę `XID`, która ogłasza rzeczywiste parametry profilu: half-duplex, implicit REJ, modulo 8, N1=256, okno k=1, T1=3000 ms i N2=10.
+- Dodano obsługę `XID`, która ogłasza rzeczywiste parametry profilu: half-duplex, implicit REJ, modulo 8, N1=256, okno k=1, T1=10 sekund i N2=10.
 - Dodano odpowiedzi na ramki `TEST` z zachowaniem pola informacji oraz wymagane odpowiedzi na `UI(P=1)`.
 - Zgodnie z AX.25 v2.2 błędy łącza są obsługiwane przez reset połączenia; aplikacja nie generuje wycofanych z tej wersji odpowiedzi `FRMR`.
 - Enkoder odrzuca niedozwolone pole informacji w ramkach sterujących.

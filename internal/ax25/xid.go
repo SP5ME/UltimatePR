@@ -16,14 +16,14 @@ type XIDParameter struct {
 
 // BasicXIDParameters advertises exactly the capabilities implemented by the
 // interoperable connected-mode engine: half duplex, implicit REJ, modulo 8,
-// N1=256 octets, receive window k=1, T1=3000 ms and N2=10.
+// N1=256 octets, receive window k=1, T1=10 seconds and N2=10.
 func BasicXIDParameters() []XIDParameter {
 	return []XIDParameter{
 		{Identifier: 2, Value: []byte{0x00, 0x20}},
 		{Identifier: 3, Value: []byte{0x81, 0xA4, 0x02}},
 		{Identifier: 6, Value: []byte{0x08, 0x00}},
 		{Identifier: 8, Value: []byte{0x01}},
-		{Identifier: 9, Value: []byte{0x0B, 0xB8}},
+		{Identifier: 9, Value: []byte{0x27, 0x10}},
 		{Identifier: 10, Value: []byte{0x0A}},
 	}
 }
