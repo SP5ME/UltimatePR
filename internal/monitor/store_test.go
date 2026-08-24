@@ -33,3 +33,18 @@ func TestAddStoresVia(t *testing.T) {
 		t.Fatalf("via=%q", items[0].Via)
 	}
 }
+
+func TestTypeNamesRemainStableWhenAX25TypesAreExtended(t *testing.T) {
+	cases := map[ax25.Type]string{
+		ax25.TypeI: "I", ax25.TypeRR: "RR", ax25.TypeRNR: "RNR",
+		ax25.TypeREJ: "REJ", ax25.TypeSREJ: "SREJ", ax25.TypeSABM: "SABM",
+		ax25.TypeSABME: "SABME", ax25.TypeDISC: "DISC", ax25.TypeDM: "DM",
+		ax25.TypeUA: "UA", ax25.TypeUI: "UI", ax25.TypeFRMR: "FRMR",
+		ax25.TypeXID: "XID", ax25.TypeTEST: "TEST", ax25.TypeUnknown: "?",
+	}
+	for typ, want := range cases {
+		if got := typeName(typ); got != want {
+			t.Errorf("typeName(%d)=%q, want %q", typ, got, want)
+		}
+	}
+}

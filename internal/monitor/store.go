@@ -55,11 +55,38 @@ func (s *Store) List() []Entry {
 	return out
 }
 func typeName(t ax25.Type) string {
-	names := []string{"I", "RR", "RNR", "REJ", "SABM", "DISC", "DM", "UA", "UI"}
-	if int(t) < len(names) {
-		return names[t]
+	switch t {
+	case ax25.TypeI:
+		return "I"
+	case ax25.TypeRR:
+		return "RR"
+	case ax25.TypeRNR:
+		return "RNR"
+	case ax25.TypeREJ:
+		return "REJ"
+	case ax25.TypeSREJ:
+		return "SREJ"
+	case ax25.TypeSABM:
+		return "SABM"
+	case ax25.TypeSABME:
+		return "SABME"
+	case ax25.TypeDISC:
+		return "DISC"
+	case ax25.TypeDM:
+		return "DM"
+	case ax25.TypeUA:
+		return "UA"
+	case ax25.TypeUI:
+		return "UI"
+	case ax25.TypeFRMR:
+		return "FRMR"
+	case ax25.TypeXID:
+		return "XID"
+	case ax25.TypeTEST:
+		return "TEST"
+	default:
+		return "?"
 	}
-	return "?"
 }
 
 func formatVia(digis []ax25.Address) string {

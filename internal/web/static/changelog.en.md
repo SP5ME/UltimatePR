@@ -2,6 +2,9 @@
 
 ## 2026-08-24 - AX.25 compliance and stability
 
+- Restored interoperability with legacy TNCs and LinBPQ nodes that return a valid `UA` without setting the `F` bit; UltimatePR still transmits the required `SABM(P=1)` and `DISC(P=1)` commands.
+- Fixed monitor frame names after extending the codec — `SABM`, `UA`, `RR`, `I`, and the remaining types are no longer shifted or incorrectly displayed as `?`.
+- Unified the default T1 at 10 seconds for outgoing and incoming links, set the recommended N1 to 256 octets, and set T3 to 5 minutes.
 - Fixed `RNR` handling: information-frame transmission now pauses while the remote station reports receiver busy, and readiness is checked using `RR` frames with the `P` bit.
 - Out-of-sequence information frames now start controlled `REJ` recovery instead of receiving an ordinary `RR` acknowledgement.
 - Added `SREJ` handling for the current one-frame transmit window.

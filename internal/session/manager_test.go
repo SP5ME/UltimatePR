@@ -241,7 +241,7 @@ func TestConnectTimeout(t *testing.T) {
 	}
 }
 
-func TestConnectRequiresFinalBitOnUA(t *testing.T) {
+func TestConnectAcceptsLegacyUAWithoutFinalBit(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)
 	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
@@ -249,15 +249,19 @@ func TestConnectRequiresFinalBitOnUA(t *testing.T) {
 	ua := response(ax25.TypeUA, 0)
 	ua.PollFinal = false
 	m.Handle("radio", ua)
-	select {
-	case err := <-done:
-		t.Fatalf("UA without F completed connection: %v", err)
-	case <-time.After(10 * time.Millisecond):
-	}
-	_ = <-sent // retry after T1
-	m.Handle("radio", response(ax25.TypeUA, 0))
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestProtocolDefaults(t *testing.T) {
+	m := New(ax25.Address{Callsign: "LOCAL"}, nil)
+	if m.t1 != 10*time.Second || m.paclen != 256 {
+		t.Fatalf("manager defaults: T1=%s N1=%d", m.t1, m.paclen)
+	}
+	inbound := NewInboundMux(nil, nil)
+	if inbound.t1 != 10*time.Second || inbound.paclen != 256 {
+		t.Fatalf("inbound defaults: T1=%s N1=%d", inbound.t1, inbound.paclen)
 	}
 }
 

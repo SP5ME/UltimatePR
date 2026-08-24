@@ -43,7 +43,7 @@ type inboundLink struct {
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
-	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: 3 * time.Second, n2: 5, paclen: 128}
+	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 5, paclen: defaultN1}
 }
 
 func (m *InboundMux) Register(address ax25.Address, service AX25Service) {

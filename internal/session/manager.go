@@ -28,6 +28,17 @@ type Event struct {
 }
 type Sender func(context.Context, []byte) error
 
+const (
+	// AX.25 v2.2 leaves T1 locally defined and requires it to cover at least
+	// a full frame/response round trip. Ten seconds is a conservative default
+	// for 1200-baud links and remains usable through short digipeater paths.
+	defaultT1 = 10 * time.Second
+	// T3 is locally defined but must be greater than T1.
+	defaultT3 = 5 * time.Minute
+	// AX.25 v2.2 defines 256 octets as the default N1.
+	defaultN1 = 256
+)
+
 type SendPacketProgress struct {
 	Packet int
 	Total  int
@@ -67,7 +78,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 3, paclen: defaultN1}
 }
 
 func (m *Manager) Subscribe() (<-chan Event, func()) {
@@ -153,11 +164,14 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 		}
 		select {
 		case event := <-m.control:
-			if event.type_ == ax25.TypeUA && event.final && event.response {
+			// Some widely deployed legacy TNCs omit F on UA/DM. We still send
+			// SABM with P=1, but accept an otherwise valid response so those
+			// stations remain interoperable.
+			if event.type_ == ax25.TypeUA && event.response {
 				m.setState(Connected, "Sesja AX.25 polaczona")
 				return nil
 			}
-			if event.type_ == ax25.TypeDM && event.final && event.response {
+			if event.type_ == ax25.TypeDM && event.response {
 				m.setState(Disconnected, "Stacja odrzucila polaczenie")
 				return errors.New("connection rejected (DM)")
 			}
@@ -189,7 +203,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		}
 		select {
 		case event := <-m.control:
-			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.final && event.response {
+			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.response {
 				m.setState(Disconnected, "Rozlaczono")
 				return nil
 			}
@@ -256,7 +270,7 @@ func splitAX25Payload(data []byte, paclen int) [][]byte {
 // It does not inject any text into the remote terminal.
 func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
-		interval = 30 * time.Second
+		interval = defaultT3
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

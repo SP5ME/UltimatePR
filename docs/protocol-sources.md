@@ -19,6 +19,11 @@ deferred. Session handling validates command/response and poll/final semantics
 for connection setup and release, pauses transmission while the peer reports
 RNR, and uses REJ recovery for out-of-sequence I frames.
 
+The default N1 is 256 octets. T1 defaults to 10 seconds for both outgoing and
+incoming links, while the terminal T3 poll interval is 5 minutes. Reception is
+deliberately tolerant of legacy UA/DM responses that omit the Final bit; the
+local station still transmits SABM and DISC commands with Poll set as required.
+
 ## KISS
 
 Original protocol: Mike Chepponis and Phil Karn, *The KISS TNC: A simple Host
