@@ -601,6 +601,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	activeMode := ""
 	historyStation, historyPort, historyDigi := "", "", ""
 	historyConnected := false
+	var historySession uint64
 	var cancelRadio func()
 	var radioSession *session.Manager
 	var releaseRadio func()
@@ -718,6 +719,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			releaseRadio()
 		}
 	}()
+	defer func() {
+		if s.cfg.History != nil {
+			s.cfg.History.Disconnected(historySession)
+		}
+	}()
 	for {
 		var m clientMessage
 		if err := ws.ReadJSON(&m); err != nil {
@@ -725,6 +731,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.Type {
 		case "connect":
+			if s.cfg.History != nil {
+				s.cfg.History.Disconnected(historySession)
+			}
+			historySession = 0
 			selectedCodec, _ := terminalcodec.New(terminalcodec.Default)
 			terminalCodec = selectedCodec
 			terminalTXCodec, _ = terminalcodec.New(terminalcodec.Default)
@@ -768,11 +778,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				}
 				historyStation, historyPort, historyDigi, historyConnected = incoming.call, "radio", "", true
 				if s.cfg.History != nil {
-					s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
+					historySession = s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 				}
 				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczenie przychodzace od " + incoming.call + "\r\n"})
 				sendIncomingReply(terminalWelcome, fmt.Sprintf("welcome-%d", time.Now().UnixNano()), incoming.call)
-				go s.copyOperatorToWS(out, incoming, historyStation, terminalCodec)
+				go s.copyOperatorToWS(out, incoming, historyStation, terminalCodec, historySession)
 				continue
 			}
 			if m.Mode == "tnc" {
@@ -802,7 +812,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						}
 						if e.State == session.Connected && !historyConnected && s.cfg.History != nil {
 							historyConnected = true
-							s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
+							historySession = s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 						}
 						if e.Type == "data" && historyConnected && s.cfg.History != nil {
 							s.cfg.History.Add("tnc", historyStation, historyPort, historyDigi, "rx", sessionCodec.Decode(e.Data))
@@ -812,6 +822,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						}
 						if e.State == session.Disconnected && strings.EqualFold(strings.TrimSpace(e.Message), "Zdalna stacja rozlaczyla sesje") {
 							_ = out.write(serverMessage{Type: "data", State: "connected", Data: expandReply(terminalGoodbye, historyStation)})
+						}
+						if e.State == session.Disconnected && historyConnected && s.cfg.History != nil {
+							s.cfg.History.Disconnected(historySession)
+							historyConnected = false
 						}
 						msg := terminalMessageFromEventWithCodec(e, sessionCodec)
 						if e.State == session.Disconnected && !historyConnected {
@@ -850,11 +864,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			historyStation = "Lokalny BBS"
 			historyPort, historyDigi, historyConnected = address, "", true
 			if s.cfg.History != nil {
-				s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
+				historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
 			}
 			done := remoteDone
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
-			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort)
+			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort, historySession)
 		case "data":
 			m.Data = prepareTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
 			if historyConnected && s.cfg.History != nil {
@@ -913,6 +927,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 			}
 		case "disconnect":
+			if s.cfg.History != nil {
+				s.cfg.History.Disconnected(historySession)
+			}
+			historySession = 0
+			historyConnected = false
 			if incoming != nil {
 				incoming.close()
 				incoming = nil
@@ -933,7 +952,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec) {
+func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec, historySession uint64) {
+	if s.cfg.History != nil {
+		defer s.cfg.History.Disconnected(historySession)
+	}
 	buf := make([]byte, 4096)
 	commandBuffer := &terminalLineBuffer{}
 	terminalCall := callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)
@@ -974,7 +996,10 @@ func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station strin
 	}
 }
 
-func (s *Server) copyTelnetToWS(ws *safeWS, conn net.Conn, done <-chan struct{}, mode, station, port string) {
+func (s *Server) copyTelnetToWS(ws *safeWS, conn net.Conn, done <-chan struct{}, mode, station, port string, historySession uint64) {
+	if s.cfg.History != nil {
+		defer s.cfg.History.Disconnected(historySession)
+	}
 	filter := newTelnetFilter(conn)
 	buf := make([]byte, 4096)
 	for {

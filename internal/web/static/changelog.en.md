@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-24 - hostnames, independent sessions, and clearer history
+
+- `web.allowed_addresses` now accepts hostnames in addition to IP addresses and CIDR networks. The same rules protect the web panel and TNC Proxy clients, and names are resolved through DNS whenever a connection is checked.
+- Every terminal tab has its own connection state and a dedicated `×` button that permanently closes the session.
+- The `Disconnect session` button only ends the current connection, preserving the tab, terminal contents, and manual reconnect option.
+- Automatic reconnection and its main-bar switch were removed. The new-connection fields now use all available space.
+- History and beacon previews are separated from active sessions, so they neither display nor inherit another connection's state.
+- The viewed history title is prominent and centered in the terminal header.
+- History messages show one date and time for the complete message instead of separate transmission packets.
+- The beginning and end of every connection are stored permanently and displayed as graphical separators: green `Connected` and red `Disconnected`, both with date and time.
+
 ## 2026-08-21 - sharing TNC access with external applications
 
 - Added an optional built-in KISS TCP proxy for each TNC port.

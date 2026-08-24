@@ -26,6 +26,13 @@ func TestWebDefaultsAndPasswordHashIsPrivate(t *testing.T) {
 	}
 }
 
+func TestWebAllowedAddressesAcceptHostname(t *testing.T) {
+	_, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080, allowed_addresses: [operator.local]}\n"))
+	if err != nil {
+		t.Fatalf("hostname allow rule rejected: %v", err)
+	}
+}
+
 func TestPortProxyJSONFieldsRoundTrip(t *testing.T) {
 	var enabled = false
 	want := Config{Ports: []Port{{ID: "p1", Type: "kiss-tcp", Enabled: &enabled, TNCProxyEnabled: true, TNCProxyPort: 8101}}}

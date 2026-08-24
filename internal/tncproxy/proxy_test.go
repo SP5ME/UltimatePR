@@ -73,6 +73,13 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	}
 }
 
+func TestAddressAllowedByHostname(t *testing.T) {
+	address := &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345}
+	if !addressAllowed(address, []string{"localhost"}) {
+		t.Fatal("hostname address rejected")
+	}
+}
+
 func freeAddress(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")

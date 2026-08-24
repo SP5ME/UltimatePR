@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/netallow"
 	"gopkg.in/yaml.v3"
 )
 
@@ -287,10 +288,8 @@ func (c Config) Validate() error {
 		if address == "0.0.0.0" || address == "::" {
 			continue
 		}
-		if net.ParseIP(address) == nil {
-			if _, _, err := net.ParseCIDR(address); err != nil {
-				return fmt.Errorf("web.allowed_addresses[%d]: expected IP address or CIDR network", i)
-			}
+		if !netallow.ValidRule(address) {
+			return fmt.Errorf("web.allowed_addresses[%d]: expected IP address, CIDR network, or hostname", i)
 		}
 	}
 	if c.BBS.Enabled {

@@ -26,6 +26,10 @@
   .terminal-body { grid-template-columns: 270px minmax(0, 1fr) 270px; }
 }
 .terminal-head { align-items: center; }
+.terminal-panel.history-view .terminal-head { position:relative; justify-content:flex-end; }
+.terminal-panel.history-view .terminal-head > div:first-child { position:absolute; left:50%; top:50%; width:max-content; max-width:calc(100% - 180px); transform:translate(-50%,-50%); text-align:center; }
+.terminal-panel.history-view .terminal-head > div:first-child > span { display:none; }
+.terminal-panel.history-view #sessionLabel { margin:0; overflow:hidden; color:var(--cyan); font:800 15px ui-monospace,Consolas,monospace; letter-spacing:.08em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
 .terminal-state { display:flex; align-items:center; gap:8px; margin-left:auto; margin-right:18px; }
 .terminal-state i { width:9px; height:9px; border-radius:50%; background:#718589; }
 .terminal-state i.connected { background:var(--green); box-shadow:0 0 8px var(--green); }

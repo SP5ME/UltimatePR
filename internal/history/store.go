@@ -14,6 +14,7 @@ type Line struct {
 	Time      time.Time `json:"time"`
 	Direction string    `json:"direction"`
 	Text      string    `json:"text"`
+	Kind      string    `json:"kind,omitempty"`
 }
 type Conversation struct {
 	Key      string    `json:"key"`
@@ -30,14 +31,16 @@ type fileData struct {
 	Conversations []Conversation `json:"conversations"`
 }
 type Store struct {
-	mu     sync.Mutex
-	path   string
-	limits Limits
-	items  map[string]*Conversation
+	mu          sync.Mutex
+	path        string
+	limits      Limits
+	items       map[string]*Conversation
+	nextSession uint64
+	active      map[uint64]string
 }
 
 func Open(path string, limits Limits) (*Store, error) {
-	s := &Store{path: path, limits: limits, items: map[string]*Conversation{}}
+	s := &Store{path: path, limits: limits, items: map[string]*Conversation{}, active: map[uint64]string{}}
 	b, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -61,7 +64,7 @@ func Open(path string, limits Limits) (*Store, error) {
 func Key(mode, station, port, digi string) string {
 	return strings.ToUpper(mode + "|" + station + "|" + port + "|" + digi)
 }
-func (s *Store) Connected(mode, station, port, digi string) {
+func (s *Store) Connected(mode, station, port, digi string) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := Key(mode, station, port, digi)
@@ -71,7 +74,32 @@ func (s *Store) Connected(mode, station, port, digi string) {
 		s.items[key] = c
 	}
 	c.Sessions++
-	c.LastSeen = time.Now()
+	now := time.Now()
+	c.LastSeen = now
+	c.Lines = append(c.Lines, Line{Time: now, Kind: "connected"})
+	s.nextSession++
+	s.active[s.nextSession] = key
+	s.trimLines(c)
+	s.pruneLocked()
+	_ = s.saveLocked()
+	return s.nextSession
+}
+func (s *Store) Disconnected(sessionID uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key, ok := s.active[sessionID]
+	if !ok {
+		return
+	}
+	delete(s.active, sessionID)
+	c := s.items[key]
+	if c == nil {
+		return
+	}
+	now := time.Now()
+	c.LastSeen = now
+	c.Lines = append(c.Lines, Line{Time: now, Kind: "disconnected"})
+	s.trimLines(c)
 	s.pruneLocked()
 	_ = s.saveLocked()
 }
@@ -93,15 +121,18 @@ func (s *Store) Add(mode, station, port, digi, direction, text string) {
 				n--
 			}
 		}
-		c.Lines = append(c.Lines, Line{time.Now(), direction, text[:n]})
+		c.Lines = append(c.Lines, Line{Time: time.Now(), Direction: direction, Text: text[:n]})
 		text = text[n:]
 	}
-	if len(c.Lines) > s.limits.MaxLines {
-		c.Lines = c.Lines[len(c.Lines)-s.limits.MaxLines:]
-	}
+	s.trimLines(c)
 	c.LastSeen = time.Now()
 	s.pruneLocked()
 	_ = s.saveLocked()
+}
+func (s *Store) trimLines(c *Conversation) {
+	if len(c.Lines) > s.limits.MaxLines {
+		c.Lines = c.Lines[len(c.Lines)-s.limits.MaxLines:]
+	}
 }
 func (s *Store) List() []Conversation {
 	s.mu.Lock()
@@ -160,7 +191,7 @@ func (s *Store) pruneLocked() {
 }
 func (s *Store) encodedSize() int { b, _ := json.Marshal(s.data()); return len(b) }
 func (s *Store) data() fileData {
-	d := fileData{Version: 2}
+	d := fileData{Version: 3}
 	for _, c := range s.items {
 		d.Conversations = append(d.Conversations, *c)
 	}

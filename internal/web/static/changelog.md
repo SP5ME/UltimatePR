@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-24 - hostnames, niezależne sesje i czytelna historia
+
+- Lista `web.allowed_addresses` przyjmuje teraz nazwy hostów oprócz adresów IP i sieci CIDR. Te same reguły chronią panel WWW oraz klientów TNC Proxy, a nazwy są ponownie rozwiązywane przez DNS przy sprawdzaniu połączenia.
+- Każda zakładka terminala ma własny stan połączenia i osobny przycisk `×` służący do trwałego zamknięcia sesji.
+- Przycisk `Rozłącz sesję` kończy tylko bieżące połączenie, zachowując zakładkę, treść terminala i możliwość ręcznego ponownego połączenia.
+- Usunięto automatyczne ponawianie połączeń i jego przełącznik z głównego paska. Pola nowego połączenia wykorzystują całą zwolnioną szerokość.
+- Podgląd historii i beaconów jest oddzielony od aktywnych sesji, dzięki czemu nie pokazuje ani nie przejmuje stanu innego połączenia.
+- Tytuł przeglądanej historii jest wyraźny i wyśrodkowany w górnym pasku terminala.
+- Wiadomości w historii pokazują datę i godzinę całej wiadomości, a nie osobnych pakietów transmisji.
+- Początek i koniec każdego połączenia są trwale zapisywane i przedstawiane jako graficzne separatory: zielony `Połączono` oraz czerwony `Rozłączono`, oba z datą i godziną.
+
 ## 2026-08-21 - współdzielenie TNC przez aplikacje zewnętrzne
 
 - Dodano opcjonalny, wbudowany proxy KISS TCP dla każdego portu TNC.

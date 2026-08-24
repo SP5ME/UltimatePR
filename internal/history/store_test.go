@@ -18,7 +18,7 @@ func TestOnlyConnectedConversationReceivesLines(t *testing.T) {
 	s.Connected("tnc", "SR5DDD", "radio", "")
 	s.Add("tnc", "SR5DDD", "radio", "", "rx", "one\r\n\r\ntwo\rthree")
 	c, ok := s.Get(Key("tnc", "SR5DDD", "radio", ""))
-	if !ok || c.Sessions != 1 || len(c.Lines) != 1 || c.Lines[0].Text != "one\r\n\r\ntwo\rthree" {
+	if !ok || c.Sessions != 1 || len(c.Lines) != 2 || c.Lines[0].Kind != "connected" || c.Lines[1].Text != "one\r\n\r\ntwo\rthree" {
 		t.Fatalf("conversation=%+v", c)
 	}
 }
@@ -64,7 +64,22 @@ func TestHistoryPreservesPacketBoundariesAndBlankLines(t *testing.T) {
 	s.Add("tnc", "SR5DDD", "radio", "", "rx", "  ASCII\r\n")
 	s.Add("tnc", "SR5DDD", "radio", "", "rx", "\r\n   ART\r\n")
 	c, _ := s.Get(Key("tnc", "SR5DDD", "radio", ""))
-	if got := c.Lines[0].Text + c.Lines[1].Text; got != "  ASCII\r\n\r\n   ART\r\n" {
+	if got := c.Lines[1].Text + c.Lines[2].Text; got != "  ASCII\r\n\r\n   ART\r\n" {
 		t.Fatalf("history changed terminal stream: %q", got)
+	}
+}
+
+func TestHistoryStoresConnectionLifecycle(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "history.json"), Limits{MaxStations: 2, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID := s.Connected("tnc", "SR5DDD", "radio", "")
+	s.Add("tnc", "SR5DDD", "radio", "", "rx", "hello")
+	s.Disconnected(sessionID)
+	s.Disconnected(sessionID)
+	c, _ := s.Get(Key("tnc", "SR5DDD", "radio", ""))
+	if len(c.Lines) != 3 || c.Lines[0].Kind != "connected" || c.Lines[1].Text != "hello" || c.Lines[2].Kind != "disconnected" {
+		t.Fatalf("unexpected lifecycle: %+v", c.Lines)
 	}
 }

@@ -6,9 +6,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/packet-radio/ultimatepr/internal/netallow"
 )
 
 // Proxy shares one upstream KISS TCP connection with multiple clients.
@@ -74,23 +75,7 @@ func addressAllowed(address net.Addr, allowed []string) bool {
 	if err != nil {
 		return false
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	for _, raw := range allowed {
-		entry := net.ParseIP(strings.TrimSpace(raw))
-		if entry != nil {
-			if (entry.IsUnspecified() && ((entry.To4() != nil) == (ip.To4() != nil))) || entry.Equal(ip) {
-				return true
-			}
-			continue
-		}
-		if _, network, err := net.ParseCIDR(strings.TrimSpace(raw)); err == nil && network.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return netallow.Allowed(net.ParseIP(host), allowed)
 }
 
 func (p *Proxy) clientLoop(ctx context.Context, c *client) {

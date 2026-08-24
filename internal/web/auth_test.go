@@ -46,4 +46,7 @@ func TestAddressAllowed(t *testing.T) {
 	if !addressAllowed(net.ParseIP("10.0.0.2"), []string{"0.0.0.0"}) {
 		t.Fatal("IPv4 wildcard rejected")
 	}
+	if !addressAllowed(net.ParseIP("127.0.0.1"), []string{"localhost"}) {
+		t.Fatal("hostname address rejected")
+	}
 }

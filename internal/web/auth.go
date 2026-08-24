@@ -16,6 +16,7 @@ import (
 	"time"
 
 	appconfig "github.com/packet-radio/ultimatepr/internal/config"
+	"github.com/packet-radio/ultimatepr/internal/netallow"
 )
 
 const (
@@ -70,22 +71,7 @@ func (s *Server) allowAddresses(next http.Handler) http.Handler {
 }
 
 func addressAllowed(ip net.IP, rules []string) bool {
-	for _, raw := range rules {
-		rule := strings.TrimSpace(raw)
-		if rule == "0.0.0.0" && ip.To4() != nil {
-			return true
-		}
-		if rule == "::" && ip.To4() == nil {
-			return true
-		}
-		if exact := net.ParseIP(rule); exact != nil && exact.Equal(ip) {
-			return true
-		}
-		if _, network, err := net.ParseCIDR(rule); err == nil && network.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return netallow.Allowed(ip, rules)
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
