@@ -61,7 +61,7 @@
 - Added help through `/H` and `/?`.
 - The default welcome message informs the correspondent about available commands; custom welcomes are not overwritten.
 - Long messages are split at the last space or line ending before the `paclen` limit, without cutting ordinary words.
-- Outgoing text and transmission status are right-aligned; after a multi-frame message only the final status remains.
+- Outgoing text and transmission status are right-aligned; every packet of a multi-frame message remains visible on its own line with its status.
 
 ## 2026-08-21 - session stability and monitor export
 
