@@ -177,7 +177,9 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/status", s.status)
 	mux.HandleFunc("GET /api/mheard", s.mheard)
 	mux.HandleFunc("GET /api/history", s.historyList)
+	mux.HandleFunc("DELETE /api/history", s.historyClear)
 	mux.HandleFunc("GET /api/history/{key}", s.historyGet)
+	mux.HandleFunc("DELETE /api/history/{key}", s.historyDelete)
 	mux.HandleFunc("GET /api/monitor", s.monitor)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
@@ -267,6 +269,32 @@ func (s *Server) historyGet(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(c)
 }
+func (s *Server) historyDelete(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.History == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.cfg.History.Delete(r.PathValue("key")); err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+func (s *Server) historyClear(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.History == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.cfg.History.Clear(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func (s *Server) monitor(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -326,6 +354,10 @@ func (s *Server) configModelPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.Web.PasswordHash = current.Web.PasswordHash
+	if err := validateWebListener(current.Web.Listen, c.Web.Listen); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err := appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -379,6 +411,10 @@ func (s *Server) configRestore(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Configuration too large", http.StatusRequestEntityTooLarge)
 		return
 	}
+	if err = validateWebConfigChange(s.cfg.ConfigPath, b); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err = appconfig.Save(s.cfg.ConfigPath, b); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -404,6 +440,10 @@ func (s *Server) configPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Configuration too large", http.StatusRequestEntityTooLarge)
 		return
 	}
+	if err = validateWebConfigChange(s.cfg.ConfigPath, b); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if err = appconfig.Save(s.cfg.ConfigPath, b); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -414,6 +454,44 @@ func (s *Server) configPut(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) SetBBS(store *bbs.Store) { s.cfg.BBS = store }
+
+func validateWebConfigChange(path string, raw []byte) error {
+	current, err := appconfig.Load(path)
+	if err != nil {
+		return err
+	}
+	candidate, err := appconfig.Parse(raw)
+	if err != nil {
+		return err
+	}
+	return validateWebListener(current.Web.Listen, candidate.Web.Listen)
+}
+
+func validateWebListener(current, candidate string) error {
+	if candidate == current {
+		return nil
+	}
+	currentHost, currentPort, currentErr := net.SplitHostPort(current)
+	candidateHost, candidatePort, candidateErr := net.SplitHostPort(candidate)
+	if candidateErr != nil {
+		return fmt.Errorf("panel WWW: nieprawidłowy adres %q: %w", candidate, candidateErr)
+	}
+	if currentErr == nil && currentPort == candidatePort {
+		if candidateHost == "" || candidateHost == "0.0.0.0" || candidateHost == "::" || candidateHost == currentHost {
+			return nil
+		}
+		if _, err := net.ResolveTCPAddr("tcp", candidate); err != nil {
+			return fmt.Errorf("panel WWW nie może użyć adresu %q: %w", candidate, err)
+		}
+		return nil
+	}
+	listener, err := net.Listen("tcp", candidate)
+	if err != nil {
+		return fmt.Errorf("panel WWW nie może otworzyć adresu %q; ustawienia nie zostały zapisane: %w", candidate, err)
+	}
+	_ = listener.Close()
+	return nil
+}
 
 type bbsRequest struct {
 	Call    string `json:"call"`
@@ -927,12 +1005,9 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 			}
 		case "disconnect":
-			if s.cfg.History != nil {
-				s.cfg.History.Disconnected(historySession)
-			}
-			historySession = 0
-			historyConnected = false
+			goodbye := expandReply(terminalGoodbye, historyStation)
 			if incoming != nil {
+				sendIncomingReply(terminalGoodbye, fmt.Sprintf("goodbye-%d", time.Now().UnixNano()), historyStation)
 				incoming.close()
 				incoming = nil
 			}
@@ -941,11 +1016,31 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					cancelKeepAlive()
 					cancelKeepAlive = nil
 				}
+				if radioSession.State() == session.Connected && strings.TrimSpace(goodbye) != "" {
+					wireData, encodeErr := terminalTXCodec.Encode(terminalResponseText(goodbye))
+					if encodeErr == nil {
+						sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+						sendMu.Lock()
+						if err := radioSession.Send(sendCtx, wireData); err != nil {
+							_ = out.write(serverMessage{Type: "error", Error: "Nie wyslano pozegnania: " + err.Error()})
+						}
+						sendMu.Unlock()
+						cancel()
+					}
+				}
 				closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				_ = radioSession.Disconnect(closeCtx)
 				cancel()
 			}
+			if activeMode == "bbs" && remote != nil && strings.TrimSpace(goodbye) != "" {
+				_, _ = remote.Write([]byte(terminalResponseText(goodbye)))
+			}
 			closeRemote()
+			if s.cfg.History != nil {
+				s.cfg.History.Disconnected(historySession)
+			}
+			historySession = 0
+			historyConnected = false
 			activeMode = ""
 			_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Rozlaczono.\r\n"})
 		}

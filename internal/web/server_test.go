@@ -1,11 +1,35 @@
 package web
 
 import (
+	"net"
 	"strings"
 	"testing"
 
 	"github.com/packet-radio/ultimatepr/internal/session"
 )
+
+func TestValidateWebListenerRejectsUnavailableAddress(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	if err := validateWebListener("127.0.0.1:8080", listener.Addr().String()); err == nil {
+		t.Fatal("unavailable web listener address accepted")
+	}
+}
+
+func TestValidateWebListenerAcceptsAvailableAddress(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+	if err := validateWebListener("127.0.0.1:8080", address); err != nil {
+		t.Fatalf("available web listener address rejected: %v", err)
+	}
+}
 
 func TestTerminalMessageFromEventUsesDataForPayload(t *testing.T) {
 	msg := terminalMessageFromEvent(session.Event{Type: "data", Data: []byte("Hello\r\n")})

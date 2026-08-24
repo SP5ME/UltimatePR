@@ -83,3 +83,32 @@ func TestHistoryStoresConnectionLifecycle(t *testing.T) {
 		t.Fatalf("unexpected lifecycle: %+v", c.Lines)
 	}
 }
+
+func TestDeleteAndClearHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	limits := Limits{MaxStations: 10, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 90}
+	s, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstSession := s.Connected("tnc", "SR5DDD", "radio", "")
+	s.Connected("tnc", "SQ4BJA", "radio", "")
+	firstKey := Key("tnc", "SR5DDD", "radio", "")
+	if err := s.Delete(firstKey); err != nil {
+		t.Fatal(err)
+	}
+	s.Disconnected(firstSession)
+	if _, ok := s.Get(firstKey); ok || len(s.List()) != 1 {
+		t.Fatalf("deleted conversation returned: %+v", s.List())
+	}
+	if err := s.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.List(); len(got) != 0 {
+		t.Fatalf("history was not cleared: %+v", got)
+	}
+}

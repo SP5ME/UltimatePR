@@ -2,7 +2,11 @@
 
 ## 2026-08-24 - hostnames, independent sessions, and clearer history
 
+- Added deletion of the currently viewed conversation and all conversation history from the new Database tab; every deletion requires confirmation.
+- “Clear terminal” clears only the current terminal window after confirmation and leaves saved history untouched.
+
 - `web.allowed_addresses` now accepts hostnames in addition to IP addresses and CIDR networks. The same rules protect the web panel and TNC Proxy clients, and names are resolved through DNS whenever a connection is checked.
+- Fixed hostname access for clients using scoped IPv6 link-local addresses such as `fe80::…%eth0`; the `::` rule now covers them correctly in both the web panel and TNC Proxy.
 - Every terminal tab has its own connection state and a dedicated `×` button that permanently closes the session.
 - The `Disconnect session` button only ends the current connection, preserving the tab, terminal contents, and manual reconnect option.
 - Automatic reconnection and its main-bar switch were removed. The new-connection fields now use all available space.
@@ -10,6 +14,9 @@
 - The viewed history title is prominent and centered in the terminal header.
 - History messages show one date and time for the complete message instead of separate transmission packets.
 - The beginning and end of every connection are stored permanently and displayed as graphical separators: green `Connected` and red `Disconnected`, both with date and time.
+- Manually disconnecting or closing an active tab now sends the configured goodbye first, waits for its transmission to finish, and only then sends the AX.25 `DISC` frame.
+- Readability is now consistent across the interface: the smallest descriptions, metadata, statuses, and hints are larger, heavier, and higher-contrast in both light and dark themes.
+- Before saving a changed web-panel address, the application verifies that it can open it. Missing permissions or an occupied port no longer overwrite a working configuration or lock out the panel after restart.
 
 ## 2026-08-21 - sharing TNC access with external applications
 

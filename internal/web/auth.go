@@ -61,7 +61,7 @@ func (s *Server) allowAddresses(next http.Handler) http.Handler {
 		if err != nil {
 			host = r.RemoteAddr
 		}
-		ip := net.ParseIP(strings.Trim(host, "[]"))
+		ip := netallow.ParseIP(host)
 		if ip == nil || !addressAllowed(ip, s.cfg.AllowedAddresses) {
 			http.Error(w, "Address not allowed", http.StatusForbidden)
 			return

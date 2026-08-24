@@ -36,3 +36,58 @@
 .terminal-state i.working { background:var(--amber); box-shadow:0 0 7px var(--amber); }
 .terminal-state i.error { background:var(--red); box-shadow:0 0 7px var(--red); }
 .terminal-state strong { font:700 12px ui-monospace,Consolas,monospace; color:#dce9e8; }
+
+/* A consistent readability floor for secondary text across all views. */
+body { font-size: 15px; }
+nav button, button, .button { font-size: 14px; }
+label, .message-editor-label { color: #b9c7c8; font-size: 12px; font-weight: 800; line-height: 1.35; }
+input::placeholder, textarea::placeholder { color: #91a3a5; opacity: 1; }
+.eyebrow, .terminal-head > div:first-child > span { font-size: 11px; font-weight: 800; }
+.hint, .config-head p, .settings-card p, .card-head p, .info-head p, .changelog-head p,
+.app-confirm-modal p, .update-progress-header p, .update-progress-summary span {
+  color: #b3c2c3;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+.message-hint small, .file-picker span { color: #b3c2c3; font-size: 12px; font-weight: 600; }
+.service-card small { color: #aebfc0; font-size: 11px; font-weight: 700; }
+.connection-item strong { font-size: 12px; }
+.dock-title { font-size: 12px; font-weight: 800; }
+.session-tab { font-size: 12px; }
+.heard-row span, .heard-row small { font-size: 12px; font-weight: 600; }
+.terminal-head strong, .terminal-state strong { font-size: 13px; font-weight: 800; }
+.monitor-frame-legend { color: #afbec0; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.monitor-row { font-size: 13px; }
+.monitor-row time, .monitor-row > span, .monitor-row em, .monitor-help-popup dd { color: #afbec0; font-weight: 600; }
+.monitor-via { font-size: 12px; font-weight: 700; }
+.monitor-help-popup { font-size: 14px; line-height: 1.45; }
+.packet-status, .message-time { color: #aebfc0; font-size: 11px; font-weight: 700; line-height: 1.4; }
+.history-event { font-size: 12px; }
+.update-status dt { color: #afbec0; font-size: 12px; }
+.config-notice { font-size: 14px; font-weight: 600; line-height: 1.45; }
+.info-panel .settings-card p, .info-panel .settings-card li, .info-panel .settings-card dd,
+#changelogContent { font-size: 15px; line-height: 1.6; }
+footer { color: #91a6a8; font-size: 11px; font-weight: 800; }
+
+[data-theme="light"] label,
+[data-theme="light"] .message-editor-label { color: #46594c; }
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder { color: #66786b; }
+[data-theme="light"] .hint,
+[data-theme="light"] .config-head p,
+[data-theme="light"] .settings-card p,
+[data-theme="light"] .card-head p,
+[data-theme="light"] .info-head p,
+[data-theme="light"] .changelog-head p,
+[data-theme="light"] .message-hint small,
+[data-theme="light"] .file-picker span,
+[data-theme="light"] .monitor-frame-legend,
+[data-theme="light"] .monitor-row time,
+[data-theme="light"] .monitor-row > span,
+[data-theme="light"] .monitor-row em,
+[data-theme="light"] .monitor-help-popup dd,
+[data-theme="light"] .packet-status,
+[data-theme="light"] .message-time,
+[data-theme="light"] .service-card small,
+[data-theme="light"] footer { color: #4b5e50; }

@@ -2,6 +2,8 @@ package web
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -16,6 +18,19 @@ func TestPasswordHash(t *testing.T) {
 	}
 	if !verifyPassword("", "packet") || verifyPassword("", "other") {
 		t.Fatal("default password verification failed")
+	}
+}
+
+func TestAllowAddressesAcceptsZonedIPv6Remote(t *testing.T) {
+	s := &Server{cfg: Config{AllowedAddresses: []string{"::"}}}
+	req := httptest.NewRequest(http.MethodGet, "http://ultimatepr:8080/", nil)
+	req.RemoteAddr = "[fe80::1234%eth0]:54321"
+	recorder := httptest.NewRecorder()
+	s.allowAddresses(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("zoned IPv6 client rejected with status %d", recorder.Code)
 	}
 }
 

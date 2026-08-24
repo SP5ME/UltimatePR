@@ -160,6 +160,27 @@ func (s *Store) Get(key string) (Conversation, bool) {
 	v.Lines = append([]Line(nil), c.Lines...)
 	return v, true
 }
+func (s *Store) Delete(key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.items[key]; !ok {
+		return os.ErrNotExist
+	}
+	delete(s.items, key)
+	for sessionID, activeKey := range s.active {
+		if activeKey == key {
+			delete(s.active, sessionID)
+		}
+	}
+	return s.saveLocked()
+}
+func (s *Store) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.items = map[string]*Conversation{}
+	s.active = map[uint64]string{}
+	return s.saveLocked()
+}
 func (s *Store) prune() { s.mu.Lock(); defer s.mu.Unlock(); s.pruneLocked() }
 func (s *Store) pruneLocked() {
 	cut := time.Now().AddDate(0, 0, -s.limits.RetentionDays)

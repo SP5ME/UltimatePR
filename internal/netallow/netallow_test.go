@@ -39,3 +39,13 @@ func TestValidRule(t *testing.T) {
 		}
 	}
 }
+
+func TestParseZonedIPv6(t *testing.T) {
+	ip := ParseIP("fe80::1234%eth0")
+	if ip == nil || !ip.Equal(net.ParseIP("fe80::1234")) {
+		t.Fatalf("zoned IPv6 was not parsed: %v", ip)
+	}
+	if !Allowed(ip, []string{"::"}) {
+		t.Fatal("IPv6 wildcard rejected zoned client address")
+	}
+}

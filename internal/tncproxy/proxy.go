@@ -75,7 +75,7 @@ func addressAllowed(address net.Addr, allowed []string) bool {
 	if err != nil {
 		return false
 	}
-	return netallow.Allowed(net.ParseIP(host), allowed)
+	return netallow.Allowed(netallow.ParseIP(host), allowed)
 }
 
 func (p *Proxy) clientLoop(ctx context.Context, c *client) {

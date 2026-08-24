@@ -6,13 +6,23 @@ import (
 	"strings"
 )
 
+// ParseIP parses a plain IP address and an IPv6 address carrying an interface
+// zone, as returned for link-local TCP clients (for example fe80::1%eth0).
+func ParseIP(raw string) net.IP {
+	raw = strings.Trim(strings.TrimSpace(raw), "[]")
+	if zone := strings.LastIndexByte(raw, '%'); zone >= 0 && strings.Contains(raw[:zone], ":") {
+		raw = raw[:zone]
+	}
+	return net.ParseIP(raw)
+}
+
 // ValidRule reports whether rule is an IP address, CIDR network, or hostname.
 func ValidRule(rule string) bool {
 	rule = strings.TrimSpace(rule)
 	if rule == "" {
 		return false
 	}
-	if net.ParseIP(rule) != nil {
+	if ParseIP(rule) != nil {
 		return true
 	}
 	if _, _, err := net.ParseCIDR(rule); err == nil {
@@ -35,7 +45,7 @@ func Allowed(ip net.IP, rules []string) bool {
 		if rule == "::" && ip.To4() == nil {
 			return true
 		}
-		if exact := net.ParseIP(rule); exact != nil && exact.Equal(ip) {
+		if exact := ParseIP(rule); exact != nil && exact.Equal(ip) {
 			return true
 		}
 		if _, network, err := net.ParseCIDR(rule); err == nil {

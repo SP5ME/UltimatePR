@@ -80,6 +80,18 @@ func TestAddressAllowedByHostname(t *testing.T) {
 	}
 }
 
+func TestAddressAllowedByIPv6WildcardWithZone(t *testing.T) {
+	address := testAddr("[fe80::1234%eth0]:12345")
+	if !addressAllowed(address, []string{"::"}) {
+		t.Fatal("zoned IPv6 address rejected")
+	}
+}
+
+type testAddr string
+
+func (a testAddr) Network() string { return "tcp" }
+func (a testAddr) String() string  { return string(a) }
+
 func freeAddress(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")

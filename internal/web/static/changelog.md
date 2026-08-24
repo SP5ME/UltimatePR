@@ -2,7 +2,11 @@
 
 ## 2026-08-24 - hostnames, niezależne sesje i czytelna historia
 
+- Dodano usuwanie pojedynczej oglądanej rozmowy oraz całej historii rozmów w nowej zakładce „Baza danych”; każda operacja wymaga potwierdzenia.
+- „Wyczyść terminal” usuwa wyłącznie zawartość bieżącego okna po potwierdzeniu i nie narusza zapisanej historii.
+
 - Lista `web.allowed_addresses` przyjmuje teraz nazwy hostów oprócz adresów IP i sieci CIDR. Te same reguły chronią panel WWW oraz klientów TNC Proxy, a nazwy są ponownie rozwiązywane przez DNS przy sprawdzaniu połączenia.
+- Poprawiono dostęp przez hostname dla klientów używających strefowych adresów IPv6 link-local, np. `fe80::…%eth0`; reguła `::` obejmuje je teraz prawidłowo w WWW i TNC Proxy.
 - Każda zakładka terminala ma własny stan połączenia i osobny przycisk `×` służący do trwałego zamknięcia sesji.
 - Przycisk `Rozłącz sesję` kończy tylko bieżące połączenie, zachowując zakładkę, treść terminala i możliwość ręcznego ponownego połączenia.
 - Usunięto automatyczne ponawianie połączeń i jego przełącznik z głównego paska. Pola nowego połączenia wykorzystują całą zwolnioną szerokość.
@@ -10,6 +14,9 @@
 - Tytuł przeglądanej historii jest wyraźny i wyśrodkowany w górnym pasku terminala.
 - Wiadomości w historii pokazują datę i godzinę całej wiadomości, a nie osobnych pakietów transmisji.
 - Początek i koniec każdego połączenia są trwale zapisywane i przedstawiane jako graficzne separatory: zielony `Połączono` oraz czerwony `Rozłączono`, oba z datą i godziną.
+- Ręczne rozłączenie i zamknięcie aktywnej zakładki wysyła najpierw skonfigurowane pożegnanie, czeka na zakończenie transmisji, a dopiero później wysyła ramkę AX.25 `DISC`.
+- Ujednolicono czytelność całego interfejsu: zwiększono najmniejsze opisy, metadane, statusy i podpowiedzi, wzmocniono ich krój oraz kontrast w jasnym i ciemnym motywie.
+- Przed zapisaniem zmienionego adresu panelu WWW aplikacja sprawdza, czy może go otworzyć. Brak uprawnień lub zajęty port nie nadpisze już działającej konfiguracji ani nie odetnie panelu po restarcie.
 
 ## 2026-08-21 - współdzielenie TNC przez aplikacje zewnętrzne
 
