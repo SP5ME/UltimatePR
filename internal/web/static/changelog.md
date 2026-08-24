@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-24 - zgodność i stabilność AX.25
+
+- Poprawiono obsługę `RNR`: wysyłanie ramek informacyjnych jest wstrzymywane, gdy zdalna stacja zgłasza zajętość odbiornika, a gotowość jest sprawdzana ramkami `RR` z bitem `P`.
+- Ramki informacyjne odebrane poza kolejnością uruchamiają teraz kontrolowaną procedurę `REJ` zamiast zwykłego potwierdzenia `RR`.
+- Dodano obsługę `SREJ` dla obecnego, jednoklatkowego okna transmisyjnego.
+- Zestawianie i rozłączanie sesji sprawdza semantykę bitów `P/F` oraz `C/R`, zachowując zgodność ze starszym kodowaniem AX.25.
+- Sesje przychodzące odpowiadają na nadzorcze zapytania z bitem `P` oraz wysyłają `DM` do lokalnej usługi znajdującej się w stanie rozłączonym.
+- Kodek rozpoznaje dodatkowe typy ramek AX.25 v2.2: `SABME`, `SREJ`, `FRMR`, `XID` i `TEST`.
+- Enkoder odrzuca niedozwolone pole informacji w ramkach sterujących.
+- Dodano testy regresyjne procedur `RNR`, `REJ`, `SREJ`, `P/F`, nadzorczego odpytywania i odpowiedzi `DM`.
+
 ## 2026-08-24 - hostnames, niezależne sesje i czytelna historia
 
 - Dodano usuwanie pojedynczej oglądanej rozmowy oraz całej historii rozmów w nowej zakładce „Baza danych”; każda operacja wymaga potwierdzenia.

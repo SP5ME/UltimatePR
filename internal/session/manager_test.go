@@ -21,7 +21,7 @@ func testManager(t *testing.T) (*Manager, chan []byte) {
 }
 
 func response(typ ax25.Type, nr uint8) ax25.Frame {
-	return ax25.Frame{Destination: ax25.Address{Callsign: "LOCAL", SSID: 9}, Source: ax25.Address{Callsign: "REMOTE", SSID: 1}, Type: typ, NR: nr}
+	return ax25.Frame{Destination: ax25.Address{Callsign: "LOCAL", SSID: 9}, Source: ax25.Address{Callsign: "REMOTE", SSID: 1, CommandResponse: true}, Type: typ, NR: nr, PollFinal: typ == ax25.TypeUA || typ == ax25.TypeDM}
 }
 
 func connectManager(t *testing.T, m *Manager, sent chan []byte) {
@@ -208,6 +208,28 @@ func TestSendRetriesImmediatelyOnRejectForCurrentSequence(t *testing.T) {
 	}
 }
 
+func TestSendRetriesImmediatelyOnSelectiveReject(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = time.Second
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
+	first := <-sent
+	m.Handle("radio", response(ax25.TypeSREJ, 0))
+	select {
+	case duplicate := <-sent:
+		if !bytes.Equal(first, duplicate) {
+			t.Fatal("SREJ retry differs from original")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("SREJ did not trigger retry")
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConnectTimeout(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)
@@ -216,6 +238,26 @@ func TestConnectTimeout(t *testing.T) {
 	<-sent
 	if err := <-done; err == nil || m.State() != Disconnected {
 		t.Fatalf("err=%v state=%s", err, m.State())
+	}
+}
+
+func TestConnectRequiresFinalBitOnUA(t *testing.T) {
+	m, sent := testManager(t)
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	_ = <-sent
+	ua := response(ax25.TypeUA, 0)
+	ua.PollFinal = false
+	m.Handle("radio", ua)
+	select {
+	case err := <-done:
+		t.Fatalf("UA without F completed connection: %v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+	_ = <-sent // retry after T1
+	m.Handle("radio", response(ax25.TypeUA, 0))
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -261,4 +303,88 @@ func TestKeepAliveUsesSupervisoryFrame(t *testing.T) {
 	if err != nil || f.Type != ax25.TypeRR || !f.PollFinal || len(f.Payload) != 0 {
 		t.Fatalf("keepalive=%#v err=%v", f, err)
 	}
+}
+
+func TestOutOfSequenceIFrameSendsSingleREJ(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	pid := byte(0xF0)
+	f := response(ax25.TypeI, 0)
+	f.NS, f.PID, f.Payload = 3, &pid, []byte("late")
+	m.Handle("radio", f)
+	rej := decodeFrame(t, <-sent)
+	if rej.Type != ax25.TypeREJ || rej.NR != 0 {
+		t.Fatalf("REJ=%+v", rej)
+	}
+	m.Handle("radio", f)
+	select {
+	case extra := <-sent:
+		t.Fatalf("duplicate out-of-sequence frame caused response: % X", extra)
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
+func TestRNRPausesNextIFrameUntilRR(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 100 * time.Millisecond
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("first")) }()
+	_ = decodeFrame(t, <-sent)
+	m.Handle("radio", response(ax25.TypeRNR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	go func() { done <- m.Send(context.Background(), []byte("second")) }()
+	poll := decodeFrame(t, <-sent)
+	if poll.Type != ax25.TypeRR || !poll.PollFinal {
+		t.Fatalf("poll=%+v", poll)
+	}
+	select {
+	case frame := <-sent:
+		t.Fatalf("I frame sent while peer busy: % X", frame)
+	case <-time.After(20 * time.Millisecond):
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	second := decodeFrame(t, <-sent)
+	if second.Type != ax25.TypeI || string(second.Payload) != "second" {
+		t.Fatalf("second=%+v", second)
+	}
+	m.Handle("radio", response(ax25.TypeRR, 2))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRNRDoesNotRetransmitUnacknowledgedIWhileBusy(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 30 * time.Millisecond
+	m.n2 = 4
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
+	first := decodeFrame(t, <-sent)
+	m.Handle("radio", response(ax25.TypeRNR, 0))
+	poll := decodeFrame(t, <-sent)
+	if poll.Type != ax25.TypeRR || !poll.PollFinal {
+		t.Fatalf("busy recovery sent %+v instead of RR poll; first=%+v", poll, first)
+	}
+	m.Handle("radio", response(ax25.TypeRR, 0))
+	retry := decodeFrame(t, <-sent)
+	if retry.Type != ax25.TypeI || retry.NS != first.NS || string(retry.Payload) != "pending" {
+		t.Fatalf("retry=%+v", retry)
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodeFrame(t *testing.T, b []byte) ax25.Frame {
+	t.Helper()
+	f, err := ax25.Decode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
 }

@@ -74,6 +74,41 @@ func TestInboundIgnoresUnknownDestination(t *testing.T) {
 	}
 }
 
+func TestInboundDisconnectedServiceRespondsDM(t *testing.T) {
+	sent := make(chan []byte, 1)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC", SSID: 7}
+	m.Register(local, func(string, io.Reader, io.Writer) {})
+	f := ax25.Frame{Destination: local, Source: ax25.Address{Callsign: "SP5ME", CommandResponse: false}, Type: ax25.TypeDISC, PollFinal: true}
+	if !m.Handle("radio", f) {
+		t.Fatal("local disconnected frame not handled")
+	}
+	dm := decodeSent(t, <-sent)
+	if dm.Type != ax25.TypeDM || !dm.PollFinal {
+		t.Fatalf("DM=%+v", dm)
+	}
+}
+
+func TestInboundAnswersSupervisoryPoll(t *testing.T) {
+	sent := make(chan []byte, 8)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC", SSID: 7}
+	remote := ax25.Address{Callsign: "SP5ME"}
+	m.Register(local, func(string, io.Reader, io.Writer) { time.Sleep(100 * time.Millisecond) })
+	sabm := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeSABM, PollFinal: true}
+	if !m.Handle("radio", sabm) {
+		t.Fatal("SABM not handled")
+	}
+	_ = <-sent // UA
+	rr := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeRR, PollFinal: true}
+	rr.Destination.CommandResponse = true
+	m.Handle("radio", rr)
+	answer := decodeSent(t, <-sent)
+	if answer.Type != ax25.TypeRR || !answer.PollFinal {
+		t.Fatalf("RR response=%+v", answer)
+	}
+}
+
 func decodeSent(t *testing.T, b []byte) ax25.Frame {
 	t.Helper()
 	f, err := ax25.Decode(bytes.Clone(b))

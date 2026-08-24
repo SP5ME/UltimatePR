@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-24 - AX.25 compliance and stability
+
+- Fixed `RNR` handling: information-frame transmission now pauses while the remote station reports receiver busy, and readiness is checked using `RR` frames with the `P` bit.
+- Out-of-sequence information frames now start controlled `REJ` recovery instead of receiving an ordinary `RR` acknowledgement.
+- Added `SREJ` handling for the current one-frame transmit window.
+- Session setup and release now validate `P/F` and `C/R` semantics while retaining compatibility with legacy AX.25 command/response encoding.
+- Incoming sessions answer supervisory polls carrying the `P` bit and send `DM` when a local service is in the disconnected state.
+- The codec recognizes additional AX.25 v2.2 frame types: `SABME`, `SREJ`, `FRMR`, `XID`, and `TEST`.
+- The encoder rejects information fields on control frames that do not permit them.
+- Added regression coverage for `RNR`, `REJ`, `SREJ`, `P/F`, supervisory polling, and `DM` responses.
+
 ## 2026-08-24 - hostnames, independent sessions, and clearer history
 
 - Added deletion of the currently viewed conversation and all conversation history from the new Database tab; every deletion requires confirmation.

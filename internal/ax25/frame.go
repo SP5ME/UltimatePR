@@ -9,11 +9,16 @@ const (
 	TypeRR
 	TypeRNR
 	TypeREJ
+	TypeSREJ
 	TypeSABM
+	TypeSABME
 	TypeDISC
 	TypeDM
 	TypeUA
 	TypeUI
+	TypeFRMR
+	TypeXID
+	TypeTEST
 	TypeUnknown
 )
 
@@ -41,8 +46,12 @@ func control(f Frame) (byte, error) {
 		return 0x05 | pf | (f.NR&7)<<5, nil
 	case TypeREJ:
 		return 0x09 | pf | (f.NR&7)<<5, nil
+	case TypeSREJ:
+		return 0x0D | pf | (f.NR&7)<<5, nil
 	case TypeSABM:
 		return 0x2F | pf, nil
+	case TypeSABME:
+		return 0x6F | pf, nil
 	case TypeDISC:
 		return 0x43 | pf, nil
 	case TypeDM:
@@ -51,6 +60,12 @@ func control(f Frame) (byte, error) {
 		return 0x63 | pf, nil
 	case TypeUI:
 		return 0x03 | pf, nil
+	case TypeFRMR:
+		return 0x87 | pf, nil
+	case TypeXID:
+		return 0xAF | pf, nil
+	case TypeTEST:
+		return 0xE3 | pf, nil
 	default:
 		return 0, fmt.Errorf("unsupported AX.25 type")
 	}
@@ -78,6 +93,9 @@ func Encode(f Frame) ([]byte, error) {
 			return nil, fmt.Errorf("PID required")
 		}
 		out = append(out, *f.PID)
+	}
+	if len(f.Payload) > 0 && f.Type != TypeI && f.Type != TypeUI && f.Type != TypeFRMR && f.Type != TypeXID && f.Type != TypeTEST {
+		return nil, fmt.Errorf("information field not allowed for AX.25 type")
 	}
 	out = append(out, f.Payload...)
 	return out, nil
@@ -131,6 +149,8 @@ func Decode(b []byte) (Frame, error) {
 			f.Type = TypeRNR
 		case 9:
 			f.Type = TypeREJ
+		case 13:
+			f.Type = TypeSREJ
 		default:
 			f.Type = TypeUnknown
 		}
@@ -138,6 +158,8 @@ func Decode(b []byte) (Frame, error) {
 		switch c & 0xEF {
 		case 0x2F:
 			f.Type = TypeSABM
+		case 0x6F:
+			f.Type = TypeSABME
 		case 0x43:
 			f.Type = TypeDISC
 		case 0x0F:
@@ -146,6 +168,12 @@ func Decode(b []byte) (Frame, error) {
 			f.Type = TypeUA
 		case 0x03:
 			f.Type = TypeUI
+		case 0x87:
+			f.Type = TypeFRMR
+		case 0xAF:
+			f.Type = TypeXID
+		case 0xE3:
+			f.Type = TypeTEST
 		default:
 			f.Type = TypeUnknown
 		}

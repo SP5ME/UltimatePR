@@ -3,7 +3,7 @@
 | Function | LinBPQ | URONode | pyBBS | This project |
 |---|---|---|---|---|
 | KISS TCP | Integrated port driver feeding the central switch | Relies on Linux AX.25 plumbing | Not present | First transport; streaming codec and reconnecting client |
-| AX.25 | Full link/session implementation | Kernel AX.25 through libax25 | Not present | Independent modulo-8 connected-mode client and incoming NODE/BBS sessions; one-frame window |
+| AX.25 | Full link/session implementation | Kernel AX.25 through libax25 | Not present | Independent modulo-8 connected-mode client and incoming NODE/BBS sessions; one-frame window with RNR, REJ/SREJ and P/F recovery |
 | Node | Rich command shell and application switch | Small, readable per-user node shell | BBS-like Telnet command UI | Minimal HELP/INFO/PORTS/MHEARD/USERS/BYE after sessions |
 | MHEARD | Updated from observed port traffic | Reads Linux heard/proc facilities | Tracks Telnet users | Bounded in-memory store behind a persistence-ready interface |
 | Monitor | Decodes traffic crossing ports | Uses system/kernel information | Application logging only | Bounded normalized RX/TX event stream |

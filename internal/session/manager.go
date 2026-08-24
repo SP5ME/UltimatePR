@@ -41,6 +41,12 @@ type acknowledgement struct {
 	nr    uint8
 }
 
+type controlEvent struct {
+	type_    ax25.Type
+	final    bool
+	response bool
+}
+
 type Manager struct {
 	mu          sync.Mutex
 	local       ax25.Address
@@ -50,16 +56,18 @@ type Manager struct {
 	digipeaters []ax25.Address
 	ports       map[string]Sender
 	vs, vr      uint8
-	control     chan ax25.Type
+	control     chan controlEvent
 	ack         chan acknowledgement
 	subs        map[chan Event]struct{}
 	t1          time.Duration
 	n2          int
 	paclen      int
+	peerBusy    bool
+	rejectSent  bool
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan ax25.Type, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: 10 * time.Second, n2: 3, paclen: 128}
 }
 
 func (m *Manager) Subscribe() (<-chan Event, func()) {
@@ -132,6 +140,8 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.digipeaters = digis
 	m.vs = 0
 	m.vr = 0
+	m.peerBusy = false
+	m.rejectSent = false
 	m.drain()
 	m.mu.Unlock()
 	m.setState(AwaitingConnection, "0/3")
@@ -142,12 +152,12 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 			return err
 		}
 		select {
-		case typ := <-m.control:
-			if typ == ax25.TypeUA {
+		case event := <-m.control:
+			if event.type_ == ax25.TypeUA && event.final && event.response {
 				m.setState(Connected, "Sesja AX.25 polaczona")
 				return nil
 			}
-			if typ == ax25.TypeDM {
+			if event.type_ == ax25.TypeDM && event.final && event.response {
 				m.setState(Disconnected, "Stacja odrzucila polaczenie")
 				return errors.New("connection rejected (DM)")
 			}
@@ -178,8 +188,8 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 			break
 		}
 		select {
-		case typ := <-m.control:
-			if typ == ax25.TypeUA || typ == ax25.TypeDM {
+		case event := <-m.control:
+			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.final && event.response {
 				m.setState(Disconnected, "Rozlaczono")
 				return nil
 			}
@@ -281,6 +291,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 	f := m.command(ax25.TypeI, false, &pid, ns, nr)
 	f.Payload = append([]byte(nil), data...)
 	for attempt := 0; attempt < m.n2; attempt++ {
+		if err := m.waitRemoteReady(ctx); err != nil {
+			return err
+		}
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			return err
 		}
@@ -289,7 +302,25 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 		for {
 			select {
 			case ack := <-m.ack:
-				if ack.type_ != ax25.TypeREJ && ack.nr == expected {
+				if ack.type_ == ax25.TypeRNR {
+					m.mu.Lock()
+					m.peerBusy = true
+					m.mu.Unlock()
+					if ack.nr == expected {
+						if !timer.Stop() {
+							select {
+							case <-timer.C:
+							default:
+							}
+						}
+						m.mu.Lock()
+						m.vs = expected
+						m.mu.Unlock()
+						return nil
+					}
+					continue
+				}
+				if ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ && ack.nr == expected {
 					if !timer.Stop() {
 						select {
 						case <-timer.C:
@@ -301,7 +332,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 					m.mu.Unlock()
 					return nil
 				}
-				if ack.type_ == ax25.TypeREJ && ack.nr == ns {
+				if (ack.type_ == ax25.TypeREJ || ack.type_ == ax25.TypeSREJ) && ack.nr == ns {
 					if !timer.Stop() {
 						select {
 						case <-timer.C:
@@ -328,6 +359,52 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 	return errors.New("AX.25 data acknowledgement timeout")
 }
 
+func (m *Manager) waitRemoteReady(ctx context.Context) error {
+	for attempt := 0; attempt < m.n2; attempt++ {
+		m.mu.Lock()
+		busy := m.peerBusy
+		send, nr := m.ports[m.port], m.vr
+		m.mu.Unlock()
+		if !busy {
+			return nil
+		}
+		m.drainAck()
+		if err := m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr)); err != nil {
+			return err
+		}
+		timer := time.NewTimer(m.t1)
+		for {
+			select {
+			case ack := <-m.ack:
+				if ack.type_ == ax25.TypeRR {
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					m.mu.Lock()
+					m.peerBusy = false
+					m.mu.Unlock()
+					return nil
+				}
+			case <-timer.C:
+				goto retry
+			case <-ctx.Done():
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				return ctx.Err()
+			}
+		}
+	retry:
+	}
+	return errors.New("AX.25 remote receiver remains busy")
+}
+
 func (m *Manager) Handle(port string, f ax25.Frame) {
 	m.mu.Lock()
 	active := port == m.port && f.Source.String() == m.remote.String() && f.Destination.String() == m.local.String()
@@ -338,14 +415,18 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 	}
 	switch f.Type {
 	case ax25.TypeUA, ax25.TypeDM:
+		response := (!f.Destination.CommandResponse && f.Source.CommandResponse) || f.Destination.CommandResponse == f.Source.CommandResponse
 		select {
-		case m.control <- f.Type:
+		case m.control <- controlEvent{type_: f.Type, final: f.PollFinal, response: response}:
 		default:
 		}
 	case ax25.TypeDISC:
 		_ = m.sendResponse(context.Background(), port, ax25.TypeUA, true, 0)
 		m.setState(Disconnected, "Zdalna stacja rozlaczyla sesje")
 	case ax25.TypeRR:
+		m.mu.Lock()
+		m.peerBusy = false
+		m.mu.Unlock()
 		select {
 		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
 		default:
@@ -357,8 +438,21 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 			_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
 		}
 	case ax25.TypeRNR:
+		m.mu.Lock()
+		m.peerBusy = true
+		m.mu.Unlock()
+		select {
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
+		default:
+		}
+		if f.PollFinal && f.Destination.CommandResponse {
+			m.mu.Lock()
+			nr := m.vr
+			m.mu.Unlock()
+			_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
+		}
 		m.emit(Event{Type: "notice", Message: "Zdalna stacja chwilowo nie moze odbierac"})
-	case ax25.TypeREJ:
+	case ax25.TypeREJ, ax25.TypeSREJ:
 		select {
 		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR}:
 		default:
@@ -370,10 +464,20 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.mu.Lock()
 		if f.NS == m.vr {
 			m.vr = (m.vr + 1) & 7
+			m.rejectSent = false
 			m.mu.Unlock()
 			m.emit(Event{Type: "data", Data: append([]byte(nil), f.Payload...)})
 		} else {
+			alreadyRejected := m.rejectSent
+			m.rejectSent = true
 			m.mu.Unlock()
+			if !alreadyRejected {
+				m.mu.Lock()
+				nr := m.vr
+				m.mu.Unlock()
+				_ = m.sendResponse(context.Background(), port, ax25.TypeREJ, f.PollFinal, nr)
+			}
+			return
 		}
 		if f.NR <= 7 {
 			select {

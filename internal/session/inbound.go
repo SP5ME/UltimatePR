@@ -38,6 +38,8 @@ type inboundLink struct {
 	ack           chan uint8
 	closed        chan struct{}
 	closeOnce     sync.Once
+	peerBusy      bool
+	rejectSent    bool
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
@@ -60,6 +62,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	m.mu.Unlock()
 
 	if link == nil {
+		if service != nil && f.Type != ax25.TypeSABM {
+			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+			return true
+		}
 		if f.Type != ax25.TypeSABM || service == nil {
 			return false
 		}
@@ -93,10 +99,29 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	case ax25.TypeDISC:
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
 		link.close()
-	case ax25.TypeRR, ax25.TypeREJ:
+	case ax25.TypeRR, ax25.TypeREJ, ax25.TypeSREJ:
+		link.mu.Lock()
+		link.peerBusy = false
+		nr := link.vr
+		link.mu.Unlock()
 		select {
 		case link.ack <- f.NR:
 		default:
+		}
+		if f.PollFinal && f.Destination.CommandResponse {
+			_ = link.sendControl(ax25.TypeRR, true, nr)
+		}
+	case ax25.TypeRNR:
+		link.mu.Lock()
+		link.peerBusy = true
+		nr := link.vr
+		link.mu.Unlock()
+		select {
+		case link.ack <- f.NR:
+		default:
+		}
+		if f.PollFinal && f.Destination.CommandResponse {
+			_ = link.sendControl(ax25.TypeRR, true, nr)
 		}
 	case ax25.TypeI:
 		if f.PID == nil || *f.PID != 0xF0 {
@@ -105,6 +130,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		link.mu.Lock()
 		if f.NS == link.vr {
 			link.vr = (link.vr + 1) & 7
+			link.rejectSent = false
 			link.mu.Unlock()
 			data := append([]byte(nil), f.Payload...)
 			select {
@@ -112,7 +138,14 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			case <-link.closed:
 			}
 		} else {
+			alreadyRejected := link.rejectSent
+			link.rejectSent = true
+			nr := link.vr
 			link.mu.Unlock()
+			if !alreadyRejected {
+				_ = link.sendControl(ax25.TypeREJ, f.PollFinal, nr)
+			}
+			return true
 		}
 		select {
 		case link.ack <- f.NR:
@@ -207,6 +240,9 @@ func (l *inboundLink) sendChunk(data []byte) error {
 	f := l.response(ax25.TypeI, false, nr)
 	f.NS, f.PID, f.Payload = ns, &pid, append([]byte(nil), data...)
 	for attempt := 0; attempt < l.mux.n2; attempt++ {
+		if err := l.waitRemoteReady(); err != nil {
+			return err
+		}
 		if err := l.send(f); err != nil {
 			return err
 		}
@@ -224,6 +260,56 @@ func (l *inboundLink) sendChunk(data []byte) error {
 		}
 	}
 	return errors.New("AX.25 inbound data acknowledgement timeout")
+}
+
+func (l *inboundLink) waitRemoteReady() error {
+	for attempt := 0; attempt < l.mux.n2; attempt++ {
+		l.mu.Lock()
+		busy, nr := l.peerBusy, l.vr
+		l.mu.Unlock()
+		if !busy {
+			return nil
+		}
+		for {
+			select {
+			case <-l.ack:
+			default:
+				goto drained
+			}
+		}
+	drained:
+		if err := l.sendControl(ax25.TypeRR, true, nr); err != nil {
+			return err
+		}
+		select {
+		case <-l.ack:
+			l.mu.Lock()
+			if !l.peerBusy {
+				l.mu.Unlock()
+				return nil
+			}
+			l.mu.Unlock()
+		case <-time.After(l.mux.t1):
+		case <-l.closed:
+			return io.ErrClosedPipe
+		}
+	}
+	return errors.New("AX.25 remote receiver remains busy")
+}
+
+func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, typ ax25.Type) error {
+	d, s := received.Source, received.Destination
+	d.CommandResponse, s.CommandResponse = false, true
+	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: received.PollFinal}
+	b, err := ax25.Encode(f)
+	if err != nil {
+		return err
+	}
+	send := m.senders[port]
+	if send == nil {
+		return errors.New("AX.25 port unavailable")
+	}
+	return send(context.Background(), b)
 }
 
 func (l *inboundLink) sendControl(t ax25.Type, pf bool, nr uint8) error {

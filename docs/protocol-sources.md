@@ -11,10 +11,13 @@ State diagrams:
 
 https://web.tapr.org/product_docs/tnc95/AX.25.diagram.pdf
 
-Milestone one intentionally implements modulo 8 only. SABME/modulo 128 and
-selective reject are deferred. The decoder represents command/response and
-poll/final bits but the session state machine must apply the rules from the
-state diagrams, not infer them from observed software.
+The connected-mode implementation currently uses modulo 8 with a one-frame
+window. The codec recognizes SABME, SREJ, XID, TEST and FRMR. SREJ triggers a
+selective retry of the single outstanding frame; SABME/modulo 128, XID
+parameter negotiation and a multi-frame selective-repeat window remain
+deferred. Session handling validates command/response and poll/final semantics
+for connection setup and release, pauses transmission while the peer reports
+RNR, and uses REJ recovery for out-of-sequence I frames.
 
 ## KISS
 
