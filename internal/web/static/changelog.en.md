@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24 - AX.25 link release fix
+
+- Receiving a remote `DISC`, `DM`, or `SABM` now immediately ends the pending link-recovery procedure and prevents frames from being sent after the session has closed.
+
 ## 2026-08-24 - diagnostic monitor export
 
 - Added a monitor export format selector: the existing human-readable TXT format and RAW JSONL for AX.25 frame diagnostics.

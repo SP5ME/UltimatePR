@@ -336,6 +336,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 		}
 		if pollOnly {
 			ack, err := m.pollAcknowledgement(ctx, send, nr)
+			if isLinkTermination(ack) {
+				return errors.New("AX.25 link terminated by remote station")
+			}
 			if err != nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
@@ -408,6 +411,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 				// frame and must not trigger an immediate retransmission.
 			case <-timer.C:
 				ack, err := m.pollAcknowledgement(ctx, send, nr)
+				if isLinkTermination(ack) {
+					return errors.New("AX.25 link terminated by remote station")
+				}
 				if err != nil {
 					cycleDone = true
 					needSend = false
@@ -455,6 +461,11 @@ func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8
 	for {
 		select {
 		case ack := <-m.ack:
+			// DISC/DM/SABM may be received as commands. They still
+			// terminate the local recovery procedure immediately.
+			if isLinkTermination(ack) {
+				return ack, nil
+			}
 			// A command with P=1 is answered by Handle. Only the matching
 			// response with F=1 completes the enquiry procedure (SDL state 4).
 			if ack.response && ack.final {
@@ -480,7 +491,11 @@ func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8
 func (m *Manager) probeLink(ctx context.Context, send Sender, nr uint8) error {
 	m.drainAck()
 	for attempt := 0; attempt < m.n2; attempt++ {
-		if _, err := m.pollAcknowledgement(ctx, send, nr); err == nil {
+		ack, err := m.pollAcknowledgement(ctx, send, nr)
+		if isLinkTermination(ack) {
+			return errors.New("AX.25 link terminated by remote station")
+		}
+		if err == nil {
 			return nil
 		} else if ctx.Err() != nil {
 			return ctx.Err()
@@ -753,6 +768,15 @@ func (m *Manager) queueAck(ack acknowledgement) {
 	select {
 	case m.ack <- ack:
 	default:
+	}
+}
+
+func isLinkTermination(ack acknowledgement) bool {
+	switch ack.type_ {
+	case ax25.TypeDM, ax25.TypeDISC, ax25.TypeSABM:
+		return true
+	default:
+		return false
 	}
 }
 

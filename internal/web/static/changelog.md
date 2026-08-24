@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24 - poprawka kończenia sesji AX.25
+
+- Po odebraniu zdalnego `DISC`, `DM` lub `SABM` oczekująca procedura odzyskiwania łącza natychmiast się kończy i nie wysyła ramek po zamknięciu sesji.
+
 ## 2026-08-24 - diagnostyczny eksport monitora
 
 - Dodano wybór formatu eksportu monitora: dotychczasowy TXT czytelny dla człowieka oraz RAW w formacie JSONL do diagnostyki ramek AX.25.
