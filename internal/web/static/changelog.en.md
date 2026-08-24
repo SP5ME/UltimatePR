@@ -2,6 +2,9 @@
 
 ## 2026-08-24 - AX.25 compliance and stability
 
+- Completed personal-station T1 recovery: an `RR(P=1)` poll is sent before retransmitting an unacknowledged I frame, and N2 exhaustion disconnects the link and clears sequence, RNR, and REJ state.
+- T3 keepalive now requires a response from the remote station and detects a lost connection instead of merely transmitting a control frame.
+- Remote `DM` and `DISC` immediately interrupt an outstanding transmission, while simultaneous or repeated `SABM` correctly completes or resets the link.
 - Added a confirmed Clear monitor action that removes all currently buffered frames without stopping subsequent monitoring.
 - Restored interoperability with legacy TNCs and LinBPQ nodes that return a valid `UA` without setting the `F` bit; UltimatePR still transmits the required `SABM(P=1)` and `DISC(P=1)` commands.
 - Fixed monitor frame names after extending the codec — `SABM`, `UA`, `RR`, `I`, and the remaining types are no longer shifted or incorrectly displayed as `?`.

@@ -254,6 +254,39 @@ func TestConnectAcceptsLegacyUAWithoutFinalBit(t *testing.T) {
 	}
 }
 
+func TestLegacyUAThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
+	m, sent := testManager(t)
+	events, cancel := m.Subscribe()
+	defer cancel()
+	<-events
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	_ = <-sent
+	ua := response(ax25.TypeUA, 0)
+	ua.PollFinal = false
+	m.Handle("radio", ua)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	pid := byte(0xF0)
+	banner := response(ax25.TypeI, 0)
+	banner.NS, banner.PID, banner.Payload = 0, &pid, []byte("=== LinBPQ ===\r")
+	m.Handle("radio", banner)
+	for {
+		select {
+		case event := <-events:
+			if event.Type == "data" {
+				if string(event.Data) != "=== LinBPQ ===\r" {
+					t.Fatalf("banner=%q", event.Data)
+				}
+				return
+			}
+		case <-time.After(time.Second):
+			t.Fatal("LinBPQ banner was not delivered")
+		}
+	}
+}
+
 func TestProtocolDefaults(t *testing.T) {
 	m := New(ax25.Address{Callsign: "LOCAL"}, nil)
 	if m.t1 != 10*time.Second || m.paclen != 256 {
@@ -381,6 +414,147 @@ func TestRNRDoesNotRetransmitUnacknowledgedIWhileBusy(t *testing.T) {
 	m.Handle("radio", response(ax25.TypeRR, 1))
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestT1ExpiryPollsBeforeRetransmittingIFrame(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 20 * time.Millisecond
+	m.n2 = 3
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
+	first := decodeFrame(t, <-sent)
+	poll := decodeFrame(t, <-sent)
+	if first.Type != ax25.TypeI || poll.Type != ax25.TypeRR || !poll.PollFinal {
+		t.Fatalf("first=%+v poll=%+v", first, poll)
+	}
+	answer := response(ax25.TypeRR, 0)
+	answer.PollFinal = true
+	m.Handle("radio", answer)
+	retry := decodeFrame(t, <-sent)
+	if retry.Type != ax25.TypeI || retry.NS != first.NS || string(retry.Payload) != "pending" {
+		t.Fatalf("retry=%+v", retry)
+	}
+	m.Handle("radio", response(ax25.TypeRR, 1))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestT1N2ExhaustionDisconnectsLostLink(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 10 * time.Millisecond
+	m.n2 = 2
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("lost")) }()
+	if f := decodeFrame(t, <-sent); f.Type != ax25.TypeI {
+		t.Fatalf("first=%+v", f)
+	}
+	for attempt := 0; attempt < m.n2; attempt++ {
+		if poll := decodeFrame(t, <-sent); poll.Type != ax25.TypeRR || !poll.PollFinal {
+			t.Fatalf("poll %d=%+v", attempt+1, poll)
+		}
+	}
+	if err := <-done; err == nil {
+		t.Fatal("missing timeout error")
+	}
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+	if m.vs != 0 || m.vr != 0 || m.peerBusy || m.rejectSent {
+		t.Fatalf("link state not reset: VS=%d VR=%d busy=%v reject=%v", m.vs, m.vr, m.peerBusy, m.rejectSent)
+	}
+}
+
+func TestKeepAliveDisconnectsUnresponsiveStation(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 10 * time.Millisecond
+	m.n2 = 2
+	connectManager(t, m, sent)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.KeepAlive(ctx, time.Millisecond)
+	for attempt := 0; attempt < m.n2; attempt++ {
+		if poll := decodeFrame(t, <-sent); poll.Type != ax25.TypeRR || !poll.PollFinal {
+			t.Fatalf("keepalive poll %d=%+v", attempt+1, poll)
+		}
+	}
+	deadline := time.After(time.Second)
+	for m.State() != Disconnected {
+		select {
+		case <-deadline:
+			t.Fatal("unresponsive link remained connected")
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func TestConnectedDMImmediatelyDropsLink(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	m.Handle("radio", response(ax25.TypeDM, 0))
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
+func TestRemoteDMInterruptsOutstandingSend(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = time.Second
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
+	_ = <-sent
+	m.Handle("radio", response(ax25.TypeDM, 0))
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("send succeeded after DM")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("send was not interrupted by DM")
+	}
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
+func TestSimultaneousSABMCompletesConnection(t *testing.T) {
+	m, sent := testManager(t)
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	_ = <-sent // local SABM
+	remoteSABM := response(ax25.TypeSABM, 0)
+	remoteSABM.PollFinal = true
+	m.Handle("radio", remoteSABM)
+	if ua := decodeFrame(t, <-sent); ua.Type != ax25.TypeUA || !ua.PollFinal {
+		t.Fatalf("UA=%+v", ua)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if m.State() != Connected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
+func TestRepeatedSABMResetsConnectedLink(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	m.mu.Lock()
+	m.vs, m.vr, m.peerBusy, m.rejectSent = 4, 5, true, true
+	m.mu.Unlock()
+	f := response(ax25.TypeSABM, 0)
+	f.PollFinal = true
+	m.Handle("radio", f)
+	ua := decodeFrame(t, <-sent)
+	if ua.Type != ax25.TypeUA || !ua.PollFinal {
+		t.Fatalf("UA=%+v", ua)
+	}
+	if m.State() != Connected || m.vs != 0 || m.vr != 0 || m.peerBusy || m.rejectSent {
+		t.Fatalf("state=%s VS=%d VR=%d busy=%v reject=%v", m.State(), m.vs, m.vr, m.peerBusy, m.rejectSent)
 	}
 }
 

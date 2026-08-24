@@ -24,6 +24,13 @@ incoming links, while the terminal T3 poll interval is 5 minutes. Reception is
 deliberately tolerant of legacy UA/DM responses that omit the Final bit; the
 local station still transmits SABM and DISC commands with Poll set as required.
 
+The personal-station client follows the T1 recovery sequence by polling with
+RR(P=1) before retransmitting an unacknowledged I frame. Exhausting N2 resets
+the local sequence and busy/reject state and reports the link as disconnected.
+The T3 probe requires a supervisory response and drops an unresponsive link
+after N2 attempts. Remote DM/DISC interrupts an outstanding transmission, and
+simultaneous or repeated SABM is handled as connection completion or link reset.
+
 ## KISS
 
 Original protocol: Mike Chepponis and Phil Karn, *The KISS TNC: A simple Host

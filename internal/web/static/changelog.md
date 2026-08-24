@@ -2,6 +2,9 @@
 
 ## 2026-08-24 - zgodność i stabilność AX.25
 
+- Uzupełniono procedurę stacji abonenckiej po wygaśnięciu T1: przed retransmisją ramki I wysyłane jest zapytanie `RR(P=1)`, a po N2 nieudanych próbach łącze przechodzi do stanu rozłączonego i czyści liczniki oraz stany RNR/REJ.
+- Keepalive T3 sprawdza teraz odpowiedź zdalnej stacji i wykrywa utracone połączenie zamiast tylko wysyłać ramkę kontrolną.
+- Zdalne `DM` i `DISC` natychmiast przerywają oczekującą transmisję, a równoczesne lub powtórzone `SABM` poprawnie zestawia albo resetuje łącze.
 - Dodano przycisk „Wyczyść monitor” z potwierdzeniem, który usuwa wszystkie aktualnie buforowane ramki bez zatrzymywania dalszego monitorowania.
 - Przywrócono łączność ze starszymi TNC i węzłami LinBPQ, które odpowiadają poprawną ramką `UA`, ale nie ustawiają bitu `F`; UltimatePR nadal wysyła wymagane `SABM(P=1)` i `DISC(P=1)`.
 - Naprawiono nazwy typów ramek w monitorze po rozszerzeniu kodeka — `SABM`, `UA`, `RR`, `I` i pozostałe typy nie są już błędnie przesunięte ani pokazywane jako `?`.
