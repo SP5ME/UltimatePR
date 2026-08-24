@@ -2,6 +2,7 @@
 
 ## 2026-08-24 - zgodność i stabilność AX.25
 
+- Dodano przycisk „Wyczyść monitor” z potwierdzeniem, który usuwa wszystkie aktualnie buforowane ramki bez zatrzymywania dalszego monitorowania.
 - Przywrócono łączność ze starszymi TNC i węzłami LinBPQ, które odpowiadają poprawną ramką `UA`, ale nie ustawiają bitu `F`; UltimatePR nadal wysyła wymagane `SABM(P=1)` i `DISC(P=1)`.
 - Naprawiono nazwy typów ramek w monitorze po rozszerzeniu kodeka — `SABM`, `UA`, `RR`, `I` i pozostałe typy nie są już błędnie przesunięte ani pokazywane jako `?`.
 - Ujednolicono domyślny T1 na 10 sekund dla połączeń wychodzących i przychodzących, ustawiono zalecane N1 na 256 bajtów oraz T3 na 5 minut.

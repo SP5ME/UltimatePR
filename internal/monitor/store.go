@@ -54,6 +54,14 @@ func (s *Store) List() []Entry {
 	}
 	return out
 }
+
+// Clear removes all buffered monitor entries. New frames received after the
+// operation are recorded normally.
+func (s *Store) Clear() {
+	s.mu.Lock()
+	s.items = nil
+	s.mu.Unlock()
+}
 func typeName(t ax25.Type) string {
 	switch t {
 	case ax25.TypeI:

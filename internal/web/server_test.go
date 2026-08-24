@@ -2,9 +2,12 @@ package web
 
 import (
 	"net"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
 )
 
@@ -93,6 +96,21 @@ func TestPrepareTerminalMessageReplacesPolishCharacters(t *testing.T) {
 	want := "Zazolc gesla jazn, Mikolaj!\r\n"
 	if got != want {
 		t.Fatalf("prepared terminal message = %q, want %q", got, want)
+	}
+}
+
+func TestMonitorClearEndpoint(t *testing.T) {
+	store := monitor.New(4)
+	pid := byte(0xF0)
+	store.Add("RX", "radio", ax25.Frame{Destination: ax25.Address{Callsign: "BEACON"}, Source: ax25.Address{Callsign: "SP5ME"}, Type: ax25.TypeUI, PID: &pid}, 16)
+	s := &Server{cfg: Config{Monitor: store}}
+	w := httptest.NewRecorder()
+	s.monitorClear(w, httptest.NewRequest("DELETE", "/api/monitor", nil))
+	if w.Code != 204 {
+		t.Fatalf("status=%d", w.Code)
+	}
+	if got := store.List(); len(got) != 0 {
+		t.Fatalf("monitor entries=%d", len(got))
 	}
 }
 

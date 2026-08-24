@@ -181,6 +181,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/history/{key}", s.historyGet)
 	mux.HandleFunc("DELETE /api/history/{key}", s.historyDelete)
 	mux.HandleFunc("GET /api/monitor", s.monitor)
+	mux.HandleFunc("DELETE /api/monitor", s.monitorClear)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
 	mux.HandleFunc("GET /ws/notifications", s.notifications)
@@ -303,6 +304,12 @@ func (s *Server) monitor(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(s.cfg.Monitor.List())
+}
+func (s *Server) monitorClear(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.Monitor != nil {
+		s.cfg.Monitor.Clear()
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) beacon(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SendBeacon == nil {

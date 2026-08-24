@@ -48,3 +48,19 @@ func TestTypeNamesRemainStableWhenAX25TypesAreExtended(t *testing.T) {
 		}
 	}
 }
+
+func TestClearRemovesBufferedEntriesAndAllowsNewFrames(t *testing.T) {
+	s := New(4)
+	f := ax25.Frame{Destination: ax25.Address{Callsign: "BEACON"}, Source: ax25.Address{Callsign: "SP5ME"}, Type: ax25.TypeUI, PID: bytePtr(0xF0)}
+	s.Add("RX", "radio", f, 16)
+	s.Clear()
+	if got := s.List(); len(got) != 0 {
+		t.Fatalf("entries after Clear=%d", len(got))
+	}
+	s.Add("TX", "radio", f, 16)
+	if got := s.List(); len(got) != 1 || got[0].Direction != "TX" {
+		t.Fatalf("entries after reuse=%+v", got)
+	}
+}
+
+func bytePtr(v byte) *byte { return &v }
