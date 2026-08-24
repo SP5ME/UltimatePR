@@ -61,6 +61,54 @@ func TestEncodeRejectsInformationOnControlFrame(t *testing.T) {
 		t.Fatal("expected control-frame information field error")
 	}
 }
+
+func TestModulo128NumberedFramesRoundTrip(t *testing.T) {
+	pid := byte(0xF0)
+	for _, typ := range []Type{TypeI, TypeRR, TypeRNR, TypeREJ, TypeSREJ} {
+		f := Frame{Destination: Address{Callsign: "REMOTE"}, Source: Address{Callsign: "LOCAL"}, Type: typ, NS: 93, NR: 117, PollFinal: true, PID: &pid}
+		if typ == TypeI {
+			f.Payload = []byte("extended")
+		}
+		encoded, err := EncodeWithModulo(f, Modulo128)
+		if err != nil {
+			t.Fatalf("type %d encode: %v", typ, err)
+		}
+		got, err := DecodeWithModulo(encoded, Modulo128)
+		if err != nil || got.Type != typ || got.NR != 117 || !got.PollFinal {
+			t.Fatalf("type %d got=%+v err=%v", typ, got, err)
+		}
+		if typ == TypeI && (got.NS != 93 || !bytes.Equal(got.Payload, f.Payload)) {
+			t.Fatalf("I frame got=%+v", got)
+		}
+	}
+}
+
+func TestXIDRoundTripAndValidation(t *testing.T) {
+	parameters := []XIDParameter{
+		{Identifier: 2, Value: []byte{0x00, 0x20}},
+		{Identifier: 3, Value: []byte{0x86, 0xA8, 0x02}},
+		{Identifier: 6, Value: []byte{0x08, 0x00}},
+		{Identifier: 8, Value: []byte{7}},
+		{Identifier: 9, Value: []byte{0x0B, 0xB8}},
+		{Identifier: 10, Value: []byte{10}},
+	}
+	encoded, err := EncodeXID(parameters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := DecodeXID(encoded)
+	if err != nil || len(got) != len(parameters) {
+		t.Fatalf("got=%v err=%v", got, err)
+	}
+	for i := range parameters {
+		if got[i].Identifier != parameters[i].Identifier || !bytes.Equal(got[i].Value, parameters[i].Value) {
+			t.Fatalf("parameter %d got=%v want=%v", i, got[i], parameters[i])
+		}
+	}
+	if _, err := DecodeXID([]byte{0x82, 0x80, 0, 3, 2, 2, 0}); err == nil {
+		t.Fatal("truncated XID accepted")
+	}
+}
 func TestDecodeRejectsShort(t *testing.T) {
 	if _, e := Decode([]byte{1, 2}); e == nil {
 		t.Fatal("expected error")

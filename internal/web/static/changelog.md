@@ -2,21 +2,29 @@
 
 ## 2026-08-24 - zgodność i stabilność AX.25
 
+- Ujednolicono obsługę protokołu AX.25 dla połączeń wychodzących terminala i połączeń przychodzących do usług; warstwa protokołu nie zależy od funkcji terminala, BBS ani NODE.
+- Naprawiono kierunek ramek informacyjnych wysyłanych w sesjach przychodzących: ramki `I` są teraz prawidłowo oznaczane jako `command`, a nie `response`.
+- Dodano stan `Timer Recovery` oraz pełne śledzenie zmiennych `V(S)`, `V(A)` i `V(R)` dla używanego profilu modulo 8.
 - Uzupełniono procedurę stacji abonenckiej po wygaśnięciu T1: przed retransmisją ramki I wysyłane jest zapytanie `RR(P=1)`, a po N2 nieudanych próbach łącze przechodzi do stanu rozłączonego i czyści liczniki oraz stany RNR/REJ.
+- Sesje przychodzące stosują tę samą procedurę odpytywania przed retransmisją oraz kończą lokalne połączenie przez `DISC(P=1)` z ponawianiem do otrzymania `UA(F=1)` lub `DM(F=1)`.
 - Keepalive T3 sprawdza teraz odpowiedź zdalnej stacji i wykrywa utracone połączenie zamiast tylko wysyłać ramkę kontrolną.
 - Zdalne `DM` i `DISC` natychmiast przerywają oczekującą transmisję, a równoczesne lub powtórzone `SABM` poprawnie zestawia albo resetuje łącze.
 - Dodano przycisk „Wyczyść monitor” z potwierdzeniem, który usuwa wszystkie aktualnie buforowane ramki bez zatrzymywania dalszego monitorowania.
-- Przywrócono łączność ze starszymi TNC i węzłami LinBPQ, które odpowiadają poprawną ramką `UA`, ale nie ustawiają bitu `F`; UltimatePR nadal wysyła wymagane `SABM(P=1)` i `DISC(P=1)`.
+- Zestawienie i zakończenie połączenia rygorystycznie sprawdza `UA/DM` jako odpowiedź z bitem `F=1` na wysłane `SABM/DISC` z bitem `P=1`.
 - Naprawiono nazwy typów ramek w monitorze po rozszerzeniu kodeka — `SABM`, `UA`, `RR`, `I` i pozostałe typy nie są już błędnie przesunięte ani pokazywane jako `?`.
-- Ujednolicono domyślny T1 na 10 sekund dla połączeń wychodzących i przychodzących, ustawiono zalecane N1 na 256 bajtów oraz T3 na 5 minut.
+- Ustawiono parametry domyślne AX.25 v2.2: T1 na 3000 ms, N2 na 10 prób, N1 na 256 bajtów oraz T3 na 5 minut.
 - Poprawiono obsługę `RNR`: wysyłanie ramek informacyjnych jest wstrzymywane, gdy zdalna stacja zgłasza zajętość odbiornika, a gotowość jest sprawdzana ramkami `RR` z bitem `P`.
 - Ramki informacyjne odebrane poza kolejnością uruchamiają teraz kontrolowaną procedurę `REJ` zamiast zwykłego potwierdzenia `RR`.
 - Dodano obsługę `SREJ` dla obecnego, jednoklatkowego okna transmisyjnego.
-- Zestawianie i rozłączanie sesji sprawdza semantykę bitów `P/F` oraz `C/R`, zachowując zgodność ze starszym kodowaniem AX.25.
+- Zestawianie, przesyłanie danych i rozłączanie sprawdza normatywną semantykę bitów `P/F` oraz `C/R`; błędne kombinacje nie ustanawiają sesji.
 - Sesje przychodzące odpowiadają na nadzorcze zapytania z bitem `P` oraz wysyłają `DM` do lokalnej usługi znajdującej się w stanie rozłączonym.
 - Kodek rozpoznaje dodatkowe typy ramek AX.25 v2.2: `SABME`, `SREJ`, `FRMR`, `XID` i `TEST`.
+- Dodano kodowanie i dekodowanie dwuoktetowego pola sterującego dla opcjonalnego modulo 128. Silnik sesji nadal negocjuje stabilny profil modulo 8, a nieobsługiwane zestawienie `SABME` odrzuca odpowiedzią `DM`.
+- Dodano obsługę `XID`, która ogłasza rzeczywiste parametry profilu: half-duplex, implicit REJ, modulo 8, N1=256, okno k=1, T1=3000 ms i N2=10.
+- Dodano odpowiedzi na ramki `TEST` z zachowaniem pola informacji oraz wymagane odpowiedzi na `UI(P=1)`.
+- Zgodnie z AX.25 v2.2 błędy łącza są obsługiwane przez reset połączenia; aplikacja nie generuje wycofanych z tej wersji odpowiedzi `FRMR`.
 - Enkoder odrzuca niedozwolone pole informacji w ramkach sterujących.
-- Dodano testy regresyjne procedur `RNR`, `REJ`, `SREJ`, `P/F`, nadzorczego odpytywania i odpowiedzi `DM`.
+- Dodano testy regresyjne procedur `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, nadzorczego odpytywania, odpowiedzi `DM` i kontrolowanego rozłączania.
 
 ## 2026-08-24 - hostnames, niezależne sesje i czytelna historia
 

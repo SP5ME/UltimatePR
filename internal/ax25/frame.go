@@ -4,6 +4,13 @@ import "fmt"
 
 type Type uint8
 
+type Modulo uint16
+
+const (
+	Modulo8   Modulo = 8
+	Modulo128 Modulo = 128
+)
+
 const (
 	TypeI Type = iota
 	TypeRR
@@ -71,6 +78,10 @@ func control(f Frame) (byte, error) {
 	}
 }
 func Encode(f Frame) ([]byte, error) {
+	return EncodeWithModulo(f, Modulo8)
+}
+
+func EncodeWithModulo(f Frame, modulo Modulo) ([]byte, error) {
 	if len(f.Digipeaters) > 8 {
 		return nil, fmt.Errorf("too many digipeaters")
 	}
@@ -83,11 +94,35 @@ func Encode(f Frame) ([]byte, error) {
 		}
 		out = append(out, e[:]...)
 	}
-	c, err := control(f)
-	if err != nil {
-		return nil, err
+	if modulo != Modulo8 && modulo != Modulo128 {
+		return nil, fmt.Errorf("unsupported AX.25 modulo %d", modulo)
 	}
-	out = append(out, c)
+	if modulo == Modulo128 && (f.Type == TypeI || f.Type == TypeRR || f.Type == TypeRNR || f.Type == TypeREJ || f.Type == TypeSREJ) {
+		var first byte
+		switch f.Type {
+		case TypeI:
+			first = (f.NS & 0x7F) << 1
+		case TypeRR:
+			first = 0x01
+		case TypeRNR:
+			first = 0x05
+		case TypeREJ:
+			first = 0x09
+		case TypeSREJ:
+			first = 0x0D
+		}
+		second := (f.NR & 0x7F) << 1
+		if f.PollFinal {
+			second |= 1
+		}
+		out = append(out, first, second)
+	} else {
+		c, err := control(f)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
 	if f.Type == TypeI || f.Type == TypeUI {
 		if f.PID == nil {
 			return nil, fmt.Errorf("PID required")
@@ -101,6 +136,13 @@ func Encode(f Frame) ([]byte, error) {
 	return out, nil
 }
 func Decode(b []byte) (Frame, error) {
+	return DecodeWithModulo(b, Modulo8)
+}
+
+func DecodeWithModulo(b []byte, modulo Modulo) (Frame, error) {
+	if modulo != Modulo8 && modulo != Modulo128 {
+		return Frame{}, fmt.Errorf("unsupported AX.25 modulo %d", modulo)
+	}
 	if len(b) < 15 {
 		return Frame{}, fmt.Errorf("AX.25 frame too short")
 	}
@@ -136,7 +178,32 @@ func Decode(b []byte) (Frame, error) {
 	for i := range f.Digipeaters {
 		f.Digipeaters[i].CommandResponse = false
 	}
-	if c&1 == 0 {
+	if modulo == Modulo128 && c&3 != 3 {
+		if pos >= len(b) {
+			return Frame{}, fmt.Errorf("missing extended AX.25 control octet")
+		}
+		c2 := b[pos]
+		pos++
+		f.PollFinal = c2&1 != 0
+		f.NR = (c2 >> 1) & 0x7F
+		if c&1 == 0 {
+			f.Type = TypeI
+			f.NS = (c >> 1) & 0x7F
+		} else {
+			switch c & 0x0F {
+			case 1:
+				f.Type = TypeRR
+			case 5:
+				f.Type = TypeRNR
+			case 9:
+				f.Type = TypeREJ
+			case 13:
+				f.Type = TypeSREJ
+			default:
+				f.Type = TypeUnknown
+			}
+		}
+	} else if c&1 == 0 {
 		f.Type = TypeI
 		f.NS = (c >> 1) & 7
 		f.NR = (c >> 5) & 7

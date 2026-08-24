@@ -2,21 +2,29 @@
 
 ## 2026-08-24 - AX.25 compliance and stability
 
+- Unified AX.25 protocol handling for outgoing terminal links and incoming service links; the protocol layer is independent of terminal, BBS, and NODE application functions.
+- Fixed the direction of information frames sent by incoming sessions: `I` frames are now correctly marked as commands instead of responses.
+- Added the `Timer Recovery` state and complete `V(S)`, `V(A)`, and `V(R)` tracking for the active modulo-8 profile.
 - Completed personal-station T1 recovery: an `RR(P=1)` poll is sent before retransmitting an unacknowledged I frame, and N2 exhaustion disconnects the link and clears sequence, RNR, and REJ state.
+- Incoming sessions use the same enquiry-before-retransmission procedure and close local links with `DISC(P=1)`, retrying until `UA(F=1)` or `DM(F=1)` is received.
 - T3 keepalive now requires a response from the remote station and detects a lost connection instead of merely transmitting a control frame.
 - Remote `DM` and `DISC` immediately interrupt an outstanding transmission, while simultaneous or repeated `SABM` correctly completes or resets the link.
 - Added a confirmed Clear monitor action that removes all currently buffered frames without stopping subsequent monitoring.
-- Restored interoperability with legacy TNCs and LinBPQ nodes that return a valid `UA` without setting the `F` bit; UltimatePR still transmits the required `SABM(P=1)` and `DISC(P=1)` commands.
+- Link establishment and release now strictly require `UA/DM` responses carrying `F=1` for transmitted `SABM/DISC` commands carrying `P=1`.
 - Fixed monitor frame names after extending the codec — `SABM`, `UA`, `RR`, `I`, and the remaining types are no longer shifted or incorrectly displayed as `?`.
-- Unified the default T1 at 10 seconds for outgoing and incoming links, set the recommended N1 to 256 octets, and set T3 to 5 minutes.
+- Applied the AX.25 v2.2 defaults: T1=3000 ms, N2=10 retries, N1=256 octets, and T3=5 minutes.
 - Fixed `RNR` handling: information-frame transmission now pauses while the remote station reports receiver busy, and readiness is checked using `RR` frames with the `P` bit.
 - Out-of-sequence information frames now start controlled `REJ` recovery instead of receiving an ordinary `RR` acknowledgement.
 - Added `SREJ` handling for the current one-frame transmit window.
-- Session setup and release now validate `P/F` and `C/R` semantics while retaining compatibility with legacy AX.25 command/response encoding.
+- Session setup, information transfer, and release validate normative `P/F` and `C/R` semantics; invalid combinations cannot establish a session.
 - Incoming sessions answer supervisory polls carrying the `P` bit and send `DM` when a local service is in the disconnected state.
 - The codec recognizes additional AX.25 v2.2 frame types: `SABME`, `SREJ`, `FRMR`, `XID`, and `TEST`.
+- Added encoding and decoding of the two-octet control field used by optional modulo 128. The session engine continues to negotiate the stable modulo-8 profile and rejects unsupported `SABME` setup with `DM`.
+- Added `XID` handling that advertises the actual profile: half duplex, implicit REJ, modulo 8, N1=256, window k=1, T1=3000 ms, and N2=10.
+- Added `TEST` responses that preserve the information field and the required responses to `UI(P=1)`.
+- In accordance with AX.25 v2.2, link errors are handled through link reset; the application does not generate the `FRMR` response removed by this version.
 - The encoder rejects information fields on control frames that do not permit them.
-- Added regression coverage for `RNR`, `REJ`, `SREJ`, `P/F`, supervisory polling, and `DM` responses.
+- Added regression coverage for `RNR`, `REJ`, `SREJ`, `P/F`, `C/R`, XID, TEST, modulo 128, supervisory polling, `DM` responses, and controlled link release.
 
 ## 2026-08-24 - hostnames, independent sessions, and clearer history
 

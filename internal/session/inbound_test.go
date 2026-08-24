@@ -17,6 +17,7 @@ func TestInboundAX25Service(t *testing.T) {
 	m.t1, m.n2, m.paclen = 50*time.Millisecond, 2, 128
 	local := ax25.Address{Callsign: "SP5ABC", SSID: 7}
 	remote := ax25.Address{Callsign: "SP5ME", SSID: 1}
+	local.CommandResponse = true
 	inboundPath := []ax25.Address{{Callsign: "DIGI1", SSID: 1, Repeated: true}, {Callsign: "DIGI2", SSID: 2, Repeated: true}}
 	m.Register(local, func(call string, r io.Reader, w io.Writer) {
 		if call != "SP5ME-1" {
@@ -38,11 +39,11 @@ func TestInboundAX25Service(t *testing.T) {
 	assertReversePath(t, ua.Digipeaters)
 
 	first := decodeSent(t, <-sent)
-	if first.Type != ax25.TypeI || string(first.Payload) != "NODE> " {
+	if first.Type != ax25.TypeI || !isCommand(first) || string(first.Payload) != "NODE> " {
 		t.Fatalf("first=%+v", first)
 	}
 	assertReversePath(t, first.Digipeaters)
-	m.Handle("radio", ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeRR, NR: 1})
+	m.Handle("radio", ax25.Frame{Destination: ax25.Address{Callsign: "SP5ABC", SSID: 7}, Source: ax25.Address{Callsign: "SP5ME", SSID: 1, CommandResponse: true}, Type: ax25.TypeRR, NR: 1})
 
 	pid := byte(0xF0)
 	m.Handle("radio", ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeI, NS: 0, NR: 1, PID: &pid, Payload: []byte("H\r")})
@@ -52,7 +53,7 @@ func TestInboundAX25Service(t *testing.T) {
 		t.Fatalf("reply=%q", reply.Payload)
 	}
 	assertReversePath(t, reply.Digipeaters)
-	m.Handle("radio", ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeRR, NR: 2})
+	m.Handle("radio", ax25.Frame{Destination: ax25.Address{Callsign: "SP5ABC", SSID: 7}, Source: ax25.Address{Callsign: "SP5ME", SSID: 1, CommandResponse: true}, Type: ax25.TypeRR, NR: 2})
 }
 
 func assertReversePath(t *testing.T, got []ax25.Address) {
@@ -79,12 +80,26 @@ func TestInboundDisconnectedServiceRespondsDM(t *testing.T) {
 	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
 	local := ax25.Address{Callsign: "SP5ABC", SSID: 7}
 	m.Register(local, func(string, io.Reader, io.Writer) {})
-	f := ax25.Frame{Destination: local, Source: ax25.Address{Callsign: "SP5ME", CommandResponse: false}, Type: ax25.TypeDISC, PollFinal: true}
+	f := ax25.Frame{Destination: ax25.Address{Callsign: "SP5ABC", SSID: 7, CommandResponse: true}, Source: ax25.Address{Callsign: "SP5ME", CommandResponse: false}, Type: ax25.TypeDISC, PollFinal: true}
 	if !m.Handle("radio", f) {
 		t.Fatal("local disconnected frame not handled")
 	}
 	dm := decodeSent(t, <-sent)
 	if dm.Type != ax25.TypeDM || !dm.PollFinal {
+		t.Fatalf("DM=%+v", dm)
+	}
+}
+
+func TestInboundDisconnectedDMAlwaysSetsFinal(t *testing.T) {
+	sent := make(chan []byte, 1)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC"}
+	m.Register(local, func(string, io.Reader, io.Writer) {})
+	disc := ax25.Frame{Destination: local, Source: ax25.Address{Callsign: "SP5ME"}, Type: ax25.TypeDISC}
+	disc.Destination.CommandResponse = true
+	m.Handle("radio", disc)
+	dm := decodeSent(t, <-sent)
+	if dm.Type != ax25.TypeDM || !dm.PollFinal || !isResponse(dm) {
 		t.Fatalf("DM=%+v", dm)
 	}
 }
@@ -96,6 +111,7 @@ func TestInboundAnswersSupervisoryPoll(t *testing.T) {
 	remote := ax25.Address{Callsign: "SP5ME"}
 	m.Register(local, func(string, io.Reader, io.Writer) { time.Sleep(100 * time.Millisecond) })
 	sabm := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeSABM, PollFinal: true}
+	sabm.Destination.CommandResponse = true
 	if !m.Handle("radio", sabm) {
 		t.Fatal("SABM not handled")
 	}
@@ -106,6 +122,83 @@ func TestInboundAnswersSupervisoryPoll(t *testing.T) {
 	answer := decodeSent(t, <-sent)
 	if answer.Type != ax25.TypeRR || !answer.PollFinal {
 		t.Fatalf("RR response=%+v", answer)
+	}
+}
+
+func TestInboundAnswersXIDWithoutStartingService(t *testing.T) {
+	sent := make(chan []byte, 1)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC", SSID: 7}
+	m.Register(local, func(string, io.Reader, io.Writer) { t.Fatal("XID started data service") })
+	payload, err := ax25.EncodeXID(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	xid := ax25.Frame{Destination: local, Source: ax25.Address{Callsign: "SP5ME"}, Type: ax25.TypeXID, PollFinal: true, Payload: payload}
+	xid.Destination.CommandResponse = true
+	if !m.Handle("radio", xid) {
+		t.Fatal("XID not handled")
+	}
+	response := decodeSent(t, <-sent)
+	if response.Type != ax25.TypeXID || !response.PollFinal || !isResponse(response) {
+		t.Fatalf("XID response=%+v", response)
+	}
+	if _, err := ax25.DecodeXID(response.Payload); err != nil {
+		t.Fatalf("invalid XID response: %v", err)
+	}
+	parameters, _ := ax25.DecodeXID(response.Payload)
+	if len(parameters) != 6 || parameters[3].Identifier != 8 || len(parameters[3].Value) != 1 || parameters[3].Value[0] != 1 {
+		t.Fatalf("XID did not advertise actual k=1 capabilities: %v", parameters)
+	}
+}
+
+func TestInboundEchoesTESTCommand(t *testing.T) {
+	sent := make(chan []byte, 1)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC"}
+	m.Register(local, func(string, io.Reader, io.Writer) {})
+	test := ax25.Frame{Destination: local, Source: ax25.Address{Callsign: "SP5ME"}, Type: ax25.TypeTEST, PollFinal: true, Payload: []byte("probe")}
+	test.Destination.CommandResponse = true
+	if !m.Handle("radio", test) {
+		t.Fatal("TEST not handled")
+	}
+	response := decodeSent(t, <-sent)
+	if response.Type != ax25.TypeTEST || !response.PollFinal || !isResponse(response) || string(response.Payload) != "probe" {
+		t.Fatalf("TEST response=%+v", response)
+	}
+}
+
+func TestInboundServiceUsesDISCHandshakeOnClose(t *testing.T) {
+	sent := make(chan []byte, 8)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- b; return nil }}, nil)
+	m.t1, m.n2 = 30*time.Millisecond, 2
+	local := ax25.Address{Callsign: "SP5ABC", CommandResponse: true}
+	remote := ax25.Address{Callsign: "SP5ME"}
+	m.Register(local, func(string, io.Reader, io.Writer) {})
+	sabm := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeSABM, PollFinal: true}
+	if !m.Handle("radio", sabm) {
+		t.Fatal("SABM not handled")
+	}
+	_ = decodeSent(t, <-sent) // UA
+	disc := decodeSent(t, <-sent)
+	if disc.Type != ax25.TypeDISC || !disc.PollFinal || !isCommand(disc) {
+		t.Fatalf("DISC=%+v", disc)
+	}
+	ua := ax25.Frame{Destination: ax25.Address{Callsign: "SP5ABC"}, Source: ax25.Address{Callsign: "SP5ME", CommandResponse: true}, Type: ax25.TypeUA, PollFinal: true}
+	m.Handle("radio", ua)
+	deadline := time.After(time.Second)
+	for {
+		m.mu.Lock()
+		remaining := len(m.links)
+		m.mu.Unlock()
+		if remaining == 0 {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("link did not close after UA(F=1)")
+		case <-time.After(time.Millisecond):
+		}
 	}
 }
 

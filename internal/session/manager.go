@@ -18,6 +18,7 @@ const (
 	AwaitingConnection State = "awaiting_connection"
 	Connected          State = "connected"
 	AwaitingRelease    State = "awaiting_release"
+	TimerRecovery      State = "timer_recovery"
 )
 
 type Event struct {
@@ -29,10 +30,9 @@ type Event struct {
 type Sender func(context.Context, []byte) error
 
 const (
-	// AX.25 v2.2 leaves T1 locally defined and requires it to cover at least
-	// a full frame/response round trip. Ten seconds is a conservative default
-	// for 1200-baud links and remains usable through short digipeater paths.
-	defaultT1 = 10 * time.Second
+	// AX.25 v2.2 XID/default parameter set: T1=3000 ms and N2=10.
+	// T1 may later be increased for the selected signalling rate/digi path.
+	defaultT1 = 3 * time.Second
 	// T3 is locally defined but must be greater than T1.
 	defaultT3 = 5 * time.Minute
 	// AX.25 v2.2 defines 256 octets as the default N1.
@@ -69,7 +69,7 @@ type Manager struct {
 	remote      ax25.Address
 	digipeaters []ax25.Address
 	ports       map[string]Sender
-	vs, vr      uint8
+	vs, va, vr  uint8
 	control     chan controlEvent
 	ack         chan acknowledgement
 	subs        map[chan Event]struct{}
@@ -81,7 +81,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 3, paclen: defaultN1}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
 func (m *Manager) Subscribe() (<-chan Event, func()) {
@@ -155,6 +155,7 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.remote = remote
 	m.digipeaters = digis
 	m.vs = 0
+	m.va = 0
 	m.vr = 0
 	m.peerBusy = false
 	m.rejectSent = false
@@ -169,14 +170,13 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 		}
 		select {
 		case event := <-m.control:
-			// Some widely deployed legacy TNCs omit F on UA/DM. We still send
-			// SABM with P=1, but accept an otherwise valid response so those
-			// stations remain interoperable.
-			if event.type_ == ax25.TypeUA && event.response {
+			// AX.25 v2.2 SDL state 1: UA/DM answering SABM(P=1) is valid
+			// only as a response with F=1. UA(F=0) is error D and is ignored.
+			if event.type_ == ax25.TypeUA && event.response && event.final {
 				m.setState(Connected, "Sesja AX.25 polaczona")
 				return nil
 			}
-			if event.type_ == ax25.TypeDM && event.response {
+			if event.type_ == ax25.TypeDM && event.response && event.final {
 				m.failLink("Stacja odrzucila polaczenie")
 				return errors.New("connection rejected (DM)")
 			}
@@ -210,7 +210,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		}
 		select {
 		case event := <-m.control:
-			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.response {
+			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.response && event.final {
 				m.failLink("Rozlaczono")
 				return nil
 			}
@@ -318,6 +318,11 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 	pid := byte(0xF0)
 	f := m.command(ax25.TypeI, false, &pid, ns, nr)
 	f.Payload = append([]byte(nil), data...)
+	// V(S) is advanced when the new I frame is sent, not when it is
+	// acknowledged. V(A) remains the oldest unacknowledged sequence number.
+	m.mu.Lock()
+	m.vs = expected
+	m.mu.Unlock()
 	needSend := true
 	pollOnly := false
 	for attempt := 0; attempt < m.n2; attempt++ {
@@ -342,9 +347,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 				m.peerBusy = true
 				m.mu.Unlock()
 			}
-			if ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
+			if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				m.mu.Lock()
-				m.vs = expected
+				m.va = expected
 				m.mu.Unlock()
 				return nil
 			}
@@ -373,7 +378,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 					if ack.nr == expected {
 						stopTimer(timer)
 						m.mu.Lock()
-						m.vs = expected
+						m.va = expected
 						m.mu.Unlock()
 						return nil
 					}
@@ -382,10 +387,10 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 					cycleDone = true
 					break
 				}
-				if ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ && ack.nr == expected {
+				if m.validNR(ack.nr) && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ && ack.nr == expected {
 					stopTimer(timer)
 					m.mu.Lock()
-					m.vs = expected
+					m.va = expected
 					m.mu.Unlock()
 					return nil
 				}
@@ -413,9 +418,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 					m.peerBusy = true
 					m.mu.Unlock()
 				}
-				if ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
+				if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 					m.mu.Lock()
-					m.vs = expected
+					m.va = expected
 					m.mu.Unlock()
 					return nil
 				}
@@ -437,6 +442,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 }
 
 func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8) (acknowledgement, error) {
+	m.setState(TimerRecovery, "Odzyskiwanie lacza AX.25")
 	if err := m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr)); err != nil {
 		return acknowledgement{}, err
 	}
@@ -445,7 +451,20 @@ func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8
 	for {
 		select {
 		case ack := <-m.ack:
-			return ack, nil
+			// A command with P=1 is answered by Handle. Only the matching
+			// response with F=1 completes the enquiry procedure (SDL state 4).
+			if ack.response && ack.final {
+				switch ack.type_ {
+				case ax25.TypeRR, ax25.TypeRNR, ax25.TypeREJ, ax25.TypeSREJ:
+					if !m.validNR(ack.nr) {
+						continue
+					}
+					m.setState(Connected, "Sesja AX.25 polaczona")
+					return ack, nil
+				case ax25.TypeDM, ax25.TypeDISC, ax25.TypeSABM:
+					return ack, nil
+				}
+			}
 		case <-timer.C:
 			return acknowledgement{}, errors.New("AX.25 supervisory poll timeout")
 		case <-ctx.Done():
@@ -524,13 +543,45 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		return
 	}
 	switch f.Type {
+	case ax25.TypeTEST:
+		if isCommand(f) {
+			m.mu.Lock()
+			send := m.ports[port]
+			remote, local := m.remote, m.local
+			digis := append([]ax25.Address(nil), m.digipeaters...)
+			m.mu.Unlock()
+			remote.CommandResponse, local.CommandResponse = false, true
+			_ = m.sendFrame(context.Background(), send, ax25.Frame{Destination: remote, Source: local, Digipeaters: digis, Type: ax25.TypeTEST, PollFinal: f.PollFinal, Payload: append([]byte(nil), f.Payload...)})
+		}
+	case ax25.TypeUI:
+		if isCommand(f) && f.PollFinal && (state == Connected || state == TimerRecovery) {
+			m.mu.Lock()
+			nr := m.vr
+			m.mu.Unlock()
+			_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
+		}
+	case ax25.TypeXID:
+		if isCommand(f) {
+			payload, err := ax25.EncodeXID(ax25.BasicXIDParameters())
+			if err == nil {
+				m.mu.Lock()
+				send := m.ports[port]
+				remote, local := m.remote, m.local
+				digis := append([]ax25.Address(nil), m.digipeaters...)
+				m.mu.Unlock()
+				remote.CommandResponse, local.CommandResponse = false, true
+				_ = m.sendFrame(context.Background(), send, ax25.Frame{Destination: remote, Source: local, Digipeaters: digis, Type: ax25.TypeXID, PollFinal: f.PollFinal, Payload: payload})
+			}
+		}
 	case ax25.TypeUA, ax25.TypeDM:
-		response := (!f.Destination.CommandResponse && f.Source.CommandResponse) || f.Destination.CommandResponse == f.Source.CommandResponse
-		if state == Connected && f.Type == ax25.TypeDM {
+		response := isResponse(f)
+		if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeDM {
 			m.failLink("Zdalna stacja zakonczyla lacze (DM)")
 			m.queueAck(acknowledgement{type_: ax25.TypeDM, final: f.PollFinal, response: response})
-		} else if state == Connected && f.Type == ax25.TypeUA {
-			m.failLink("Nieoczekiwana odpowiedz UA - wymagane ponowne polaczenie")
+		} else if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeUA {
+			// Error C. The SDL requires re-establishment rather than silently
+			// continuing with potentially different sequence state.
+			m.failLink("Nieoczekiwana odpowiedz UA - lacze wymaga ponownego zestawienia")
 			m.queueAck(acknowledgement{type_: ax25.TypeDM})
 		} else {
 			select {
@@ -539,7 +590,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 			}
 		}
 	case ax25.TypeDISC:
-		_ = m.sendResponse(context.Background(), port, ax25.TypeUA, true, 0)
+		_ = m.sendResponse(context.Background(), port, ax25.TypeUA, f.PollFinal, 0)
 		m.failLink("Zdalna stacja rozlaczyla sesje")
 		m.queueAck(acknowledgement{type_: ax25.TypeDISC})
 	case ax25.TypeSABM:
@@ -549,9 +600,9 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 			case m.control <- controlEvent{type_: ax25.TypeUA, final: true, response: true}:
 			default:
 			}
-		} else if state == Connected {
+		} else if state == Connected || state == TimerRecovery {
 			m.mu.Lock()
-			m.vs, m.vr = 0, 0
+			m.vs, m.va, m.vr = 0, 0, 0
 			m.peerBusy = false
 			m.rejectSent = false
 			m.mu.Unlock()
@@ -564,10 +615,10 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.peerBusy = false
 		m.mu.Unlock()
 		select {
-		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: !f.Destination.CommandResponse}:
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 		default:
 		}
-		if f.PollFinal && f.Destination.CommandResponse {
+		if f.PollFinal && isCommand(f) {
 			m.mu.Lock()
 			nr := m.vr
 			m.mu.Unlock()
@@ -578,10 +629,10 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		m.peerBusy = true
 		m.mu.Unlock()
 		select {
-		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: !f.Destination.CommandResponse}:
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 		default:
 		}
-		if f.PollFinal && f.Destination.CommandResponse {
+		if f.PollFinal && isCommand(f) {
 			m.mu.Lock()
 			nr := m.vr
 			m.mu.Unlock()
@@ -589,12 +640,18 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		}
 		m.emit(Event{Type: "notice", Message: "Zdalna stacja chwilowo nie moze odbierac"})
 	case ax25.TypeREJ, ax25.TypeSREJ:
+		if f.PollFinal && isCommand(f) {
+			m.mu.Lock()
+			nr := m.vr
+			m.mu.Unlock()
+			_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
+		}
 		select {
-		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: !f.Destination.CommandResponse}:
+		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 		default:
 		}
 	case ax25.TypeI:
-		if state != Connected {
+		if (state != Connected && state != TimerRecovery) || !isCommand(f) || len(f.Payload) > m.paclen {
 			return
 		}
 		m.mu.Lock()
@@ -617,7 +674,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) {
 		}
 		if f.NR <= 7 {
 			select {
-			case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: !f.Destination.CommandResponse}:
+			case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 			default:
 			}
 		}
@@ -688,11 +745,28 @@ func (m *Manager) queueAck(ack acknowledgement) {
 func (m *Manager) failLink(message string) {
 	m.mu.Lock()
 	m.state = Disconnected
-	m.vs, m.vr = 0, 0
+	m.vs, m.va, m.vr = 0, 0, 0
 	m.peerBusy = false
 	m.rejectSent = false
 	m.mu.Unlock()
 	m.emit(Event{Type: "state", State: Disconnected, Message: message})
+}
+
+// validNR implements the modulo-8 acknowledgement range check from AX.25
+// section 6.4.1. With the personal-station window k=1, N(R) may only name
+// V(A) (no new acknowledgement) or V(S) (the outstanding frame accepted).
+func (m *Manager) validNR(nr uint8) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nr == m.va || nr == m.vs
+}
+
+func isCommand(f ax25.Frame) bool {
+	return f.Destination.CommandResponse && !f.Source.CommandResponse
+}
+
+func isResponse(f ax25.Frame) bool {
+	return !f.Destination.CommandResponse && f.Source.CommandResponse
 }
 
 func stopTimer(timer *time.Timer) {

@@ -32,10 +32,11 @@ type inboundLink struct {
 	port          string
 	local, remote ax25.Address
 	digipeaters   []ax25.Address
-	vr, vs        uint8
+	vr, vs, va    uint8
 	in            chan []byte
 	tx            chan []byte
-	ack           chan uint8
+	ack           chan acknowledgement
+	control       chan controlEvent
 	closed        chan struct{}
 	closeOnce     sync.Once
 	peerBusy      bool
@@ -43,7 +44,7 @@ type inboundLink struct {
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
-	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 5, paclen: defaultN1}
+	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
 func (m *InboundMux) Register(address ax25.Address, service AX25Service) {
@@ -62,14 +63,34 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	m.mu.Unlock()
 
 	if link == nil {
-		if service != nil && f.Type != ax25.TypeSABM {
+		if service != nil && f.Type == ax25.TypeXID && isCommand(f) {
+			_ = m.sendXIDResponse(port, f)
+			return true
+		}
+		if service != nil && f.Type == ax25.TypeSABME && isCommand(f) {
+			// This endpoint has not switched its receive decoder to modulo 128,
+			// therefore AX.25 requires a negative mode-setting response.
 			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
 			return true
 		}
-		if f.Type != ax25.TypeSABM || service == nil {
+		if service != nil && f.Type == ax25.TypeTEST && isCommand(f) {
+			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload)
+			return true
+		}
+		if service != nil && f.Type == ax25.TypeUI && isCommand(f) {
+			if f.PollFinal {
+				_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+			}
+			return true
+		}
+		if service != nil && f.Type != ax25.TypeSABM && f.Type != ax25.TypeUI && isCommand(f) {
+			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+			return true
+		}
+		if f.Type != ax25.TypeSABM || service == nil || !isCommand(f) {
 			return false
 		}
-		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan uint8, 8), closed: make(chan struct{})}
+		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{})}
 		created := false
 		m.mu.Lock()
 		if existing := m.links[key]; existing != nil {
@@ -90,13 +111,49 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	}
 
 	switch f.Type {
+	case ax25.TypeTEST:
+		if isCommand(f) {
+			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload)
+		}
+	case ax25.TypeUI:
+		if isCommand(f) && f.PollFinal {
+			link.mu.Lock()
+			nr := link.vr
+			link.mu.Unlock()
+			_ = link.sendControl(ax25.TypeRR, true, nr)
+		}
+	case ax25.TypeUA:
+		if isResponse(f) {
+			select {
+			case link.control <- controlEvent{type_: f.Type, final: f.PollFinal, response: true}:
+			default:
+			}
+		}
+	case ax25.TypeDM:
+		if isResponse(f) {
+			select {
+			case link.control <- controlEvent{type_: f.Type, final: f.PollFinal, response: true}:
+			default:
+			}
+			link.close()
+		}
+	case ax25.TypeXID:
+		if isCommand(f) {
+			_ = m.sendXIDResponse(port, f)
+		}
 	case ax25.TypeSABM:
+		if !isCommand(f) {
+			return true
+		}
 		link.mu.Lock()
-		link.vr, link.vs = 0, 0
+		link.vr, link.vs, link.va = 0, 0, 0
 		link.digipeaters = reverseDigipeaters(f.Digipeaters)
 		link.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
 	case ax25.TypeDISC:
+		if !isCommand(f) {
+			return true
+		}
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
 		link.close()
 	case ax25.TypeRR, ax25.TypeREJ, ax25.TypeSREJ:
@@ -105,10 +162,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		nr := link.vr
 		link.mu.Unlock()
 		select {
-		case link.ack <- f.NR:
+		case link.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 		default:
 		}
-		if f.PollFinal && f.Destination.CommandResponse {
+		if f.PollFinal && isCommand(f) {
 			_ = link.sendControl(ax25.TypeRR, true, nr)
 		}
 	case ax25.TypeRNR:
@@ -117,14 +174,14 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		nr := link.vr
 		link.mu.Unlock()
 		select {
-		case link.ack <- f.NR:
+		case link.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
 		default:
 		}
-		if f.PollFinal && f.Destination.CommandResponse {
+		if f.PollFinal && isCommand(f) {
 			_ = link.sendControl(ax25.TypeRR, true, nr)
 		}
 	case ax25.TypeI:
-		if f.PID == nil || *f.PID != 0xF0 {
+		if !isCommand(f) || f.PID == nil || *f.PID != 0xF0 || len(f.Payload) > m.paclen {
 			return true
 		}
 		link.mu.Lock()
@@ -148,7 +205,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		select {
-		case link.ack <- f.NR:
+		case link.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: false}:
 		default:
 		}
 		link.mu.Lock()
@@ -203,8 +260,37 @@ func (l *inboundLink) run(service AX25Service) {
 	case <-l.closed:
 		return
 	}
-	_ = l.sendControl(ax25.TypeDISC, true, 0)
+	_ = l.disconnect()
 	l.close()
+}
+
+func (l *inboundLink) disconnect() error {
+	for {
+		select {
+		case <-l.control:
+		default:
+			goto drained
+		}
+	}
+drained:
+	for attempt := 0; attempt < l.mux.n2; attempt++ {
+		if err := l.sendCommand(ax25.TypeDISC, true, 0); err != nil {
+			return err
+		}
+		timer := time.NewTimer(l.mux.t1)
+		select {
+		case event := <-l.control:
+			stopTimer(timer)
+			if event.response && event.final && (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) {
+				return nil
+			}
+		case <-timer.C:
+		case <-l.closed:
+			stopTimer(timer)
+			return io.ErrClosedPipe
+		}
+	}
+	return errors.New("AX.25 disconnect timeout")
 }
 
 func (l *inboundLink) transmit() {
@@ -237,24 +323,61 @@ func (l *inboundLink) sendChunk(data []byte) error {
 	expected := (ns + 1) & 7
 	l.mu.Unlock()
 	pid := byte(0xF0)
-	f := l.response(ax25.TypeI, false, nr)
+	f := l.command(ax25.TypeI, false, nr)
 	f.NS, f.PID, f.Payload = ns, &pid, append([]byte(nil), data...)
+	l.mu.Lock()
+	l.vs = expected
+	l.mu.Unlock()
+	needSend := true
 	for attempt := 0; attempt < l.mux.n2; attempt++ {
 		if err := l.waitRemoteReady(); err != nil {
 			return err
 		}
-		if err := l.send(f); err != nil {
-			return err
+		if needSend {
+			if err := l.send(f); err != nil {
+				return err
+			}
+			needSend = false
 		}
 		select {
-		case nr := <-l.ack:
-			if nr == expected {
+		case ack := <-l.ack:
+			if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				l.mu.Lock()
-				l.vs = expected
+				l.va = expected
 				l.mu.Unlock()
 				return nil
 			}
+			if (ack.type_ == ax25.TypeREJ || ack.type_ == ax25.TypeSREJ) && ack.nr == ns {
+				needSend = true
+			}
 		case <-time.After(l.mux.t1):
+			if err := l.sendControl(ax25.TypeRR, true, nr); err != nil {
+				return err
+			}
+			pollTimer := time.NewTimer(l.mux.t1)
+			pollDone := false
+			for !pollDone {
+				select {
+				case ack := <-l.ack:
+					if !ack.response || !ack.final {
+						continue
+					}
+					stopTimer(pollTimer)
+					if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
+						l.mu.Lock()
+						l.va = expected
+						l.mu.Unlock()
+						return nil
+					}
+					needSend = true
+					pollDone = true
+				case <-pollTimer.C:
+					pollDone = true
+				case <-l.closed:
+					stopTimer(pollTimer)
+					return io.ErrClosedPipe
+				}
+			}
 		case <-l.closed:
 			return io.ErrClosedPipe
 		}
@@ -282,9 +405,9 @@ func (l *inboundLink) waitRemoteReady() error {
 			return err
 		}
 		select {
-		case <-l.ack:
+		case ack := <-l.ack:
 			l.mu.Lock()
-			if !l.peerBusy {
+			if ack.response && ack.final && ack.type_ == ax25.TypeRR && !l.peerBusy {
 				l.mu.Unlock()
 				return nil
 			}
@@ -300,7 +423,7 @@ func (l *inboundLink) waitRemoteReady() error {
 func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, typ ax25.Type) error {
 	d, s := received.Source, received.Destination
 	d.CommandResponse, s.CommandResponse = false, true
-	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: received.PollFinal}
+	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: true}
 	b, err := ax25.Encode(f)
 	if err != nil {
 		return err
@@ -312,8 +435,43 @@ func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, 
 	return send(context.Background(), b)
 }
 
+func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame) error {
+	payload, err := ax25.EncodeXID(ax25.BasicXIDParameters())
+	if err != nil {
+		return err
+	}
+	d, s := received.Source, received.Destination
+	d.CommandResponse, s.CommandResponse = false, true
+	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: ax25.TypeXID, PollFinal: received.PollFinal, Payload: payload}
+	b, err := ax25.Encode(f)
+	if err != nil {
+		return err
+	}
+	if send := m.senders[port]; send != nil {
+		return send(context.Background(), b)
+	}
+	return errors.New("AX.25 port unavailable")
+}
+
+func (m *InboundMux) sendUnnumberedResponse(port string, received ax25.Frame, typ ax25.Type, payload []byte) error {
+	d, s := received.Source, received.Destination
+	d.CommandResponse, s.CommandResponse = false, true
+	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: received.PollFinal, Payload: append([]byte(nil), payload...)}
+	b, err := ax25.Encode(f)
+	if err != nil {
+		return err
+	}
+	if send := m.senders[port]; send != nil {
+		return send(context.Background(), b)
+	}
+	return errors.New("AX.25 port unavailable")
+}
+
 func (l *inboundLink) sendControl(t ax25.Type, pf bool, nr uint8) error {
 	return l.send(l.response(t, pf, nr))
+}
+func (l *inboundLink) sendCommand(t ax25.Type, pf bool, nr uint8) error {
+	return l.send(l.command(t, pf, nr))
 }
 func (l *inboundLink) response(t ax25.Type, pf bool, nr uint8) ax25.Frame {
 	l.mu.Lock()
@@ -322,6 +480,21 @@ func (l *inboundLink) response(t ax25.Type, pf bool, nr uint8) ax25.Frame {
 	l.mu.Unlock()
 	d.CommandResponse, s.CommandResponse = false, true
 	return ax25.Frame{Destination: d, Source: s, Digipeaters: digis, Type: t, PollFinal: pf, NR: nr}
+}
+
+func (l *inboundLink) command(t ax25.Type, pf bool, nr uint8) ax25.Frame {
+	l.mu.Lock()
+	d, s := l.remote, l.local
+	digis := append([]ax25.Address(nil), l.digipeaters...)
+	l.mu.Unlock()
+	d.CommandResponse, s.CommandResponse = true, false
+	return ax25.Frame{Destination: d, Source: s, Digipeaters: digis, Type: t, PollFinal: pf, NR: nr}
+}
+
+func (l *inboundLink) validNR(nr uint8) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return nr == l.va || nr == l.vs
 }
 
 func reverseDigipeaters(path []ax25.Address) []ax25.Address {

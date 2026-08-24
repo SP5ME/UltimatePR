@@ -24,6 +24,10 @@ func response(typ ax25.Type, nr uint8) ax25.Frame {
 	return ax25.Frame{Destination: ax25.Address{Callsign: "LOCAL", SSID: 9}, Source: ax25.Address{Callsign: "REMOTE", SSID: 1, CommandResponse: true}, Type: typ, NR: nr, PollFinal: typ == ax25.TypeUA || typ == ax25.TypeDM}
 }
 
+func commandFromRemote(typ ax25.Type, nr uint8) ax25.Frame {
+	return ax25.Frame{Destination: ax25.Address{Callsign: "LOCAL", SSID: 9, CommandResponse: true}, Source: ax25.Address{Callsign: "REMOTE", SSID: 1}, Type: typ, NR: nr}
+}
+
 func connectManager(t *testing.T, m *Manager, sent chan []byte) {
 	t.Helper()
 	done := make(chan error, 1)
@@ -56,7 +60,7 @@ func TestConnectSendReceiveDisconnect(t *testing.T) {
 	}
 
 	pid := byte(0xF0)
-	incoming := response(ax25.TypeI, 1)
+	incoming := commandFromRemote(ax25.TypeI, 1)
 	incoming.NS = 0
 	incoming.PID = &pid
 	incoming.Payload = []byte("world")
@@ -241,7 +245,7 @@ func TestConnectTimeout(t *testing.T) {
 	}
 }
 
-func TestConnectAcceptsLegacyUAWithoutFinalBit(t *testing.T) {
+func TestConnectRejectsUAWithoutFinalBit(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)
 	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
@@ -249,12 +253,27 @@ func TestConnectAcceptsLegacyUAWithoutFinalBit(t *testing.T) {
 	ua := response(ax25.TypeUA, 0)
 	ua.PollFinal = false
 	m.Handle("radio", ua)
-	if err := <-done; err != nil {
-		t.Fatal(err)
+	_ = <-sent // retransmitted SABM after T1
+	if err := <-done; err == nil {
+		t.Fatal("UA without F=1 incorrectly completed connection")
 	}
 }
 
-func TestLegacyUAThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
+func TestConnectRejectsInvalidCommandResponseBits(t *testing.T) {
+	m, sent := testManager(t)
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	_ = <-sent
+	ua := response(ax25.TypeUA, 0)
+	ua.Destination.CommandResponse = true // C/R bits equal: neither command nor response
+	m.Handle("radio", ua)
+	_ = <-sent
+	if err := <-done; err == nil {
+		t.Fatal("invalid C/R bits incorrectly completed connection")
+	}
+}
+
+func TestUAWithFinalThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
 	m, sent := testManager(t)
 	events, cancel := m.Subscribe()
 	defer cancel()
@@ -263,13 +282,13 @@ func TestLegacyUAThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
 	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
 	_ = <-sent
 	ua := response(ax25.TypeUA, 0)
-	ua.PollFinal = false
+	ua.PollFinal = true
 	m.Handle("radio", ua)
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	pid := byte(0xF0)
-	banner := response(ax25.TypeI, 0)
+	banner := commandFromRemote(ax25.TypeI, 0)
 	banner.NS, banner.PID, banner.Payload = 0, &pid, []byte("=== LinBPQ ===\r")
 	m.Handle("radio", banner)
 	for {
@@ -289,11 +308,11 @@ func TestLegacyUAThenImmediateLinBPQBannerIsDelivered(t *testing.T) {
 
 func TestProtocolDefaults(t *testing.T) {
 	m := New(ax25.Address{Callsign: "LOCAL"}, nil)
-	if m.t1 != 10*time.Second || m.paclen != 256 {
-		t.Fatalf("manager defaults: T1=%s N1=%d", m.t1, m.paclen)
+	if m.t1 != 3*time.Second || m.n2 != 10 || m.paclen != 256 {
+		t.Fatalf("manager defaults: T1=%s N2=%d N1=%d", m.t1, m.n2, m.paclen)
 	}
 	inbound := NewInboundMux(nil, nil)
-	if inbound.t1 != 10*time.Second || inbound.paclen != 256 {
+	if inbound.t1 != 3*time.Second || inbound.paclen != 256 {
 		t.Fatalf("inbound defaults: T1=%s N1=%d", inbound.t1, inbound.paclen)
 	}
 }
@@ -346,7 +365,7 @@ func TestOutOfSequenceIFrameSendsSingleREJ(t *testing.T) {
 	m, sent := testManager(t)
 	connectManager(t, m, sent)
 	pid := byte(0xF0)
-	f := response(ax25.TypeI, 0)
+	f := commandFromRemote(ax25.TypeI, 0)
 	f.NS, f.PID, f.Payload = 3, &pid, []byte("late")
 	m.Handle("radio", f)
 	rej := decodeFrame(t, <-sent)
@@ -429,6 +448,9 @@ func TestT1ExpiryPollsBeforeRetransmittingIFrame(t *testing.T) {
 	if first.Type != ax25.TypeI || poll.Type != ax25.TypeRR || !poll.PollFinal {
 		t.Fatalf("first=%+v poll=%+v", first, poll)
 	}
+	if m.State() != TimerRecovery {
+		t.Fatalf("state=%s, want timer recovery", m.State())
+	}
 	answer := response(ax25.TypeRR, 0)
 	answer.PollFinal = true
 	m.Handle("radio", answer)
@@ -439,6 +461,18 @@ func TestT1ExpiryPollsBeforeRetransmittingIFrame(t *testing.T) {
 	m.Handle("radio", response(ax25.TypeRR, 1))
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRemoteDISCUAMirrorsPollBit(t *testing.T) {
+	m, sent := testManager(t)
+	connectManager(t, m, sent)
+	disc := commandFromRemote(ax25.TypeDISC, 0)
+	disc.PollFinal = false
+	m.Handle("radio", disc)
+	ua := decodeFrame(t, <-sent)
+	if ua.Type != ax25.TypeUA || ua.PollFinal {
+		t.Fatalf("UA=%+v, expected F=0 matching DISC P=0", ua)
 	}
 }
 
@@ -515,6 +549,25 @@ func TestRemoteDMInterruptsOutstandingSend(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("send was not interrupted by DM")
+	}
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
+func TestRemoteDMDuringTimerRecoveryDoesNotReconnect(t *testing.T) {
+	m, sent := testManager(t)
+	m.t1 = 15 * time.Millisecond
+	connectManager(t, m, sent)
+	done := make(chan error, 1)
+	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
+	_ = decodeFrame(t, <-sent) // I
+	_ = decodeFrame(t, <-sent) // RR(P=1)
+	dm := response(ax25.TypeDM, 0)
+	dm.PollFinal = true
+	m.Handle("radio", dm)
+	if err := <-done; err == nil {
+		t.Fatal("send succeeded after DM during timer recovery")
 	}
 	if m.State() != Disconnected {
 		t.Fatalf("state=%s", m.State())
