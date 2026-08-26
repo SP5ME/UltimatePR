@@ -20,9 +20,11 @@ for connection setup and release, pauses transmission while the peer reports
 RNR, and uses REJ recovery for out-of-sequence I frames.
 
 The default N1 is 256 octets. T1 defaults to 10 seconds for both outgoing and
-incoming links, while the terminal T3 poll interval is 5 minutes. Reception is
-deliberately tolerant of legacy UA/DM responses that omit the Final bit; the
-local station still transmits SABM and DISC commands with Poll set as required.
+incoming links, while the terminal T3 poll interval is 5 minutes. N1, T1, T3
+and N2 are operator-configurable and the configured N1, T1 and N2 are
+advertised in XID responses. Link establishment and release require UA/DM
+responses with the Final bit set for locally transmitted SABM/DISC commands
+carrying Poll, as required by the AX.25 v2.2 state diagrams.
 
 The personal-station client follows the T1 recovery sequence by polling with
 RR(P=1) before retransmitting an unacknowledged I frame. Exhausting N2 resets
@@ -43,9 +45,18 @@ to TNC communications protocol*. The stable framing rules used here are:
 - FESC in content becomes FESC/TFESC (`DB DD`);
 - adjacent FEND bytes do not create empty frames.
 
-Until a stable primary copy of the original KISS text is archived in project
-documentation, only data command `0` is emitted. Parameter commands remain
-future work.
+The transport emits data command `0`. When explicitly configured, it also
+emits the portable KISS link-parameter commands TXDELAY, PERSISTENCE, SLOTTIME,
+TXTAIL and FULLDUPLEX after each TCP connection is established. Device-specific
+SET HARDWARE and RETURN are not emitted.
+
+The optional KISS TCP proxy parses and forwards complete KISS frames rather
+than arbitrary TCP read fragments. It establishes and maintains its upstream
+connection independently of client traffic. Frames received from the upstream
+TNC are distributed to clients; frames transmitted by one client are not
+echoed to the other clients. Client DATA and portable link-parameter commands
+are accepted, while device-specific SET HARDWARE and RETURN are blocked so a
+client cannot take a shared TNC out of KISS mode.
 
 ## AXIP
 

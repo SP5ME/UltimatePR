@@ -48,6 +48,18 @@ YAML. Nowa konfiguracja nie zawiera znaku ani danych autora projektu.
 - `station` — terminal, porty TNC/radio, monitor, MHEARD, historia i beacon;
 - `station-node-bbs` — stacja oraz wspólnie uruchamiane NODE i BBS.
 
+## Terminal i TNC przez sieć
+
+UltimatePR komunikuje się z TNC przez KISS TCP lub AXUDP; bezpośrednie TNC
+szeregowe RS-232 nie jest obecnie przewidziane. Opcjonalne TNC Proxy udostępnia
+jeden port KISS TCP aplikacji i zewnętrznym klientom, rozdzielając pełne ramki
+KISS i chroniąc wspólne TNC przed komendami zmieniającymi jego stan.
+
+W **Konfiguracja → Terminal** można ustawić zakończenie wiersza, T1, T3, N2
+oraz N1/PACLEN. Każde pole ma krótki opis i podaną wartość domyślną, a przycisk
+przywracania ustawia profil: CR, T1=10 s, T3=300 s, N2=10 i N1=256 B.
+Tekst terminala pozostaje w UTF-8.
+
 ## Kopia i aktualizacja
 
 Szczegóły zgodności KISS, obsługiwanych komend TNC, portów KISS 0–15 oraz
@@ -89,6 +101,13 @@ Projekt nie wspiera systemu Windows.
 UltimatePR is a Linux packet-radio station with a browser terminal, KISS TCP,
 AXUDP, frame monitor, MHEARD, history and beacon. It has two operating modes:
 station only, or station with NODE and BBS enabled together.
+
+TNC communication uses network transports: KISS TCP or AXUDP. Direct RS-232
+TNC support is not currently planned. The optional TNC Proxy safely shares one
+KISS TCP endpoint between UltimatePR and external clients. The dedicated
+**Configuration → Terminal** tab documents and configures line endings, T1,
+T3, N2, and N1/PACLEN. Its restore button applies CR, T1=10 s, T3=300 s,
+N2=10, and N1=256 bytes. Terminal text remains UTF-8.
 
 Release packages support Linux AMD64, ARM64 and ARMv7 with systemd or OpenRC.
 The default install channel is `main`:

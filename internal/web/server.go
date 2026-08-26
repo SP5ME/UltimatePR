@@ -49,6 +49,8 @@ type Config struct {
 	TerminalWelcome    string
 	TerminalGoodbye    string
 	TerminalInfo       string
+	TerminalEOL        string
+	AX25T3             time.Duration
 	Ports              []string
 	PortStatus         func() []transport.Status
 	NodeEnabled        bool
@@ -634,6 +636,7 @@ type clientMessage struct {
 	Encoding string `json:"encoding"`
 	Inbound  uint64 `json:"inbound"`
 	ID       string `json:"id"`
+	Line     bool   `json:"line"`
 }
 type serverMessage struct {
 	Type   string `json:"type"`
@@ -691,11 +694,24 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	var radioSession *session.Manager
 	var releaseRadio func()
 	var cancelKeepAlive context.CancelFunc
+	txCtx, cancelTX := context.WithCancel(r.Context())
+	defer func() { cancelTX() }()
 	var incoming *operatorSession
 	terminalCodec, _ := terminalcodec.New(terminalcodec.Default)
 	terminalTXCodec, _ := terminalcodec.New(terminalcodec.Default)
 	remoteCommandBuffer := &terminalLineBuffer{}
 	var sendMu sync.Mutex
+	txJobs := make(chan func(), 64)
+	go func() {
+		for {
+			select {
+			case job := <-txJobs:
+				job()
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}()
 	terminalCall := callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)
 	expandReply := func(template, remote string) string {
 		return terminalReplyText(template, terminalMacroContext(terminalCall, remote, s.cfg))
@@ -703,6 +719,16 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	terminalWelcome := s.cfg.TerminalWelcome
 	terminalGoodbye := s.cfg.TerminalGoodbye
 	terminalInfo := s.cfg.TerminalInfo
+	lineEnding := func() string {
+		switch s.cfg.TerminalEOL {
+		case "lf":
+			return "\n"
+		case "crlf":
+			return "\r\n"
+		default:
+			return "\r"
+		}
+	}
 	handleRemoteCommand := func(text string, reply func(string)) {
 		for _, line := range remoteCommandBuffer.Push(text) {
 			switch terminalRemoteCommand(line) {
@@ -816,6 +842,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 		}
 		switch m.Type {
 		case "connect":
+			cancelTX()
+			nextTXCtx, nextCancelTX := context.WithCancel(r.Context())
+			defer nextCancelTX()
+			txCtx, cancelTX = nextTXCtx, nextCancelTX
 			if s.cfg.History != nil {
 				s.cfg.History.Disconnected(historySession)
 			}
@@ -878,7 +908,11 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				radioSession, releaseRadio = s.cfg.Radio.NewSession()
 				keepAliveCtx, keepAliveCancel := context.WithCancel(context.Background())
 				cancelKeepAlive = keepAliveCancel
-				go radioSession.KeepAlive(keepAliveCtx, 5*time.Minute)
+				interval := s.cfg.AX25T3
+				if interval <= 0 {
+					interval = 5 * time.Minute
+				}
+				go radioSession.KeepAlive(keepAliveCtx, interval)
 				events, cancel := radioSession.Subscribe()
 				cancelRadio = cancel
 				sessionCodec := terminalCodec
@@ -955,10 +989,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
 			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort, historySession)
 		case "data":
-			m.Data = prepareTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
-			if historyConnected && s.cfg.History != nil {
-				s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
+			if m.Line {
+				m.Data += lineEnding()
 			}
+			m.Data = prepareTerminalMessage(m.Data, terminalMacroContext(terminalCall, historyStation, s.cfg))
 			if activeMode == "incoming" && incoming != nil {
 				wireData, encodeErr := terminalTXCodec.Encode(m.Data)
 				if encodeErr != nil {
@@ -973,6 +1007,9 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
 				} else {
 					incoming.mu.Unlock()
+					if historyConnected && s.cfg.History != nil {
+						s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
+					}
 					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 				}
 				continue
@@ -983,15 +1020,28 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					_ = out.write(serverMessage{Type: "error", Error: encodeErr.Error()})
 					continue
 				}
-				progress := func(p session.SendPacketProgress) {
-					_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: p.Packet, Total: p.Total, Data: terminalTXCodec.Decode(p.Data), State: p.State, Error: p.Error})
+				messageID, messageData := m.ID, m.Data
+				currentSession, currentTXCtx := radioSession, txCtx
+				historyMode, historyCall, historyRadioPort, historyRoute := activeMode, historyStation, historyPort, historyDigi
+				job := func() {
+					progress := func(p session.SendPacketProgress) {
+						_ = out.write(serverMessage{Type: "tx_packet", ID: messageID, Packet: p.Packet, Total: p.Total, Data: terminalTXCodec.Decode(p.Data), State: p.State, Error: p.Error})
+					}
+					sendMu.Lock()
+					err := currentSession.SendWithProgress(currentTXCtx, wireData, progress)
+					sendMu.Unlock()
+					if err != nil {
+						_ = out.write(serverMessage{Type: "error", Error: err.Error()})
+						return
+					}
+					if s.cfg.History != nil {
+						s.cfg.History.Add(historyMode, historyCall, historyRadioPort, historyRoute, "tx", messageData)
+					}
 				}
-				sendMu.Lock()
-				if err := radioSession.SendWithProgress(r.Context(), wireData, progress); err != nil {
-					sendMu.Unlock()
-					_ = out.write(serverMessage{Type: "error", Error: err.Error()})
-				} else {
-					sendMu.Unlock()
+				select {
+				case txJobs <- job:
+				default:
+					_ = out.write(serverMessage{Type: "tx_packet", ID: messageID, Packet: 1, Total: 1, Data: messageData, State: "error", Error: "Kolejka terminala jest pelna"})
 				}
 				continue
 			}
@@ -1009,9 +1059,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				closeRemote()
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: err.Error()})
 			} else {
+				if historyConnected && s.cfg.History != nil {
+					s.cfg.History.Add(activeMode, historyStation, historyPort, historyDigi, "tx", m.Data)
+				}
 				_ = out.write(serverMessage{Type: "tx_packet", ID: m.ID, Packet: 1, Total: 1, Data: m.Data, State: "sent"})
 			}
 		case "disconnect":
+			cancelTX()
 			goodbye := expandReply(terminalGoodbye, historyStation)
 			if incoming != nil {
 				sendIncomingReply(terminalGoodbye, fmt.Sprintf("goodbye-%d", time.Now().UnixNano()), historyStation)

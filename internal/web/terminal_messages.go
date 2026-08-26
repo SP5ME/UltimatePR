@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/packet-radio/ultimatepr/internal/language"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 )
@@ -103,7 +102,7 @@ func expandTerminalMessage(text string, values map[string]string) string {
 }
 
 func prepareTerminalMessage(text string, values map[string]string) string {
-	return language.ASCII(expandTerminalMessage(text, values))
+	return expandTerminalMessage(text, values)
 }
 
 func terminalRemoteCommand(line string) string {

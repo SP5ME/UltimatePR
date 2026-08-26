@@ -72,6 +72,23 @@ func TestTerminalMessageDefaults(t *testing.T) {
 	}
 }
 
+func TestTerminalAX25Defaults(t *testing.T) {
+	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Application.TerminalEOL != "cr" || c.Application.AX25T1Seconds != 10 || c.Application.AX25T3Seconds != 300 || c.Application.AX25N2 != 10 || c.Application.AX25N1 != 256 {
+		t.Fatalf("terminal AX.25 defaults = %+v", c.Application)
+	}
+}
+
+func TestRejectsInvalidTerminalAX25Settings(t *testing.T) {
+	_, err := Parse([]byte("application: {terminal_eol: invalid, ax25_t1_seconds: 10, ax25_t3_seconds: 5, ax25_n2: 10, ax25_n1: 256}\nserver: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\n"))
+	if err == nil {
+		t.Fatal("invalid terminal AX.25 settings accepted")
+	}
+}
+
 func TestLegacyWelcomeGetsCommandHintWithoutOverwritingCustomWelcome(t *testing.T) {
 	legacy, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\napplication: {welcome_message: 'Witaj {REMOTE}, de {CALL}.'}\n"))
 	if err != nil {

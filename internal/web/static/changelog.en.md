@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-26 - AX.25 terminal and safe TNC Proxy
+
+- Added a dedicated `Terminal` configuration tab with plain-language descriptions, visible defaults, and a button that restores the complete default profile.
+- Configurable settings now include `CR` / `CRLF` / `LF` line endings, T1 response time, T3 idle-link checking, N2 retry count, and N1/PACLEN maximum data size.
+- The default profile remains aligned with the implemented AX.25 modulo-8 mode: CR, T1=10 s, T3=300 s, N2=10, and N1=256 bytes.
+- XID responses advertise the configured N1, T1, and N2 values; settings are validated before the configuration is saved.
+- The terminal preserves UTF-8 text without automatically transliterating Polish characters to ASCII.
+- Pressing Enter can send an empty line; transmissions use one ordered queue and can be safely cancelled while disconnecting.
+- Outgoing messages are added to history only after successful transmission.
+- TNC Proxy separates the stream into complete KISS frames, does not echo client data to other clients, and distributes frames received from the TNC to every client.
+- The proxy maintains and retries its TCP connection to the TNC and blocks the KISS `SET HARDWARE` and `RETURN` commands that could alter shared-device state.
+
 ## 2026-08-24 - AX.25 recovery timer correction
 
 - Unified the default `T1` to 10 seconds for outgoing and incoming links and for the parameters advertised through `XID`. The 3-second value caused premature retransmissions with full `N1=256` frames and delayed remote stations.

@@ -18,13 +18,46 @@ type XIDParameter struct {
 // interoperable connected-mode engine: half duplex, implicit REJ, modulo 8,
 // N1=256 octets, receive window k=1, T1=10 seconds and N2=10.
 func BasicXIDParameters() []XIDParameter {
+	return LinkXIDParameters(256, 1, 10000, 10)
+}
+
+// LinkXIDParameters builds the conservative modulo-8 profile implemented by
+// UltimatePR using the configured link limits.
+func LinkXIDParameters(n1, window, t1Milliseconds, n2 int) []XIDParameter {
+	if n1 < 1 {
+		n1 = 256
+	}
+	if window < 1 {
+		window = 1
+	}
+	if t1Milliseconds < 1 {
+		t1Milliseconds = 10000
+	}
+	if n2 < 1 {
+		n2 = 10
+	}
+	// These fields have fixed widths in the AX.25 XID parameter encoding.
+	// Clamp defensively so callers can never advertise wrapped values.
+	if n1 > 8191 {
+		n1 = 8191
+	}
+	if window > 255 {
+		window = 255
+	}
+	if t1Milliseconds > 65535 {
+		t1Milliseconds = 65535
+	}
+	if n2 > 255 {
+		n2 = 255
+	}
+	n1Bits := n1 * 8
 	return []XIDParameter{
 		{Identifier: 2, Value: []byte{0x00, 0x20}},
 		{Identifier: 3, Value: []byte{0x81, 0xA4, 0x02}},
-		{Identifier: 6, Value: []byte{0x08, 0x00}},
-		{Identifier: 8, Value: []byte{0x01}},
-		{Identifier: 9, Value: []byte{0x27, 0x10}},
-		{Identifier: 10, Value: []byte{0x0A}},
+		{Identifier: 6, Value: []byte{byte(n1Bits >> 8), byte(n1Bits)}},
+		{Identifier: 8, Value: []byte{byte(window)}},
+		{Identifier: 9, Value: []byte{byte(t1Milliseconds >> 8), byte(t1Milliseconds)}},
+		{Identifier: 10, Value: []byte{byte(n2)}},
 	}
 }
 

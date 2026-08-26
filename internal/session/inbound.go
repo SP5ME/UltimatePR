@@ -47,6 +47,20 @@ func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
 	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
+func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if t1 > 0 {
+		m.t1 = t1
+	}
+	if n2 > 0 {
+		m.n2 = n2
+	}
+	if n1 > 0 {
+		m.paclen = n1
+	}
+}
+
 func (m *InboundMux) Register(address ax25.Address, service AX25Service) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -436,7 +450,10 @@ func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, 
 }
 
 func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame) error {
-	payload, err := ax25.EncodeXID(ax25.BasicXIDParameters())
+	m.mu.Lock()
+	n1, n2, t1 := m.paclen, m.n2, m.t1
+	m.mu.Unlock()
+	payload, err := ax25.EncodeXID(ax25.LinkXIDParameters(n1, 1, int(t1/time.Millisecond), n2))
 	if err != nil {
 		return err
 	}

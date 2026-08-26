@@ -10,9 +10,16 @@ import (
 	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/netallow"
+	"github.com/packet-radio/ultimatepr/internal/transport/kiss"
+)
+
+const (
+	maxKISSFrame  = 65535
+	upstreamQueue = 256
 )
 
 // Proxy shares one upstream KISS TCP connection with multiple clients.
+// It proxies complete KISS frames, not arbitrary TCP read fragments.
 type Proxy struct {
 	listen   string
 	upstream string
@@ -20,6 +27,7 @@ type Proxy struct {
 	log      *slog.Logger
 	mu       sync.Mutex
 	clients  map[net.Conn]*client
+	tx       chan []byte
 	upMu     sync.Mutex
 	up       net.Conn
 }
@@ -34,7 +42,10 @@ func Start(ctx context.Context, listen, upstream string, allowed []string, log *
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", listen, err)
 	}
-	p := &Proxy{listen: listen, upstream: upstream, allowed: append([]string(nil), allowed...), log: log, clients: make(map[net.Conn]*client)}
+	p := &Proxy{
+		listen: listen, upstream: upstream, allowed: append([]string(nil), allowed...),
+		log: log, clients: make(map[net.Conn]*client), tx: make(chan []byte, upstreamQueue),
+	}
 	log.Info("TNC proxy started", "listen", listen, "upstream", upstream)
 	go p.run(ctx, l)
 	return nil
@@ -42,9 +53,10 @@ func Start(ctx context.Context, listen, upstream string, allowed []string, log *
 
 func (p *Proxy) run(ctx context.Context, listener net.Listener) {
 	defer listener.Close()
+	go p.upstreamManager(ctx)
 	go func() {
 		<-ctx.Done()
-		listener.Close()
+		_ = listener.Close()
 		p.closeUpstream()
 		p.closeClients()
 	}()
@@ -80,15 +92,30 @@ func addressAllowed(address net.Addr, allowed []string) bool {
 
 func (p *Proxy) clientLoop(ctx context.Context, c *client) {
 	defer p.removeClient(c)
+	decoder := kiss.NewDecoder(maxKISSFrame)
 	b := make([]byte, 4096)
 	for {
 		n, err := c.conn.Read(b)
 		if n > 0 {
-			data := append([]byte(nil), b[:n]...)
-			if err := p.writeUpstream(ctx, data); err != nil && ctx.Err() == nil {
-				p.log.Warn("TNC proxy upstream unavailable", "error", err)
+			frames, decodeErrs := decoder.Feed(b[:n])
+			for _, decodeErr := range decodeErrs {
+				p.log.Warn("TNC proxy rejected malformed client KISS data", "remote", c.conn.RemoteAddr(), "error", decodeErr)
 			}
-			p.broadcast(data, c)
+			for _, frame := range frames {
+				if !clientCommandAllowed(frame.Command) {
+					p.log.Warn("TNC proxy blocked client KISS command", "remote", c.conn.RemoteAddr(), "command", frame.Command)
+					continue
+				}
+				wire, encodeErr := kiss.Encode(frame)
+				if encodeErr != nil {
+					continue
+				}
+				select {
+				case p.tx <- wire:
+				case <-ctx.Done():
+					return
+				}
+			}
 		}
 		if err != nil {
 			return
@@ -96,88 +123,134 @@ func (p *Proxy) clientLoop(ctx context.Context, c *client) {
 	}
 }
 
-func (p *Proxy) writeUpstream(ctx context.Context, data []byte) error {
-	for {
-		p.upMu.Lock()
-		up := p.up
-		if up != nil {
-			_, err := up.Write(data)
-			p.upMu.Unlock()
-			if err != nil {
-				p.closeUpstream()
-			}
-			return err
-		}
-		p.upMu.Unlock()
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err := p.connectUpstream(ctx); err != nil {
-			select {
-			case <-time.After(time.Second):
-			case <-ctx.Done():
-				return ctx.Err()
+func clientCommandAllowed(command uint8) bool {
+	// DATA and the portable KISS link parameters are safe to forward.
+	// SET HARDWARE is device-specific and RETURN would terminate KISS for every client.
+	return command <= kiss.CommandFullDuplex
+}
+
+func (p *Proxy) upstreamManager(ctx context.Context) {
+	for ctx.Err() == nil {
+		conn, err := (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext(ctx, "tcp", p.upstream)
+		if err != nil {
+			p.log.Warn("TNC proxy upstream unavailable", "address", p.upstream, "error", err)
+			if !waitFor(ctx, time.Second) {
+				return
 			}
 			continue
 		}
+		p.setUpstream(conn)
+		p.log.Info("TNC proxy connected upstream", "address", p.upstream)
+		err = p.serveUpstream(ctx, conn)
+		p.clearUpstream(conn)
+		_ = conn.Close()
+		if ctx.Err() == nil {
+			p.log.Warn("TNC proxy upstream disconnected", "address", p.upstream, "error", err)
+			if !waitFor(ctx, time.Second) {
+				return
+			}
+		}
 	}
 }
 
-func (p *Proxy) connectUpstream(ctx context.Context) error {
-	p.upMu.Lock()
-	defer p.upMu.Unlock()
-	if p.up != nil {
-		return nil
+func (p *Proxy) serveUpstream(ctx context.Context, conn net.Conn) error {
+	readErr := make(chan error, 1)
+	go p.readUpstream(ctx, conn, readErr)
+	for {
+		select {
+		case wire := <-p.tx:
+			if _, err := writeAll(conn, wire); err != nil {
+				return err
+			}
+		case err := <-readErr:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", p.upstream)
-	if err != nil {
-		return err
-	}
-	p.up = conn
-	p.log.Info("TNC proxy connected upstream", "address", p.upstream)
-	go p.upstreamLoop(ctx, conn)
-	return nil
 }
 
-func (p *Proxy) upstreamLoop(ctx context.Context, conn net.Conn) {
+func (p *Proxy) readUpstream(ctx context.Context, conn net.Conn, errch chan<- error) {
+	decoder := kiss.NewDecoder(maxKISSFrame)
 	b := make([]byte, 4096)
 	for {
 		n, err := conn.Read(b)
 		if n > 0 {
-			p.broadcast(append([]byte(nil), b[:n]...), nil)
+			frames, decodeErrs := decoder.Feed(b[:n])
+			for _, decodeErr := range decodeErrs {
+				p.log.Warn("TNC proxy rejected malformed upstream KISS data", "error", decodeErr)
+			}
+			for _, frame := range frames {
+				wire, encodeErr := kiss.Encode(frame)
+				if encodeErr == nil {
+					p.broadcast(wire)
+				}
+			}
 		}
 		if err != nil {
-			p.upMu.Lock()
-			if p.up == conn {
-				p.up = nil
+			select {
+			case errch <- err:
+			case <-ctx.Done():
 			}
-			p.upMu.Unlock()
-			if ctx.Err() == nil && err != io.EOF {
-				p.log.Warn("TNC proxy upstream disconnected", "error", err)
-			}
-			_ = conn.Close()
 			return
 		}
 	}
 }
 
-func (p *Proxy) broadcast(data []byte, except *client) {
+func (p *Proxy) broadcast(data []byte) {
 	p.mu.Lock()
 	clients := make([]*client, 0, len(p.clients))
 	for _, c := range p.clients {
-		if c != except {
-			clients = append(clients, c)
-		}
+		clients = append(clients, c)
 	}
 	p.mu.Unlock()
 	for _, c := range clients {
 		c.mu.Lock()
-		_, err := c.conn.Write(data)
+		_, err := writeAll(c.conn, data)
 		c.mu.Unlock()
 		if err != nil {
 			p.removeClient(c)
 		}
 	}
+}
+
+func writeAll(w io.Writer, b []byte) (int, error) {
+	total := 0
+	for len(b) > 0 {
+		n, err := w.Write(b)
+		total += n
+		b = b[n:]
+		if err != nil {
+			return total, err
+		}
+		if n == 0 {
+			return total, io.ErrShortWrite
+		}
+	}
+	return total, nil
+}
+
+func waitFor(ctx context.Context, delay time.Duration) bool {
+	select {
+	case <-time.After(delay):
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (p *Proxy) setUpstream(conn net.Conn) {
+	p.upMu.Lock()
+	p.up = conn
+	p.upMu.Unlock()
+}
+
+func (p *Proxy) clearUpstream(conn net.Conn) {
+	p.upMu.Lock()
+	if p.up == conn {
+		p.up = nil
+	}
+	p.upMu.Unlock()
 }
 
 func (p *Proxy) removeClient(c *client) {

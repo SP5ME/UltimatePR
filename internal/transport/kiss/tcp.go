@@ -72,7 +72,7 @@ func (p *TCPPort) Run(ctx context.Context, out chan<- transport.Packet) error {
 	}
 }
 func (p *TCPPort) runConn(ctx context.Context, out chan<- transport.Packet) error {
-	d := net.Dialer{}
+	d := net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	c, err := d.DialContext(ctx, "tcp", p.cfg.Address)
 	if err != nil {
 		return err

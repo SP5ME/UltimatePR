@@ -5,6 +5,11 @@ application:
   qth: Example
   language: en
   update_channel: main
+  terminal_eol: cr
+  ax25_t1_seconds: 10
+  ax25_t3_seconds: 300
+  ax25_n2: 10
+  ax25_n1: 256
   welcome_message: "Witaj {REMOTE}, de {CALL}.\r\nDostepne komendy: /I, /MH, /H lub /?."
   goodbye_message: "73 {REMOTE}, de {CALL}."
   info_message: "Call: {CALL}\r\nImię: {NAME}\r\nLOC: {LOC}\r\nQTH: {QTH}\r\n73"

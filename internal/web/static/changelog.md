@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
+
+- Dodano osobną zakładkę `Terminal` w konfiguracji z prostymi opisami, widocznymi wartościami domyślnymi i przyciskiem przywracania całego profilu.
+- Konfigurowalne są: zakończenie wiersza `CR` / `CRLF` / `LF`, czas odpowiedzi T1, kontrola bezczynności T3, liczba prób N2 oraz największa porcja danych N1/PACLEN.
+- Domyślny profil pozostaje zgodny z używanym trybem AX.25 modulo 8: CR, T1=10 s, T3=300 s, N2=10 i N1=256 B.
+- Odpowiedzi XID ogłaszają rzeczywiście skonfigurowane N1, T1 i N2; wartości są sprawdzane przed zapisaniem konfiguracji.
+- Terminal zachowuje tekst UTF-8 bez automatycznej zamiany polskich znaków na ASCII.
+- Naciśnięcie Enter wysyła również pusty wiersz, a transmisje trafiają do jednej kolejki i mogą zostać bezpiecznie anulowane podczas rozłączania.
+- Historia zapisuje wiadomość wychodzącą dopiero po udanym wysłaniu.
+- TNC Proxy rozdziela strumień na pełne ramki KISS, nie odsyła danych klienta do pozostałych klientów i przekazuje odebrane ramki TNC do wszystkich klientów.
+- Proxy utrzymuje i ponawia połączenie TCP z TNC oraz blokuje komendy KISS `SET HARDWARE` i `RETURN`, które mogłyby zmienić stan wspólnego urządzenia.
+
 ## 2026-08-24 - korekta czasu odzyskiwania AX.25
 
 - Ujednolicono domyślny czas `T1` do 10 sekund dla połączeń wychodzących i przychodzących oraz dla parametrów ogłaszanych przez `XID`. Wartość 3 sekund powodowała przedwczesne retransmisje przy pełnych ramkach `N1=256` i opóźnionej pracy stacji zdalnej.

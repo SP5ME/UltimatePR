@@ -28,3 +28,4 @@ html,body{height:100%;overflow:hidden}#terminalView{height:calc(100vh - 179px);o
 .tnc-port-row{grid-template-columns:minmax(100px,.75fr) minmax(140px,1fr) minmax(140px,1.1fr) 110px minmax(125px,.9fr) 90px 100px 45px}
 @media(max-width:1050px){.tnc-port-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.tnc-port-row{grid-template-columns:1fr}}
+.field-grid label small{display:block;min-height:42px;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.35}.field-grid select{margin-top:7px}

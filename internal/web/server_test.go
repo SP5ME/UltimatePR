@@ -90,10 +90,10 @@ func TestExpandTerminalMessageAtSendTime(t *testing.T) {
 	}
 }
 
-func TestPrepareTerminalMessageReplacesPolishCharacters(t *testing.T) {
+func TestPrepareTerminalMessagePreservesUTF8(t *testing.T) {
 	values := map[string]string{"NAME": "Mikołaj"}
 	got := prepareTerminalMessage("Zażółć gęślą jaźń, {NAME}!\r\n", values)
-	want := "Zazolc gesla jazn, Mikolaj!\r\n"
+	want := "Zażółć gęślą jaźń, Mikołaj!\r\n"
 	if got != want {
 		t.Fatalf("prepared terminal message = %q, want %q", got, want)
 	}

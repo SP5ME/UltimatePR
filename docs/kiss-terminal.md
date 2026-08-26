@@ -59,6 +59,13 @@ Port `tncproxy_port` musi być unikalny dla każdego włączonego portu TNC.
 Połączenia proxy są ograniczane przez wspólną listę `web.allowed_addresses`,
 która kontroluje również dostęp do panelu WWW.
 
+Proxy utrzymuje połączenie z właściwym TNC niezależnie od ruchu klientów i
+przekazuje wyłącznie kompletne ramki KISS. Ramki odebrane z TNC są rozsyłane do
+klientów, natomiast transmisja jednego klienta nie jest przedstawiana innym
+klientom jako odbiór radiowy. Komendy `SET HARDWARE` i `RETURN` od klientów są
+blokowane, aby pojedyncza aplikacja nie mogła zmienić sprzętowego trybu pracy
+albo wyłączyć wspólnego interfejsu KISS.
+
 ## Kodowanie tekstu
 
 Kodowanie jest na sztywno ustawione na `UTF-8`. KISS i AX.25 przenoszą bajty,
@@ -70,5 +77,16 @@ To oznacza, że:
 - interfejs WWW zawsze pokazuje i wysyła tekst jako UTF-8;
 - zapis sesji nie przechowuje alternatywnego kodowania;
 - historia i monitor korzystają z tego samego założenia.
+
+## Ustawienia terminala AX.25
+
+Zakładka konfiguracji `Terminal` pozwala wybrać zakończenie wiersza oraz
+parametry N1, T1, T3 i N2. Domyślny profil to `CR`, N1=256 bajtów, T1=10 s,
+T3=300 s i N2=10. Przycisk `Przywróć domyślne` odtwarza cały profil.
+
+Enter może wysłać również pusty wiersz. Wysyłanie odbywa się przez uporządkowaną
+kolejkę, dzięki czemu interfejs nadal przyjmuje polecenie rozłączenia podczas
+oczekiwania na potwierdzenie radiowe. Anulowane lub niepotwierdzone wiadomości
+nie są zapisywane w historii jako poprawnie wysłane.
 
 Źródło specyfikacji: <https://www.ax25.net/kiss.aspx>.

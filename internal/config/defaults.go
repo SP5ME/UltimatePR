@@ -18,7 +18,7 @@ func New(mode, callsign, locator, qth, language string, stationSSID, nodeSSID, b
 	}
 	full := mode == ModeFull
 	c := Config{
-		Application: Application{Mode: mode, OperatorName: "", Locator: strings.ToUpper(strings.TrimSpace(locator)), QTH: strings.TrimSpace(qth), Language: lang, UpdateChannel: "main"},
+		Application: Application{Mode: mode, OperatorName: "", Locator: strings.ToUpper(strings.TrimSpace(locator)), QTH: strings.TrimSpace(qth), Language: lang, UpdateChannel: "main", TerminalEOL: "cr", AX25T1Seconds: 10, AX25T3Seconds: 300, AX25N2: 10, AX25N1: 256},
 		Server:      Station{Callsign: call, SSID: nodeSSID},
 		Terminal:    Station{Callsign: call, SSID: stationSSID},
 		Web:         Web{Listen: "0.0.0.0:8080", Username: "admin", AllowedAddresses: []string{"0.0.0.0", "::"}},

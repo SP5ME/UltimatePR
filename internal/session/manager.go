@@ -85,6 +85,25 @@ func New(local ax25.Address, ports map[string]Sender) *Manager {
 	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
+// Configure applies the negotiated-link defaults used for future operations.
+// It must be called while the session is disconnected.
+func (m *Manager) Configure(t1 time.Duration, n2, n1 int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != Disconnected {
+		return
+	}
+	if t1 > 0 {
+		m.t1 = t1
+	}
+	if n2 > 0 {
+		m.n2 = n2
+	}
+	if n1 > 0 {
+		m.paclen = n1
+	}
+}
+
 func (m *Manager) Subscribe() (<-chan Event, func()) {
 	c := make(chan Event, 64)
 	m.mu.Lock()
@@ -585,7 +604,10 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeXID:
 		if isCommand(f) {
-			payload, err := ax25.EncodeXID(ax25.BasicXIDParameters())
+			m.mu.Lock()
+			n1, n2, t1 := m.paclen, m.n2, m.t1
+			m.mu.Unlock()
+			payload, err := ax25.EncodeXID(ax25.LinkXIDParameters(n1, 1, int(t1/time.Millisecond), n2))
 			if err == nil {
 				m.mu.Lock()
 				send := m.ports[port]

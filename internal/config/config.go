@@ -32,6 +32,11 @@ type Application struct {
 	WelcomeMessage string `yaml:"welcome_message"`
 	GoodbyeMessage string `yaml:"goodbye_message"`
 	InfoMessage    string `yaml:"info_message"`
+	TerminalEOL    string `yaml:"terminal_eol"`
+	AX25T1Seconds  int    `yaml:"ax25_t1_seconds"`
+	AX25T3Seconds  int    `yaml:"ax25_t3_seconds"`
+	AX25N2         int    `yaml:"ax25_n2"`
+	AX25N1         int    `yaml:"ax25_n1"`
 }
 type Beacon struct {
 	Enabled         bool   `yaml:"enabled"`
@@ -184,6 +189,21 @@ func (c *Config) applyDefaults() {
 	if c.Application.UpdateChannel == "stable" {
 		c.Application.UpdateChannel = "main"
 	}
+	if c.Application.TerminalEOL == "" {
+		c.Application.TerminalEOL = "cr"
+	}
+	if c.Application.AX25T1Seconds == 0 {
+		c.Application.AX25T1Seconds = 10
+	}
+	if c.Application.AX25T3Seconds == 0 {
+		c.Application.AX25T3Seconds = 300
+	}
+	if c.Application.AX25N2 == 0 {
+		c.Application.AX25N2 = 10
+	}
+	if c.Application.AX25N1 == 0 {
+		c.Application.AX25N1 = 256
+	}
 	if strings.TrimSpace(c.Web.Listen) == "" {
 		c.Web.Listen = "0.0.0.0:8080"
 	}
@@ -247,6 +267,21 @@ func (c Config) Validate() error {
 	}
 	if c.Application.UpdateChannel != "main" && c.Application.UpdateChannel != "dev" {
 		return fmt.Errorf("application.update_channel must be main or dev")
+	}
+	if c.Application.TerminalEOL != "cr" && c.Application.TerminalEOL != "crlf" && c.Application.TerminalEOL != "lf" {
+		return fmt.Errorf("application.terminal_eol must be cr, crlf or lf")
+	}
+	if c.Application.AX25T1Seconds < 1 || c.Application.AX25T1Seconds > 60 {
+		return fmt.Errorf("application.ax25_t1_seconds must be 1..60")
+	}
+	if c.Application.AX25T3Seconds <= c.Application.AX25T1Seconds || c.Application.AX25T3Seconds > 86400 {
+		return fmt.Errorf("application.ax25_t3_seconds must be greater than T1 and at most 86400")
+	}
+	if c.Application.AX25N2 < 1 || c.Application.AX25N2 > 255 {
+		return fmt.Errorf("application.ax25_n2 must be 1..255")
+	}
+	if c.Application.AX25N1 < 16 || c.Application.AX25N1 > 2048 {
+		return fmt.Errorf("application.ax25_n1 must be 16..2048")
 	}
 	if locator := strings.ToUpper(strings.TrimSpace(c.Application.Locator)); locator != "" && !validLocator(locator) {
 		return fmt.Errorf("application.locator: invalid Maidenhead locator")

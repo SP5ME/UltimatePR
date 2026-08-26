@@ -189,6 +189,7 @@ func main() {
 		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(services))
 	}
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
+	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
 	var historyStore *history.Store
 	if cfg.History.Enabled {
@@ -250,6 +251,7 @@ func main() {
 		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
 	}
 	inbound := session.NewInboundMux(senders, log)
+	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	web := webui.New(webui.Config{
 		Listen:             cfg.Web.Listen,
 		Username:           cfg.Web.Username,
@@ -267,6 +269,8 @@ func main() {
 		TerminalWelcome:    cfg.Application.WelcomeMessage,
 		TerminalGoodbye:    cfg.Application.GoodbyeMessage,
 		TerminalInfo:       cfg.Application.InfoMessage,
+		TerminalEOL:        cfg.Application.TerminalEOL,
+		AX25T3:             time.Duration(cfg.Application.AX25T3Seconds) * time.Second,
 		Ports:              portIDs,
 		NodeEnabled:        cfg.Node.Enabled,
 		PortStatus: func() []transport.Status {
