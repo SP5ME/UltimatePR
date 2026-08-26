@@ -15,8 +15,7 @@ func testManager(t *testing.T) (*Manager, chan []byte) {
 	m := New(ax25.Address{Callsign: "LOCAL", SSID: 9}, map[string]Sender{
 		"radio": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil },
 	})
-	m.t1 = 30 * time.Millisecond
-	m.n2 = 2
+	m.Configure(30*time.Millisecond, 2, 256)
 	return m, sent
 }
 
@@ -40,6 +39,14 @@ func connectManager(t *testing.T, m *Manager, sent chan []byte) {
 	if err = <-done; err != nil || m.State() != Connected {
 		t.Fatalf("connect err=%v state=%s", err, m.State())
 	}
+	xid, err := ax25.Decode(<-sent)
+	if err != nil || xid.Type != ax25.TypeXID || !xid.PollFinal || !isCommand(xid) {
+		t.Fatalf("XID command=%#v err=%v", xid, err)
+	}
+	xidResponse := response(ax25.TypeXID, 0)
+	xidResponse.PollFinal = true
+	xidResponse.Payload = xid.Payload
+	m.Handle("radio", xidResponse)
 }
 
 func TestConnectSendReceiveDisconnect(t *testing.T) {
@@ -96,9 +103,47 @@ received:
 	}
 }
 
+func TestConnectNegotiatesXIDResponseParameters(t *testing.T) {
+	m, sent := testManager(t)
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	if sabm := decodeFrame(t, <-sent); sabm.Type != ax25.TypeSABM {
+		t.Fatalf("first frame=%+v", sabm)
+	}
+	m.Handle("radio", response(ax25.TypeUA, 0))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	command := decodeFrame(t, <-sent)
+	if command.Type != ax25.TypeXID || !command.PollFinal || !isCommand(command) {
+		t.Fatalf("XID command=%+v", command)
+	}
+	peer := ax25.XIDLinkSettings{Modulo: ax25.Modulo8, ReceiveN1: 64, ReceiveWindow: 1, T1Milliseconds: 50, Retries: 4}
+	payload, err := ax25.EncodeXID(ax25.XIDParameters(peer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	xidResponse := response(ax25.TypeXID, 0)
+	xidResponse.PollFinal, xidResponse.Payload = true, payload
+	m.Handle("radio", xidResponse)
+	deadline := time.Now().Add(time.Second)
+	for {
+		m.mu.Lock()
+		n1, t1, n2 := m.paclen, m.t1, m.n2
+		m.mu.Unlock()
+		if n1 == 64 && t1 == 50*time.Millisecond && n2 == 4 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("negotiated N1=%d T1=%s N2=%d", n1, t1, n2)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
 	m, sent := testManager(t)
-	m.paclen = 4
+	m.Configure(30*time.Millisecond, 2, 4)
 	connectManager(t, m, sent)
 
 	var progress []SendPacketProgress
@@ -135,7 +180,7 @@ func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
 
 func TestSendSplitsAtSpacesAndPreservesOriginalText(t *testing.T) {
 	m, sent := testManager(t)
-	m.paclen = 12
+	m.Configure(30*time.Millisecond, 2, 12)
 	connectManager(t, m, sent)
 	text := "test dlugiej wiadomosci"
 	done := make(chan error, 1)
@@ -171,7 +216,7 @@ func TestPayloadWithoutWhitespaceUsesHardPaclenLimit(t *testing.T) {
 
 func TestSendIgnoresStaleAcknowledgementWithoutImmediateRetry(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 80 * time.Millisecond
+	m.Configure(80*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
@@ -191,7 +236,7 @@ func TestSendIgnoresStaleAcknowledgementWithoutImmediateRetry(t *testing.T) {
 
 func TestSendRetriesImmediatelyOnRejectForCurrentSequence(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = time.Second
+	m.Configure(time.Second, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
@@ -214,7 +259,7 @@ func TestSendRetriesImmediatelyOnRejectForCurrentSequence(t *testing.T) {
 
 func TestSendRetriesImmediatelyOnSelectiveReject(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = time.Second
+	m.Configure(time.Second, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("hello")) }()
@@ -382,7 +427,7 @@ func TestOutOfSequenceIFrameSendsSingleREJ(t *testing.T) {
 
 func TestRNRPausesNextIFrameUntilRR(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 100 * time.Millisecond
+	m.Configure(100*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("first")) }()
@@ -414,8 +459,7 @@ func TestRNRPausesNextIFrameUntilRR(t *testing.T) {
 
 func TestRNRDoesNotRetransmitUnacknowledgedIWhileBusy(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 30 * time.Millisecond
-	m.n2 = 4
+	m.Configure(30*time.Millisecond, 4, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
@@ -438,8 +482,7 @@ func TestRNRDoesNotRetransmitUnacknowledgedIWhileBusy(t *testing.T) {
 
 func TestT1ExpiryPollsBeforeRetransmittingIFrame(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 20 * time.Millisecond
-	m.n2 = 3
+	m.Configure(20*time.Millisecond, 3, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
@@ -478,8 +521,7 @@ func TestRemoteDISCUAMirrorsPollBit(t *testing.T) {
 
 func TestT1N2ExhaustionDisconnectsLostLink(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 10 * time.Millisecond
-	m.n2 = 2
+	m.Configure(10*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("lost")) }()
@@ -504,8 +546,7 @@ func TestT1N2ExhaustionDisconnectsLostLink(t *testing.T) {
 
 func TestKeepAliveDisconnectsUnresponsiveStation(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 10 * time.Millisecond
-	m.n2 = 2
+	m.Configure(10*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -536,7 +577,7 @@ func TestConnectedDMImmediatelyDropsLink(t *testing.T) {
 
 func TestRemoteDMInterruptsOutstandingSend(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = time.Second
+	m.Configure(time.Second, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
@@ -557,7 +598,7 @@ func TestRemoteDMInterruptsOutstandingSend(t *testing.T) {
 
 func TestRemoteDMDuringTimerRecoveryDoesNotReconnect(t *testing.T) {
 	m, sent := testManager(t)
-	m.t1 = 15 * time.Millisecond
+	m.Configure(15*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	done := make(chan error, 1)
 	go func() { done <- m.Send(context.Background(), []byte("pending")) }()
@@ -631,7 +672,7 @@ func TestHubClaimsOutgoingInformationBeforeInboundMux(t *testing.T) {
 	})
 	m, release := hub.NewSession()
 	defer release()
-	m.t1, m.n2 = 30*time.Millisecond, 2
+	m.Configure(30*time.Millisecond, 2, 256)
 	connectManager(t, m, sent)
 	pid := byte(0xF0)
 	incoming := commandFromRemote(ax25.TypeI, 0)

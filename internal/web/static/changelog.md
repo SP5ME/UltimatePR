@@ -2,6 +2,8 @@
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 
+- Uzupełniono pełną negocjację XID po zestawieniu łącza: N1 respektuje limit odbiorczy partnera, T1 i N2 wybierają większą wartość, a nieobsługiwane funkcje są obniżane do profilu modulo 8, implicit REJ i k=1.
+- Brak odpowiedzi XID lub FRMR włącza parametry zgodności AX.25 v2.0; skorygowano także maskę funkcji implicit REJ w polu XID.
 - Dodano osobną zakładkę `Terminal` w konfiguracji z prostymi opisami, widocznymi wartościami domyślnymi i przyciskiem przywracania całego profilu.
 - Konfigurowalne są: zakończenie wiersza `CR` / `CRLF` / `LF`, czas odpowiedzi T1, kontrola bezczynności T3, liczba prób N2 oraz największa porcja danych N1/PACLEN.
 - Domyślny profil pozostaje zgodny z używanym trybem AX.25 modulo 8: CR, T1=10 s, T3=300 s, N2=10 i N1=256 B.

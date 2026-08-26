@@ -109,6 +109,31 @@ func TestXIDRoundTripAndValidation(t *testing.T) {
 		t.Fatal("truncated XID accepted")
 	}
 }
+
+func TestXIDNegotiationUsesTAPRSelectionRules(t *testing.T) {
+	local := XIDLinkSettings{Modulo: Modulo8, ReceiveN1: 256, ReceiveWindow: 1, T1Milliseconds: 10000, Retries: 10}
+	offer := XIDLinkSettings{FullDuplex: true, SelectiveReject: true, Modulo: Modulo128, ReceiveN1: 128, ReceiveWindow: 7, T1Milliseconds: 15000, Retries: 3}
+	selected, peer, err := NegotiateXID(XIDParameters(offer), local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.FullDuplex || selected.SelectiveReject || selected.Modulo != Modulo8 {
+		t.Fatalf("unsupported procedure selected: %+v", selected)
+	}
+	if selected.ReceiveN1 != 256 || selected.ReceiveWindow != 1 {
+		t.Fatalf("local receive notification changed: %+v", selected)
+	}
+	if selected.T1Milliseconds != 15000 || selected.Retries != 10 {
+		t.Fatalf("TAPR greater-value rule not applied: %+v", selected)
+	}
+	if peer.ReceiveN1 != 128 || peer.ReceiveWindow != 7 {
+		t.Fatalf("peer receive limits lost: %+v", peer)
+	}
+	parameters := XIDParameters(local)
+	if got := parameters[1].Value; !bytes.Equal(got, []byte{0x82, 0xA4, 0x02}) {
+		t.Fatalf("implicit REJ/modulo-8 mask=% X", got)
+	}
+}
 func TestDecodeRejectsShort(t *testing.T) {
 	if _, e := Decode([]byte{1, 2}); e == nil {
 		t.Fatal("expected error")

@@ -2,6 +2,8 @@
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 
+- Completed post-connect XID negotiation: N1 respects the peer receive limit, T1 and N2 select the greater value, and unsupported features are reduced to the modulo-8, implicit-REJ, k=1 profile.
+- A missing XID response or FRMR selects the AX.25 v2.0 compatibility parameters; the implicit-REJ XID function mask was also corrected.
 - Added a dedicated `Terminal` configuration tab with plain-language descriptions, visible defaults, and a button that restores the complete default profile.
 - Configurable settings now include `CR` / `CRLF` / `LF` line endings, T1 response time, T3 idle-link checking, N2 retry count, and N1/PACLEN maximum data size.
 - The default profile remains aligned with the implemented AX.25 modulo-8 mode: CR, T1=10 s, T3=300 s, N2=10, and N1=256 bytes.

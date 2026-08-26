@@ -60,6 +60,13 @@ type controlEvent struct {
 	response bool
 }
 
+type xidEvent struct {
+	type_    ax25.Type
+	payload  []byte
+	final    bool
+	response bool
+}
+
 type Manager struct {
 	mu           sync.Mutex
 	operation    sync.Mutex
@@ -76,13 +83,19 @@ type Manager struct {
 	t1           time.Duration
 	n2           int
 	paclen       int
+	receiveN1    int
+	configuredT1 time.Duration
+	configuredN2 int
+	configuredN1 int
+	xid          chan xidEvent
+	xidCancel    context.CancelFunc
 	peerBusy     bool
 	rejectSent   bool
 	uaGraceUntil time.Time
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), xid: make(chan xidEvent, 4), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1, receiveN1: defaultN1, configuredT1: defaultT1, configuredN2: 10, configuredN1: defaultN1}
 }
 
 // Configure applies the negotiated-link defaults used for future operations.
@@ -94,13 +107,13 @@ func (m *Manager) Configure(t1 time.Duration, n2, n1 int) {
 		return
 	}
 	if t1 > 0 {
-		m.t1 = t1
+		m.t1, m.configuredT1 = t1, t1
 	}
 	if n2 > 0 {
-		m.n2 = n2
+		m.n2, m.configuredN2 = n2, n2
 	}
 	if n1 > 0 {
-		m.paclen = n1
+		m.paclen, m.receiveN1, m.configuredN1 = n1, n1, n1
 	}
 }
 
@@ -137,6 +150,79 @@ func (m *Manager) setState(s State, msg string) {
 	m.emit(Event{Type: "state", State: s, Message: msg})
 }
 func (m *Manager) State() State { m.mu.Lock(); defer m.mu.Unlock(); return m.state }
+
+func xidSettings(n1 int, t1 time.Duration, n2 int) ax25.XIDLinkSettings {
+	return ax25.XIDLinkSettings{Modulo: ax25.Modulo8, ReceiveN1: n1, ReceiveWindow: 1, T1Milliseconds: int(t1 / time.Millisecond), Retries: n2}
+}
+
+func (m *Manager) negotiateXID(ctx context.Context, send Sender, started chan struct{}) {
+	signalStarted := func() {
+		if started != nil {
+			close(started)
+			started = nil
+		}
+	}
+	defer signalStarted()
+	m.mu.Lock()
+	local := xidSettings(m.configuredN1, m.configuredT1, m.configuredN2)
+	timeout, attempts := m.configuredT1, m.configuredN2
+	m.mu.Unlock()
+	payload, err := ax25.EncodeXID(ax25.XIDParameters(local))
+	if err != nil {
+		return
+	}
+	frame := m.command(ax25.TypeXID, true, nil, 0, 0)
+	frame.Payload = payload
+	for attempt := 0; attempt < attempts; attempt++ {
+		if err := m.sendFrame(ctx, send, frame); err != nil {
+			return
+		}
+		signalStarted()
+		timer := time.NewTimer(timeout)
+		select {
+		case event := <-m.xid:
+			stopTimer(timer)
+			if event.type_ == ax25.TypeFRMR {
+				m.applyLegacyXIDDefaults()
+				m.emit(Event{Type: "notice", Message: "Stacja uzywa AX.25 starszego niz 2.2; zastosowano parametry zgodnosci"})
+				return
+			}
+			if !event.response || !event.final {
+				continue
+			}
+			parameters, decodeErr := ax25.DecodeXID(event.payload)
+			if decodeErr != nil {
+				continue
+			}
+			selected, peer, parseErr := ax25.NegotiateXID(parameters, local)
+			if parseErr != nil || selected.Modulo != ax25.Modulo8 || selected.FullDuplex || selected.SelectiveReject {
+				continue
+			}
+			m.mu.Lock()
+			m.paclen = min(m.configuredN1, peer.ReceiveN1)
+			m.t1 = time.Duration(max(local.T1Milliseconds, selected.T1Milliseconds)) * time.Millisecond
+			m.n2 = max(local.Retries, selected.Retries)
+			n1, t1, n2 := m.paclen, m.t1, m.n2
+			m.mu.Unlock()
+			m.emit(Event{Type: "notice", Message: fmt.Sprintf("XID: N1=%d B, T1=%s, N2=%d, modulo 8", n1, t1, n2)})
+			return
+		case <-timer.C:
+		case <-ctx.Done():
+			stopTimer(timer)
+			return
+		}
+	}
+	m.applyLegacyXIDDefaults()
+	m.emit(Event{Type: "notice", Message: "Brak odpowiedzi XID; zastosowano parametry zgodnosci AX.25 v2.0"})
+}
+
+func (m *Manager) applyLegacyXIDDefaults() {
+	m.mu.Lock()
+	m.paclen = min(m.configuredN1, 256)
+	m.t1 = 3 * time.Second
+	m.n2 = 10
+	m.mu.Unlock()
+}
 
 func (m *Manager) Connect(ctx context.Context, port, target string, via ...string) error {
 	m.operation.Lock()
@@ -179,7 +265,15 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.vr = 0
 	m.peerBusy = false
 	m.rejectSent = false
+	if m.xidCancel != nil {
+		m.xidCancel()
+	}
+	xidCtx, xidCancel := context.WithCancel(context.Background())
+	m.xidCancel = xidCancel
 	m.drain()
+	for len(m.xid) > 0 {
+		<-m.xid
+	}
 	m.mu.Unlock()
 	m.setState(AwaitingConnection, fmt.Sprintf("0/%d", m.n2))
 	f := m.command(ax25.TypeSABM, true, nil, 0, 0)
@@ -197,6 +291,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 				m.uaGraceUntil = time.Now().Add(time.Duration(m.n2) * m.t1)
 				m.mu.Unlock()
 				m.setState(Connected, "Sesja AX.25 polaczona")
+				xidStarted := make(chan struct{})
+				go m.negotiateXID(xidCtx, send, xidStarted)
+				<-xidStarted
 				return nil
 			}
 			if event.type_ == ax25.TypeDM && event.response && event.final {
@@ -223,11 +320,12 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		return nil
 	}
 	send := m.ports[m.port]
+	t1, n2 := m.t1, m.n2
 	m.drain()
 	m.mu.Unlock()
 	m.setState(AwaitingRelease, "Rozlaczanie")
 	f := m.command(ax25.TypeDISC, true, nil, 0, 0)
-	for attempt := 0; attempt < m.n2; attempt++ {
+	for attempt := 0; attempt < n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			break
 		}
@@ -237,7 +335,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 				m.failLink("Rozlaczono")
 				return nil
 			}
-		case <-time.After(m.t1):
+		case <-time.After(t1):
 		case <-ctx.Done():
 			break
 		}
@@ -255,7 +353,10 @@ func (m *Manager) Send(ctx context.Context, data []byte) error {
 func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress func(SendPacketProgress)) error {
 	m.operation.Lock()
 	defer m.operation.Unlock()
-	chunks := splitAX25Payload(data, m.paclen)
+	m.mu.Lock()
+	paclen := m.paclen
+	m.mu.Unlock()
+	chunks := splitAX25Payload(data, paclen)
 	for packet, chunk := range chunks {
 		if progress != nil {
 			progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "sending"})
@@ -334,7 +435,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 		return errors.New("AX.25 session is not connected")
 	}
 	send := m.ports[m.port]
-	ns, nr := m.vs, m.vr
+	ns, nr, t1, n2 := m.vs, m.vr, m.t1, m.n2
 	expected := (m.vs + 1) & 7
 	m.drainAck()
 	m.mu.Unlock()
@@ -348,7 +449,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 	m.mu.Unlock()
 	needSend := true
 	pollOnly := false
-	for attempt := 0; attempt < m.n2; attempt++ {
+	for attempt := 0; attempt < n2; attempt++ {
 		if err := m.waitRemoteReady(ctx); err != nil {
 			m.failLink("Zdalna stacja pozostaje zajeta")
 			return err
@@ -388,7 +489,7 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 			}
 			needSend = false
 		}
-		timer := time.NewTimer(m.t1)
+		timer := time.NewTimer(t1)
 		cycleDone := false
 		for {
 			select {
@@ -475,7 +576,10 @@ func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8
 	if err := m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr)); err != nil {
 		return acknowledgement{}, err
 	}
-	timer := time.NewTimer(m.t1)
+	m.mu.Lock()
+	t1 := m.t1
+	m.mu.Unlock()
+	timer := time.NewTimer(t1)
 	defer stopTimer(timer)
 	for {
 		select {
@@ -509,7 +613,10 @@ func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8
 
 func (m *Manager) probeLink(ctx context.Context, send Sender, nr uint8) error {
 	m.drainAck()
-	for attempt := 0; attempt < m.n2; attempt++ {
+	m.mu.Lock()
+	n2 := m.n2
+	m.mu.Unlock()
+	for attempt := 0; attempt < n2; attempt++ {
 		ack, err := m.pollAcknowledgement(ctx, send, nr)
 		if isLinkTermination(ack) {
 			return errors.New("AX.25 link terminated by remote station")
@@ -524,7 +631,10 @@ func (m *Manager) probeLink(ctx context.Context, send Sender, nr uint8) error {
 }
 
 func (m *Manager) waitRemoteReady(ctx context.Context) error {
-	for attempt := 0; attempt < m.n2; attempt++ {
+	m.mu.Lock()
+	t1, n2 := m.t1, m.n2
+	m.mu.Unlock()
+	for attempt := 0; attempt < n2; attempt++ {
 		m.mu.Lock()
 		busy := m.peerBusy
 		send, nr := m.ports[m.port], m.vr
@@ -536,7 +646,7 @@ func (m *Manager) waitRemoteReady(ctx context.Context) error {
 		if err := m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr)); err != nil {
 			return err
 		}
-		timer := time.NewTimer(m.t1)
+		timer := time.NewTimer(t1)
 		for {
 			select {
 			case ack := <-m.ack:
@@ -604,18 +714,42 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeXID:
 		if isCommand(f) {
+			if !f.PollFinal {
+				m.emit(Event{Type: "notice", Message: "Pominieto XID bez wymaganego P=1"})
+				break
+			}
 			m.mu.Lock()
-			n1, n2, t1 := m.paclen, m.n2, m.t1
+			local := xidSettings(m.configuredN1, m.configuredT1, m.configuredN2)
 			m.mu.Unlock()
-			payload, err := ax25.EncodeXID(ax25.LinkXIDParameters(n1, 1, int(t1/time.Millisecond), n2))
-			if err == nil {
+			command, err := ax25.DecodeXID(f.Payload)
+			selected, offered, negotiateErr := ax25.NegotiateXID(command, local)
+			if err == nil && negotiateErr == nil {
+				payload, encodeErr := ax25.EncodeXID(ax25.XIDParameters(selected))
+				if encodeErr != nil {
+					break
+				}
 				m.mu.Lock()
+				m.paclen = min(m.configuredN1, offered.ReceiveN1)
+				m.t1 = time.Duration(selected.T1Milliseconds) * time.Millisecond
+				m.n2 = selected.Retries
 				send := m.ports[port]
 				remote, local := m.remote, m.local
 				digis := append([]ax25.Address(nil), m.digipeaters...)
 				m.mu.Unlock()
 				remote.CommandResponse, local.CommandResponse = false, true
 				_ = m.sendFrame(context.Background(), send, ax25.Frame{Destination: remote, Source: local, Digipeaters: digis, Type: ax25.TypeXID, PollFinal: f.PollFinal, Payload: payload})
+			}
+		} else {
+			select {
+			case m.xid <- xidEvent{type_: f.Type, payload: append([]byte(nil), f.Payload...), final: f.PollFinal, response: true}:
+			default:
+			}
+		}
+	case ax25.TypeFRMR:
+		if isResponse(f) {
+			select {
+			case m.xid <- xidEvent{type_: f.Type, final: f.PollFinal, response: true}:
+			default:
 			}
 		}
 	case ax25.TypeUA, ax25.TypeDM:
@@ -701,7 +835,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 		default:
 		}
 	case ax25.TypeI:
-		if (state != Connected && state != TimerRecovery) || !isCommand(f) || len(f.Payload) > m.paclen {
+		if (state != Connected && state != TimerRecovery) || !isCommand(f) || len(f.Payload) > m.receiveN1 {
 			return true
 		}
 		m.mu.Lock()
@@ -804,11 +938,16 @@ func isLinkTermination(ack acknowledgement) bool {
 
 func (m *Manager) failLink(message string) {
 	m.mu.Lock()
+	if m.xidCancel != nil {
+		m.xidCancel()
+		m.xidCancel = nil
+	}
 	m.state = Disconnected
 	m.vs, m.va, m.vr = 0, 0, 0
 	m.peerBusy = false
 	m.rejectSent = false
 	m.uaGraceUntil = time.Time{}
+	m.t1, m.n2, m.paclen, m.receiveN1 = m.configuredT1, m.configuredN2, m.configuredN1, m.configuredN1
 	m.mu.Unlock()
 	m.emit(Event{Type: "state", State: Disconnected, Message: message})
 }

@@ -5,7 +5,11 @@
 Primary source: ARRL/TAPR AX.25 Link Access Protocol for Amateur Packet Radio,
 Version 2.2, July 1998:
 
-https://tapr.org/pdf/AX25.2.2.pdf
+https://www.ax25.net/AX25.2.2-Jul%2098-2.pdf
+
+TAPR archive index:
+
+https://tapr.org/ftp-archive/
 
 State diagrams:
 
@@ -13,16 +17,23 @@ https://web.tapr.org/product_docs/tnc95/AX.25.diagram.pdf
 
 The connected-mode implementation currently uses modulo 8 with a one-frame
 window. The codec recognizes SABME, SREJ, XID, TEST and FRMR. SREJ triggers a
-selective retry of the single outstanding frame; SABME/modulo 128, XID
-parameter negotiation and a multi-frame selective-repeat window remain
-deferred. Session handling validates command/response and poll/final semantics
+selective retry of the single outstanding frame; SABME/modulo 128 and a
+multi-frame selective-repeat window remain deferred. Session handling validates
+command/response and poll/final semantics
 for connection setup and release, pauses transmission while the peer reports
 RNR, and uses REJ recovery for out-of-sequence I frames.
 
 The default N1 is 256 octets. T1 defaults to 10 seconds for both outgoing and
 incoming links, while the terminal T3 poll interval is 5 minutes. N1, T1, T3
 and N2 are operator-configurable and the configured N1, T1 and N2 are
-advertised in XID responses. Link establishment and release require UA/DM
+advertised and negotiated through XID. After UA, an outgoing link sends an XID
+command with P=1 and accepts only an XID response with F=1. N1 and window are
+receive-limit notifications; the peer receive N1 limits transmitted frame size.
+T1 and N2 use the greater offered value, while duplex, reject mode and modulo
+fall back to the mutually supported lower capability. UltimatePR remains
+half-duplex, implicit REJ, modulo 8 and window k=1. A peer that rejects XID with
+FRMR or does not respond causes the AX.25 v2.0 compatibility defaults to be
+used. Link establishment and release require UA/DM
 responses with the Final bit set for locally transmitted SABM/DISC commands
 carrying Poll, as required by the AX.25 v2.2 state diagrams.
 

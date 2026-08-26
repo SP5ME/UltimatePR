@@ -41,6 +41,10 @@ type inboundLink struct {
 	closeOnce     sync.Once
 	peerBusy      bool
 	rejectSent    bool
+	t1            time.Duration
+	n2            int
+	paclen        int
+	receiveN1     int
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
@@ -78,7 +82,9 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 
 	if link == nil {
 		if service != nil && f.Type == ax25.TypeXID && isCommand(f) {
-			_ = m.sendXIDResponse(port, f)
+			if f.PollFinal {
+				_ = m.sendXIDResponse(port, f, nil)
+			}
 			return true
 		}
 		if service != nil && f.Type == ax25.TypeSABME && isCommand(f) {
@@ -104,7 +110,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		if f.Type != ax25.TypeSABM || service == nil || !isCommand(f) {
 			return false
 		}
-		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{})}
+		m.mu.Lock()
+		linkT1, linkN2, linkN1 := m.t1, m.n2, m.paclen
+		m.mu.Unlock()
+		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
 		created := false
 		m.mu.Lock()
 		if existing := m.links[key]; existing != nil {
@@ -152,8 +161,8 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			link.close()
 		}
 	case ax25.TypeXID:
-		if isCommand(f) {
-			_ = m.sendXIDResponse(port, f)
+		if isCommand(f) && f.PollFinal {
+			_ = m.sendXIDResponse(port, f, link)
 		}
 	case ax25.TypeSABM:
 		if !isCommand(f) {
@@ -195,7 +204,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			_ = link.sendControl(ax25.TypeRR, true, nr)
 		}
 	case ax25.TypeI:
-		if !isCommand(f) || f.PID == nil || *f.PID != 0xF0 || len(f.Payload) > m.paclen {
+		link.mu.Lock()
+		receiveN1 := link.receiveN1
+		link.mu.Unlock()
+		if !isCommand(f) || f.PID == nil || *f.PID != 0xF0 || len(f.Payload) > receiveN1 {
 			return true
 		}
 		link.mu.Lock()
@@ -279,6 +291,9 @@ func (l *inboundLink) run(service AX25Service) {
 }
 
 func (l *inboundLink) disconnect() error {
+	l.mu.Lock()
+	t1, n2 := l.t1, l.n2
+	l.mu.Unlock()
 	for {
 		select {
 		case <-l.control:
@@ -287,11 +302,11 @@ func (l *inboundLink) disconnect() error {
 		}
 	}
 drained:
-	for attempt := 0; attempt < l.mux.n2; attempt++ {
+	for attempt := 0; attempt < n2; attempt++ {
 		if err := l.sendCommand(ax25.TypeDISC, true, 0); err != nil {
 			return err
 		}
-		timer := time.NewTimer(l.mux.t1)
+		timer := time.NewTimer(t1)
 		select {
 		case event := <-l.control:
 			stopTimer(timer)
@@ -315,9 +330,12 @@ func (l *inboundLink) transmit() {
 				return
 			}
 			for len(data) > 0 {
+				l.mu.Lock()
+				paclen := l.paclen
+				l.mu.Unlock()
 				n := len(data)
-				if n > l.mux.paclen {
-					n = l.mux.paclen
+				if n > paclen {
+					n = paclen
 				}
 				if l.sendChunk(data[:n]) != nil {
 					l.close()
@@ -333,7 +351,7 @@ func (l *inboundLink) transmit() {
 
 func (l *inboundLink) sendChunk(data []byte) error {
 	l.mu.Lock()
-	ns, nr := l.vs, l.vr
+	ns, nr, t1, n2 := l.vs, l.vr, l.t1, l.n2
 	expected := (ns + 1) & 7
 	l.mu.Unlock()
 	pid := byte(0xF0)
@@ -343,7 +361,7 @@ func (l *inboundLink) sendChunk(data []byte) error {
 	l.vs = expected
 	l.mu.Unlock()
 	needSend := true
-	for attempt := 0; attempt < l.mux.n2; attempt++ {
+	for attempt := 0; attempt < n2; attempt++ {
 		if err := l.waitRemoteReady(); err != nil {
 			return err
 		}
@@ -364,11 +382,11 @@ func (l *inboundLink) sendChunk(data []byte) error {
 			if (ack.type_ == ax25.TypeREJ || ack.type_ == ax25.TypeSREJ) && ack.nr == ns {
 				needSend = true
 			}
-		case <-time.After(l.mux.t1):
+		case <-time.After(t1):
 			if err := l.sendControl(ax25.TypeRR, true, nr); err != nil {
 				return err
 			}
-			pollTimer := time.NewTimer(l.mux.t1)
+			pollTimer := time.NewTimer(t1)
 			pollDone := false
 			for !pollDone {
 				select {
@@ -400,7 +418,10 @@ func (l *inboundLink) sendChunk(data []byte) error {
 }
 
 func (l *inboundLink) waitRemoteReady() error {
-	for attempt := 0; attempt < l.mux.n2; attempt++ {
+	l.mu.Lock()
+	t1, n2 := l.t1, l.n2
+	l.mu.Unlock()
+	for attempt := 0; attempt < n2; attempt++ {
 		l.mu.Lock()
 		busy, nr := l.peerBusy, l.vr
 		l.mu.Unlock()
@@ -426,7 +447,7 @@ func (l *inboundLink) waitRemoteReady() error {
 				return nil
 			}
 			l.mu.Unlock()
-		case <-time.After(l.mux.t1):
+		case <-time.After(t1):
 		case <-l.closed:
 			return io.ErrClosedPipe
 		}
@@ -449,11 +470,26 @@ func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, 
 	return send(context.Background(), b)
 }
 
-func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame) error {
+func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame, link *inboundLink) error {
 	m.mu.Lock()
 	n1, n2, t1 := m.paclen, m.n2, m.t1
 	m.mu.Unlock()
-	payload, err := ax25.EncodeXID(ax25.LinkXIDParameters(n1, 1, int(t1/time.Millisecond), n2))
+	command, err := ax25.DecodeXID(received.Payload)
+	if err != nil {
+		return err
+	}
+	selected, offered, err := ax25.NegotiateXID(command, xidSettings(n1, t1, n2))
+	if err != nil {
+		return err
+	}
+	if link != nil {
+		link.mu.Lock()
+		link.paclen = min(n1, offered.ReceiveN1)
+		link.t1 = time.Duration(selected.T1Milliseconds) * time.Millisecond
+		link.n2 = selected.Retries
+		link.mu.Unlock()
+	}
+	payload, err := ax25.EncodeXID(ax25.XIDParameters(selected))
 	if err != nil {
 		return err
 	}

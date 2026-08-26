@@ -84,6 +84,13 @@ Zakładka konfiguracji `Terminal` pozwala wybrać zakończenie wiersza oraz
 parametry N1, T1, T3 i N2. Domyślny profil to `CR`, N1=256 bajtów, T1=10 s,
 T3=300 s i N2=10. Przycisk `Przywróć domyślne` odtwarza cały profil.
 
+Po zestawieniu połączenia terminal wysyła `XID(P=1)`. Odpowiedź `XID(F=1)`
+ustala parametry łącza: limit odbiorczy N1 partnera ogranicza wielkość
+wysyłanych ramek, a dla T1 i N2 stosowana jest większa z wartości obu stacji.
+Nieobsługiwane full-duplex, modulo 128 i większe okno są bezpiecznie obniżane
+do profilu half-duplex, modulo 8, implicit REJ i k=1. Brak odpowiedzi XID lub
+odpowiedź FRMR włącza profil zgodności ze starszym AX.25.
+
 Enter może wysłać również pusty wiersz. Wysyłanie odbywa się przez uporządkowaną
 kolejkę, dzięki czemu interfejs nadal przyjmuje polecenie rozłączenia podczas
 oczekiwania na potwierdzenie radiowe. Anulowane lub niepotwierdzone wiadomości
