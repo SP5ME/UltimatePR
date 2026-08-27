@@ -12,6 +12,7 @@
 - Long messages, including unbroken strings, no longer widen terminal rows; conversations now scroll vertically only.
 - The digipeater supports `VIA` connections across different TNCs: it selects the destination station port from the newest direct MHEARD entry and retains input-port repetition when no usable route exists.
 - Update checks and installation no longer use the rate-limited GitHub API: releases publish `VERSION.txt`, while packages and SHA-256 sums are downloaded directly from `main-latest` or `dev-latest`.
+- Terminal packet status now distinguishes physical transmission from AX.25 acknowledgement: after sending it shows that ACK is pending, and the final green `ACK` appears only after a valid `N(R)`.
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 

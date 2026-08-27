@@ -164,16 +164,21 @@ func TestSendWithProgressReportsEveryPaclenFrame(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if len(progress) != 6 {
-		t.Fatalf("progress events=%d, want 6", len(progress))
+	if len(progress) != 9 {
+		t.Fatalf("progress events=%d, want 9", len(progress))
 	}
 	for packet := 1; packet <= 3; packet++ {
-		sending, sentState := progress[(packet-1)*2], progress[(packet-1)*2+1]
+		sending := progress[(packet-1)*3]
+		waiting := progress[(packet-1)*3+1]
+		acknowledged := progress[(packet-1)*3+2]
 		if sending.Packet != packet || sending.Total != 3 || sending.State != "sending" {
 			t.Fatalf("sending progress=%+v", sending)
 		}
-		if sentState.Packet != packet || sentState.Total != 3 || sentState.State != "sent" {
-			t.Fatalf("sent progress=%+v", sentState)
+		if waiting.Packet != packet || waiting.Total != 3 || waiting.State != "waiting_ack" {
+			t.Fatalf("waiting ACK progress=%+v", waiting)
+		}
+		if acknowledged.Packet != packet || acknowledged.Total != 3 || acknowledged.State != "sent" {
+			t.Fatalf("ACK progress=%+v", acknowledged)
 		}
 	}
 }

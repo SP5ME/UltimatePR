@@ -367,7 +367,11 @@ func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress fu
 		if progress != nil {
 			progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "sending"})
 		}
-		if err := m.sendChunk(ctx, chunk); err != nil {
+		if err := m.sendChunk(ctx, chunk, func() {
+			if progress != nil {
+				progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "waiting_ack"})
+			}
+		}); err != nil {
 			if progress != nil {
 				progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "error", Error: err.Error()})
 			}
@@ -434,7 +438,7 @@ func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 		}
 	}
 }
-func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
+func (m *Manager) sendChunk(ctx context.Context, data []byte, transmitted func()) error {
 	m.mu.Lock()
 	if m.state != Connected {
 		m.mu.Unlock()
@@ -492,6 +496,9 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte) error {
 			if err := m.sendFrame(ctx, send, f); err != nil {
 				m.failLink(err.Error())
 				return err
+			}
+			if transmitted != nil {
+				transmitted()
 			}
 			needSend = false
 		}
