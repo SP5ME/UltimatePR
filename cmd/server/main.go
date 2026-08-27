@@ -248,26 +248,25 @@ func main() {
 	}
 	sendBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
-		return sendBeaconFrame(sendCtx, source, stationBeaconVia, beaconText(source, cfg.Application.Locator, heard.List(), digiAliases...))
+		return sendBeaconFrame(sendCtx, source, stationBeaconVia, expandBeaconText(cfg.Beacon.Text, source, cfg.Application.OperatorName, cfg.Application.Locator, cfg.Application.QTH))
 	}
 	sendBBSBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}
 		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, heard.List(), digiAliases...))
 	}
 	sendUPRD := func(sendCtx context.Context) error {
+		frame, enabled, err := uprdMgr.BuildFrame("")
+		if err != nil {
+			return err
+		}
+		if !enabled || frame == nil {
+			return fmt.Errorf("UPRD is disabled")
+		}
 		sent := 0
 		failed := make([]string, 0)
 		for _, portID := range portIDs {
 			runtime := runtimes[portID]
 			if runtime == nil || !runtime.enabled || !runtime.port.Status().Connected {
-				continue
-			}
-			frame, _, err := uprdMgr.BuildFrame(portID)
-			if err != nil {
-				failed = append(failed, portID+": "+err.Error())
-				continue
-			}
-			if frame == nil {
 				continue
 			}
 			send := senders[portID]
@@ -642,6 +641,15 @@ func beaconText(source ax25.Address, locator string, entries []mheard.Entry, exc
 		lines = append(lines, strings.Join(calls, ","))
 	}
 	return strings.Join(lines, "\r")
+}
+
+func expandBeaconText(template string, source ax25.Address, name, locator, qth string) string {
+	return strings.NewReplacer(
+		"{CALL}", strings.ToUpper(strings.TrimSpace(source.Callsign)),
+		"{NAME}", strings.TrimSpace(name),
+		"{LOC}", strings.ToUpper(strings.TrimSpace(locator)),
+		"{QTH}", strings.TrimSpace(qth),
+	).Replace(template)
 }
 
 func withoutCallsigns(calls []string, excluded ...ax25.Address) []string {

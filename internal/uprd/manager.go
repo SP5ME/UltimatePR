@@ -189,7 +189,8 @@ func (m *Manager) BuildFrame(port string) ([]byte, bool, error) {
 	if m == nil || !m.cfg.Enabled {
 		return nil, false, nil
 	}
-	entries := m.heard.ListByPort(port)
+	_ = port
+	entries := m.heard.List()
 	filtered := make([]string, 0, len(entries))
 	seen := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
@@ -278,6 +279,7 @@ func (m *Manager) Snapshot(activePorts []string) Snapshot {
 		}
 		return true
 	})
+	directCalls := make(map[string]struct{})
 	for _, entry := range direct {
 		if entry.SourceType == "reported" {
 			continue
@@ -285,6 +287,9 @@ func (m *Manager) Snapshot(activePorts []string) Snapshot {
 		call := strings.TrimSpace(entry.Callsign)
 		if call == "" {
 			continue
+		}
+		if !entry.Indirect {
+			directCalls[BaseCall(call)] = struct{}{}
 		}
 		n := ensureNode(nodes, call)
 		n.Callsign = call
@@ -318,6 +323,9 @@ func (m *Manager) Snapshot(activePorts []string) Snapshot {
 		for idx, heardCall := range report.Heard {
 			heardCall = BaseCall(heardCall)
 			if heardCall == "" {
+				continue
+			}
+			if _, directlyHeard := directCalls[heardCall]; directlyHeard {
 				continue
 			}
 			heardNode := ensureNode(nodes, heardCall)
@@ -543,7 +551,7 @@ func bestRoutes(root string, now time.Time, nodes map[string]*Node, edges []Edge
 				next.firstPort = edge.InterfaceID
 				next.firstHop = child
 			}
-			if prev, ok := best[child]; !ok || next.score.After(prev.score) {
+			if prev, ok := best[child]; !ok || len(next.path) < len(prev.path) || (len(next.path) == len(prev.path) && next.score.After(prev.score)) {
 				best[child] = next
 				queue = append(queue, next)
 			}
