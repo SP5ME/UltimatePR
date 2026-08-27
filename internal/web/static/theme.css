@@ -40,6 +40,10 @@
 [data-theme="light"] .heard-row small b { color: #405247; }
 [data-theme="light"] .history-row:hover,
 [data-theme="light"] .heard-row:hover { background: #267d450d; }
+[data-theme="light"] #sendForm #command { border: 1px solid #b7c8bb; background: #f9fcfa; color: #173724; caret-color: #173724; }
+[data-theme="light"] #sendForm #command:focus { border-color: #267d45; box-shadow: inset 0 0 0 1px #267d45; }
+[data-theme="light"] .heard-row .mheard-via,
+[data-theme="light"] .heard-row time { color: #52675a; }
 [data-theme="light"] #sendForm button { border-color: #267d45; background: #267d45; color: #fff; font-weight: 800; }
 [data-theme="light"] #sendForm button:disabled { border-color: #aebbb0; background: #dce3dd; color: #738077; }
 [data-theme="light"] .session-tab { border-color: #9cad9e; background: #f5f8f5; color: #405247; }

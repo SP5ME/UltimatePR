@@ -4,6 +4,7 @@
 
 - Pole wpisywania ma wysokość dwóch wierszy, zawija długi tekst i przewija go pionowo, dzięki czemu można przejrzeć oraz poprawić całą wiadomość przed wysłaniem.
 - Lista MHEARD pokazuje przy każdej stacji wyrównany do prawej czas w minutach od ostatniej odebranej ramki.
+- Poprawiono jasny motyw dwuwierszowego pola terminala oraz układ MHEARD: czas jest czytelniejszy i pozostaje przy prawej krawędzi, a środkowa kolumna mieści opcjonalne `via`.
 - Enter nadal wysyła wiadomość, a Shift+Enter pozwala ręcznie dodać podział wiersza. Wysłany tekst jest również zawijany w widoku rozmowy.
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy

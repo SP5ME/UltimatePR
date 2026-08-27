@@ -4,6 +4,7 @@
 
 - The message field is two lines high, wraps long text and scrolls vertically so the whole message can be reviewed and corrected before sending.
 - MHEARD shows a right-aligned minute counter for every station, measured from its most recently received frame.
+- Fixed the two-line terminal field in the light theme and refined MHEARD: the time is more readable and stays at the right edge, while a middle column holds optional `via` information.
 - Enter still sends the message, while Shift+Enter inserts a manual line break. Sent text also wraps in the conversation view.
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
