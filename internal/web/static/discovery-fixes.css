@@ -1,0 +1,5 @@
+#beaconTextVisible,#beaconDestinationVisible,#beaconViaVisible,#beaconIntervalVisible{background:#f7fbf8;color:#13231a;border-color:#bcd1c1}
+#beaconTextVisible{min-height:90px;resize:vertical}
+#mheardPanelTabs{width:150px;grid-template-columns:1fr 1fr}
+.map-actions{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px}
+.map-actions button{width:auto;margin:0;padding:0 14px}

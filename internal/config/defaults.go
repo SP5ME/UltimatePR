@@ -22,7 +22,7 @@ func New(mode, callsign, locator, qth, language string, stationSSID, nodeSSID, b
 		Server:      Station{Callsign: call, SSID: nodeSSID},
 		Terminal:    Station{Callsign: call, SSID: stationSSID},
 		Web:         Web{Listen: "0.0.0.0:8080", Username: "admin", AllowedAddresses: []string{"0.0.0.0", "::"}},
-		Beacon:      Beacon{Enabled: false, Destination: "BEACON", Text: call + " UltimatePR", IntervalMinutes: 30},
+		Beacon:      Beacon{Enabled: false, Destination: "BEACON", Text: "{CALL} {LOC} UltimatePR", IntervalMinutes: 30},
 		UPRD:        UPRD{Enabled: false, IntervalSeconds: 600, MHeardLimit: 5},
 		History:     History{Enabled: true, Database: "/var/lib/ultimatepr/history.json", MaxStations: 200, MaxSessionsPerStation: 50, MaxLinesPerStation: 2000, MaxBytes: 10485760, RetentionDays: 90},
 		BBS: BBS{Enabled: full, Listen: "127.0.0.1:8023", ForwardListen: "127.0.0.1:8024", Database: "/var/lib/ultimatepr/bbs.json", Title: call + " BBS", Callsign: call, SSID: bbsSSID, Language: lang,
