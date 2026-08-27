@@ -528,7 +528,10 @@ func TestT1N2ExhaustionDisconnectsLostLink(t *testing.T) {
 	if f := decodeFrame(t, <-sent); f.Type != ax25.TypeI {
 		t.Fatalf("first=%+v", f)
 	}
-	for attempt := 0; attempt < m.n2; attempt++ {
+	m.mu.Lock()
+	attempts := m.n2
+	m.mu.Unlock()
+	for attempt := 0; attempt < attempts; attempt++ {
 		if poll := decodeFrame(t, <-sent); poll.Type != ax25.TypeRR || !poll.PollFinal {
 			t.Fatalf("poll %d=%+v", attempt+1, poll)
 		}

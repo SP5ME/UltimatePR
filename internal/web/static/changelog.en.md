@@ -8,6 +8,7 @@
 - Enter still sends the message, while Shift+Enter inserts a manual line break. Sent text also wraps in the conversation view.
 - Shortened the beacon: it no longer repeats the station callsign or QTH; it keeps the locator, `DIGI` and `UltimatePR` identifiers, and the recently heard station list.
 - XID recovery now uses the separate TAPR management parameters `TM201` and `NM201`: one command and at most two retransmissions at 10-second intervals, independently of the `T1` and `N2` settings.
+- Removed a data race from the T1/N2 exhaustion test by reading the negotiated retry count under the session manager lock.
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 

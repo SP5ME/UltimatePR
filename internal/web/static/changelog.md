@@ -8,6 +8,7 @@
 - Enter nadal wysyła wiadomość, a Shift+Enter pozwala ręcznie dodać podział wiersza. Wysłany tekst jest również zawijany w widoku rozmowy.
 - Skrócono beacon: nie powtarza już własnego znaku ani QTH; pozostawia locator, oznaczenia `DIGI` i `UltimatePR` oraz listę ostatnio słyszanych stacji.
 - Procedura XID używa teraz osobnych parametrów zarządzania TAPR `TM201` i `NM201`: jedna komenda oraz najwyżej dwie retransmisje co 10 sekund, niezależnie od ustawień `T1` i `N2`.
+- Usunięto wyścig danych w teście wyczerpania T1/N2: test odczytuje teraz negocjowaną liczbę prób pod blokadą menedżera sesji.
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 
