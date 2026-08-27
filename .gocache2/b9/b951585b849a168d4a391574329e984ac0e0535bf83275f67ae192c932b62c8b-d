@@ -1,0 +1,13 @@
+# test log
+open ../../configs/example.yaml
+getenv GOTMPDIR
+open ../../configs/example.yaml
+open F:\GitHub\BBS-Serwer\.gotmp\TestSaveRejectsInvalidWithoutChangingFile2918512329\001\config.yaml.tmp
+open F:\GitHub\BBS-Serwer\.gotmp\TestSaveRejectsInvalidWithoutChangingFile2918512329\001\config.yaml.tmp
+open F:\GitHub\BBS-Serwer\.gotmp\TestSaveRejectsInvalidWithoutChangingFile2918512329\001\config.yaml
+open F:\GitHub\BBS-Serwer\.gotmp
+open ../../configs/example.yaml
+getenv GOTMPDIR
+open F:\GitHub\BBS-Serwer\.gotmp\TestSaveModelRoundTrip1340178662\001\config.yaml.tmp
+open F:\GitHub\BBS-Serwer\.gotmp\TestSaveModelRoundTrip1340178662\001\config.yaml
+open F:\GitHub\BBS-Serwer\.gotmp

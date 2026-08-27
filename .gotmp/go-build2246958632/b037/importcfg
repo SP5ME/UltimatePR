@@ -1,0 +1,6 @@
+# import config
+packagefile internal/race=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b028\_pkg_.a
+packagefile internal/sync=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b038\_pkg_.a
+packagefile internal/synctest=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b040\_pkg_.a
+packagefile runtime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b010\_pkg_.a
+packagefile sync/atomic=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b039\_pkg_.a

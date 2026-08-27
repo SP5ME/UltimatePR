@@ -1,0 +1,5 @@
+# import config
+packagefile internal/bisect=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b047\_pkg_.a
+packagefile internal/godebugs=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b016\_pkg_.a
+packagefile sync=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b037\_pkg_.a
+packagefile sync/atomic=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b039\_pkg_.a

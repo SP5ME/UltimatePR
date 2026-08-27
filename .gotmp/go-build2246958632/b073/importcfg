@@ -1,0 +1,5 @@
+# import config
+packagefile internal/godebug=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b046\_pkg_.a
+packagefile math=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b060\_pkg_.a
+packagefile sync=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b037\_pkg_.a
+packagefile sync/atomic=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b039\_pkg_.a

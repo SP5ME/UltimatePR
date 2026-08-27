@@ -1,0 +1,5 @@
+# import config
+packagefile internal/abi=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b006\_pkg_.a
+packagefile internal/goarch=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b007\_pkg_.a
+packagefile internal/unsafeheader=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b009\_pkg_.a
+packagefile runtime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b010\_pkg_.a

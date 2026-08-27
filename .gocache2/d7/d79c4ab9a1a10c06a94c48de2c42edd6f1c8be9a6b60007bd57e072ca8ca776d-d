@@ -1,0 +1,10 @@
+# test log
+getenv GOTMPDIR
+open F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001\bbs.json
+stat F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001
+open F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001\bbs.json.tmp
+stat F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001
+open F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001\bbs.json.tmp
+stat F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001
+open F:\GitHub\BBS-Serwer\.gotmp\TestNodeEntersBBSAndReturns2400189605\001\bbs.json.tmp
+open F:\GitHub\BBS-Serwer\.gotmp

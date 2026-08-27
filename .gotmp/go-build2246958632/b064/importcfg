@@ -1,0 +1,9 @@
+# import config
+packagefile errors=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b004\_pkg_.a
+packagefile internal/oserror=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b051\_pkg_.a
+packagefile internal/runtime/syscall/windows=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b031\_pkg_.a
+packagefile internal/syscall/windows/sysdll=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b049\_pkg_.a
+packagefile runtime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b010\_pkg_.a
+packagefile structs=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b065\_pkg_.a
+packagefile sync=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b037\_pkg_.a
+packagefile syscall=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b050\_pkg_.a

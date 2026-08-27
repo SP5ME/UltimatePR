@@ -1,0 +1,25 @@
+# import config
+packagefile internal/abi=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b006\_pkg_.a
+packagefile internal/bytealg=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b011\_pkg_.a
+packagefile internal/byteorder=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b013\_pkg_.a
+packagefile internal/chacha8rand=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b014\_pkg_.a
+packagefile internal/coverage/rtcov=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b015\_pkg_.a
+packagefile internal/cpu=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b012\_pkg_.a
+packagefile internal/goarch=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b007\_pkg_.a
+packagefile internal/godebugs=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b016\_pkg_.a
+packagefile internal/goexperiment=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b017\_pkg_.a
+packagefile internal/goos=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b018\_pkg_.a
+packagefile internal/profilerecord=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b019\_pkg_.a
+packagefile internal/runtime/atomic=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b020\_pkg_.a
+packagefile internal/runtime/exithook=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b021\_pkg_.a
+packagefile internal/runtime/gc=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b022\_pkg_.a
+packagefile internal/runtime/gc/scan=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b023\_pkg_.a
+packagefile internal/runtime/maps=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b025\_pkg_.a
+packagefile internal/runtime/math=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b029\_pkg_.a
+packagefile internal/runtime/pprof/label=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b030\_pkg_.a
+packagefile internal/runtime/sys=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b024\_pkg_.a
+packagefile internal/runtime/syscall/windows=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b031\_pkg_.a
+packagefile internal/strconv=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b032\_pkg_.a
+packagefile internal/stringslite=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b034\_pkg_.a
+packagefile internal/trace/tracev2=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b035\_pkg_.a
+packagefile math/bits=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b033\_pkg_.a

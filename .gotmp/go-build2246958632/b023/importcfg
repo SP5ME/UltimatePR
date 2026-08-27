@@ -1,0 +1,5 @@
+# import config
+packagefile internal/cpu=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b012\_pkg_.a
+packagefile internal/goarch=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b007\_pkg_.a
+packagefile internal/runtime/gc=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b022\_pkg_.a
+packagefile internal/runtime/sys=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b024\_pkg_.a

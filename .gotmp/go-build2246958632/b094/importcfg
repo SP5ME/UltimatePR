@@ -1,0 +1,9 @@
+# import config
+packagefile bytes=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b003\_pkg_.a
+packagefile crypto/internal/fips140=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b089\_pkg_.a
+packagefile crypto/internal/fips140deps/byteorder=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b095\_pkg_.a
+packagefile crypto/internal/fips140deps/cpu=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b096\_pkg_.a
+packagefile crypto/internal/impl=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b097\_pkg_.a
+packagefile errors=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b004\_pkg_.a
+packagefile hash=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b085\_pkg_.a
+packagefile math/bits=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b033\_pkg_.a

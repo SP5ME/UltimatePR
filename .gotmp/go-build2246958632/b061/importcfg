@@ -1,0 +1,6 @@
+# import config
+packagefile errors=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b004\_pkg_.a
+packagefile internal/bytealg=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b011\_pkg_.a
+packagefile internal/strconv=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b032\_pkg_.a
+packagefile internal/stringslite=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b034\_pkg_.a
+packagefile unicode/utf8=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b043\_pkg_.a

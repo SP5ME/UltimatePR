@@ -1,0 +1,17 @@
+# import config
+packagefile errors=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b004\_pkg_.a
+packagefile internal/abi=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b006\_pkg_.a
+packagefile internal/bytealg=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b011\_pkg_.a
+packagefile internal/goarch=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b007\_pkg_.a
+packagefile internal/race=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b028\_pkg_.a
+packagefile internal/runtime/maps=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b025\_pkg_.a
+packagefile internal/runtime/sys=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b024\_pkg_.a
+packagefile internal/strconv=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b032\_pkg_.a
+packagefile internal/unsafeheader=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b009\_pkg_.a
+packagefile iter=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b041\_pkg_.a
+packagefile math=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b060\_pkg_.a
+packagefile runtime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b010\_pkg_.a
+packagefile strconv=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b061\_pkg_.a
+packagefile sync=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b037\_pkg_.a
+packagefile unicode=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b042\_pkg_.a
+packagefile unicode/utf8=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b043\_pkg_.a

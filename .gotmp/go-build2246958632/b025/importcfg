@@ -1,0 +1,8 @@
+# import config
+packagefile internal/abi=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b006\_pkg_.a
+packagefile internal/asan=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b026\_pkg_.a
+packagefile internal/goarch=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b007\_pkg_.a
+packagefile internal/msan=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b027\_pkg_.a
+packagefile internal/race=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b028\_pkg_.a
+packagefile internal/runtime/math=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b029\_pkg_.a
+packagefile internal/runtime/sys=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b024\_pkg_.a

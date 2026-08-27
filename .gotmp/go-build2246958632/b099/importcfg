@@ -1,0 +1,5 @@
+# import config
+packagefile crypto/internal/constanttime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b100\_pkg_.a
+packagefile crypto/internal/fips140/alias=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b091\_pkg_.a
+packagefile crypto/internal/fips140deps/byteorder=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b095\_pkg_.a
+packagefile math/bits=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b033\_pkg_.a

@@ -1,0 +1,5 @@
+# import config
+packagefile crypto/internal/fips140deps/godebug=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b090\_pkg_.a
+packagefile errors=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b004\_pkg_.a
+packagefile runtime=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b010\_pkg_.a
+packagefile strings=F:\GitHub\BBS-Serwer\.gotmp\go-build2246958632\b071\_pkg_.a
