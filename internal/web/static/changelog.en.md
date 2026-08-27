@@ -12,6 +12,7 @@
 - Long messages, including unbroken strings, no longer widen terminal rows; conversations now scroll vertically only.
 - The digipeater supports `VIA` connections across different TNCs: it selects the destination station port from the newest direct MHEARD entry and retains input-port repetition when no usable route exists.
 - Improved cross-TNC operation for ports with different speeds: every TNC keeps an independent queue, connected-mode retries are not discarded as UI duplicates, and an echoed frame with an already repeated VIA no longer overwrites the direct MHEARD route.
+- When the destination station port is not known yet, the initial VIA frames are forwarded to the independent queues of every active TNC; the response teaches the direct route and subsequent traffic uses only that port.
 - Update checks and installation no longer use the rate-limited GitHub API: releases publish `VERSION.txt`, while packages and SHA-256 sums are downloaded directly from `main-latest` or `dev-latest`.
 - Terminal packet status now distinguishes physical transmission from AX.25 acknowledgement: after sending it shows that ACK is pending, and the final green `ACK` appears only after a valid `N(R)`.
 - For multi-frame messages, acknowledged parts are progressively merged into one text; the previous packet status disappears, leaving only the final ACK of the last packet, for example `3/3`.

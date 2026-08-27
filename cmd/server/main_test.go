@@ -51,23 +51,30 @@ func TestParseUltimatePRBeaconAndExcludeOwnCalls(t *testing.T) {
 	}
 }
 
-func TestDigipeaterOutputPortUsesMHeardCrossPort(t *testing.T) {
+func TestDigipeaterOutputPortsUsesMHeardAndDiscoversUnknown(t *testing.T) {
 	heard := mheard.New(10)
 	heard.Heard("SQ9MDD", "tnc-x")
 	heard.Heard("SR5DDD", "tnc-y")
-	usable := func(port string) bool { return port == "tnc-y" }
+	available := []string{"tnc-z", "tnc-x", "tnc-y"}
 
-	if got := digipeaterOutputPort("tnc-x", "SR5DDD", heard, usable); got != "tnc-y" {
-		t.Fatalf("cross-port output=%q", got)
+	if got := digipeaterOutputPorts("tnc-x", "SR5DDD", heard, available); len(got) != 1 || got[0] != "tnc-y" {
+		t.Fatalf("known cross-port outputs=%v", got)
 	}
-	if got := digipeaterOutputPort("tnc-x", "UNKNOWN", heard, usable); got != "tnc-x" {
-		t.Fatalf("unknown destination output=%q", got)
+	if got := digipeaterOutputPorts("tnc-y", "SR5DDD", heard, available); len(got) != 1 || got[0] != "tnc-y" {
+		t.Fatalf("known same-port outputs=%v", got)
 	}
-	if got := digipeaterOutputPort("tnc-y", "SR5DDD", heard, usable); got != "tnc-y" {
-		t.Fatalf("same-port output=%q", got)
+	got := digipeaterOutputPorts("tnc-x", "UNKNOWN", heard, available)
+	want := []string{"tnc-x", "tnc-y", "tnc-z"}
+	if len(got) != len(want) {
+		t.Fatalf("unknown destination outputs=%v", got)
 	}
-	if got := digipeaterOutputPort("tnc-x", "SR5DDD", heard, func(string) bool { return false }); got != "tnc-x" {
-		t.Fatalf("unavailable cross-port output=%q", got)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unknown destination outputs=%v", got)
+		}
+	}
+	if got := digipeaterOutputPorts("tnc-x", "SR5DDD", heard, []string{"tnc-x", "tnc-z"}); len(got) != 2 || got[0] != "tnc-x" || got[1] != "tnc-z" {
+		t.Fatalf("stale route fallback outputs=%v", got)
 	}
 }
 

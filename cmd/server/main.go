@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -381,15 +382,20 @@ func main() {
 			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
 			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
-				outputPort := digipeaterOutputPort(pkt.PortID, f.Destination.String(), heard, func(id string) bool {
-					runtime := runtimes[id]
-					return runtime != nil && runtime.enabled && runtime.port.Status().Connected
-				})
-				if send := senders[outputPort]; send != nil {
-					if err := send(ctx, repeated); err != nil {
-						log.Warn("digipeater transmit failed", "input_port", pkt.PortID, "output_port", outputPort, "error", err)
-					} else {
-						log.Info("frame digipeated", "input_port", pkt.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
+				available := make([]string, 0, len(runtimes))
+				for id, runtime := range runtimes {
+					if runtime != nil && runtime.enabled && runtime.port.Status().Connected {
+						available = append(available, id)
+					}
+				}
+				outputPorts := digipeaterOutputPorts(pkt.PortID, f.Destination.String(), heard, available)
+				for _, outputPort := range outputPorts {
+					if send := senders[outputPort]; send != nil {
+						if err := send(ctx, repeated); err != nil {
+							log.Warn("digipeater transmit failed", "input_port", pkt.PortID, "output_port", outputPort, "error", err)
+						} else {
+							log.Info("frame digipeated", "input_port", pkt.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
+						}
 					}
 				}
 				continue
@@ -415,12 +421,26 @@ func directlyHeard(frame ax25.Frame) bool {
 	}
 	return true
 }
-func digipeaterOutputPort(input, destination string, heard *mheard.Store, usable func(string) bool) string {
-	output, found := heard.DirectPort(destination)
-	if !found || output == input || !usable(output) {
-		return input
+func digipeaterOutputPorts(input, destination string, heard *mheard.Store, available []string) []string {
+	usable := make(map[string]struct{}, len(available))
+	for _, port := range available {
+		usable[port] = struct{}{}
 	}
-	return output
+	if output, found := heard.DirectPort(destination); found {
+		if _, ok := usable[output]; ok {
+			return []string{output}
+		}
+	}
+	// The destination has not been heard directly yet (or its old port is
+	// unavailable). Fan out once through the independent queues of all active
+	// TNCs. The response teaches MHEARD the direct port in both directions, so
+	// subsequent connected-mode traffic is routed to a single TNC.
+	outputs := make([]string, 0, len(usable))
+	for port := range usable {
+		outputs = append(outputs, port)
+	}
+	sort.Strings(outputs)
+	return outputs
 }
 func fmtPort(p uint16) string {
 	const digits = "0123456789"
