@@ -371,8 +371,12 @@ func main() {
 				continue
 			}
 			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
-			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) {
-				heard.Heard(f.Source.String(), pkt.PortID)
+			if !isOwnCallsign(f.Source.String()) {
+				if via := mheardReturnPath(f); via != "" {
+					heard.HeardVia(f.Source.String(), pkt.PortID, via)
+				} else if directlyHeard(f) {
+					heard.Heard(f.Source.String(), pkt.PortID)
+				}
 			}
 			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
 				heard.Beacon(f.Source.String(), pkt.PortID, string(f.Payload))
@@ -412,6 +416,15 @@ func main() {
 			return
 		}
 	}
+}
+func mheardReturnPath(frame ax25.Frame) string {
+	path := make([]string, 0, len(frame.Digipeaters))
+	for i := len(frame.Digipeaters) - 1; i >= 0; i-- {
+		if frame.Digipeaters[i].Repeated {
+			path = append(path, frame.Digipeaters[i].String())
+		}
+	}
+	return strings.Join(path, ",")
 }
 func directlyHeard(frame ax25.Frame) bool {
 	for _, via := range frame.Digipeaters {

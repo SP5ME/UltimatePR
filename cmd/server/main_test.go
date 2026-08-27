@@ -91,3 +91,15 @@ func TestDirectlyHeardRejectsRepeatedPath(t *testing.T) {
 		t.Fatal("echoed frame with a repeated VIA must not overwrite the direct port route")
 	}
 }
+
+func TestMHeardReturnPathReversesRepeatedDigipeaters(t *testing.T) {
+	digi1, _ := ax25.ParseAddress("DIGI1")
+	digi2, _ := ax25.ParseAddress("DIGI2-2")
+	pending, _ := ax25.ParseAddress("NEXT")
+	digi1.Repeated = true
+	digi2.Repeated = true
+	frame := ax25.Frame{Digipeaters: []ax25.Address{digi1, digi2, pending}}
+	if got := mheardReturnPath(frame); got != "DIGI2-2,DIGI1" {
+		t.Fatalf("return path=%q", got)
+	}
+}

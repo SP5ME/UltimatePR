@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - czytelniejsze pole terminala
 
+- Dwuklik stacji w MHEARD nawiązuje połączenie z zapamiętaną drogą powrotną VIA; ścieżka digipeaterów jest automatycznie odwracana względem ostatnio odebranej ramki.
+
 - Główny status terminala pokazuje wyłącznie stan sesji: Nawiązywanie połączenia, Połączono, Kończenie połączenia albo Rozłączono; wysyłanie ramek, oczekiwanie na ACK i odzyskiwanie T1 nie zastępują już stanu Połączono.
 
 - Pole wpisywania ma wysokość dwóch wierszy, zawija długi tekst i przewija go pionowo, dzięki czemu można przejrzeć oraz poprawić całą wiadomość przed wysłaniem.

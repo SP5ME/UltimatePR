@@ -73,6 +73,26 @@ func (s *Store) Heard(call, port string) {
 	s.pruneLocked(now)
 }
 
+// HeardVia records a frame received through digipeaters. The via argument is
+// the already reversed return path. A directly heard entry always takes
+// precedence, so an echoed digipeated frame cannot replace a direct route.
+func (s *Store) HeardVia(call, port, via string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.nowTime()
+	for _, entry := range s.entries {
+		if entry.Callsign == call && !entry.Indirect {
+			s.pruneLocked(now)
+			return
+		}
+	}
+	key := "indirect\x00" + call
+	e := s.entries[key]
+	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via = call, port, now, e.Frames+1, true, via
+	s.entries[key] = e
+	s.pruneLocked(now)
+}
+
 // Reported adds stations announced in an UltimatePR beacon. Directly heard
 // entries always take precedence over these indirect observations.
 func (s *Store) Reported(calls []string, via, port string) {

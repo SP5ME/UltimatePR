@@ -89,3 +89,19 @@ func TestDirectPortChoosesNewestDirectObservation(t *testing.T) {
 		t.Fatalf("expired direct port=%q ok=%v", port, ok)
 	}
 }
+
+func TestHeardViaKeepsReversePathWithoutReplacingDirectRoute(t *testing.T) {
+	s := New(10)
+	s.HeardVia("SP5ABC", "radio-y", "DIGI2,DIGI1")
+	entries := s.List()
+	if len(entries) != 1 || !entries[0].Indirect || entries[0].Port != "radio-y" || entries[0].Via != "DIGI2,DIGI1" || entries[0].Frames != 1 {
+		t.Fatalf("via entry=%+v", entries)
+	}
+
+	s.Heard("SP5ABC", "radio-x")
+	s.HeardVia("SP5ABC", "radio-y", "ECHO")
+	entries = s.List()
+	if len(entries) != 1 || entries[0].Indirect || entries[0].Port != "radio-x" || entries[0].Via != "" {
+		t.Fatalf("direct route replaced by via echo: %+v", entries)
+	}
+}
