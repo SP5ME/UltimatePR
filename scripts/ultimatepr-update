@@ -100,7 +100,7 @@ else
   GET='wget -qO-'
 fi
 
-API="https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/$CHANNEL-latest"
+BASE_URL="https://github.com/SP5ME/UltimatePR/releases/download/$CHANNEL-latest"
 PATTERN="ultimatepr-$CHANNEL-linux-$ARCH.tar.gz"
 
 wait_for_systemd_stop() {
@@ -124,21 +124,14 @@ wait_for_openrc_stop() {
 }
 
 status_write running "Sprawdzanie dostępnej aktualizacji." "" 5 checking
-JSON=$($GET "$API")
-URL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' | grep "$PATTERN" | head -n 1)
-[ -n "$URL" ] || { echo "Nie znaleziono pakietu aktualizacji dla $ARCH." >&2; exit 4; }
-case "$URL" in
-  https://github.com/SP5ME/UltimatePR/releases/download/*) ;;
-  *) echo "Odrzucono nieprawidłowy adres aktualizacji." >&2; exit 5 ;;
-esac
+URL="$BASE_URL/$PATTERN"
+SUMURL="$BASE_URL/SHA256SUMS.txt"
 
 status_write running "Pobieranie pakietu aktualizacji." "" 10 downloading
-$GET "$URL" > "$TMP/package.tar.gz"
-SUMURL=$(printf '%s' "$JSON" | tr ',' '\n' | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*SHA256SUMS.txt\)".*/\1/p' | head -n 1)
-[ -n "$SUMURL" ] || { echo "Brak podpisanej listy sum SHA-256." >&2; exit 6; }
+$GET "$URL" > "$TMP/package.tar.gz" || { echo "Nie znaleziono pakietu aktualizacji dla $ARCH." >&2; exit 4; }
 
 status_write running "Sprawdzanie podpisu pakietu." "" 20 verifying
-$GET "$SUMURL" > "$TMP/SHA256SUMS.txt"
+$GET "$SUMURL" > "$TMP/SHA256SUMS.txt" || { echo "Brak listy sum SHA-256." >&2; exit 6; }
 EXPECTED=$(grep " $(basename "$URL")$" "$TMP/SHA256SUMS.txt" | awk '{print $1}')
 ACTUAL=$(sha256sum "$TMP/package.tar.gz" | awk '{print $1}')
 [ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Suma SHA-256 pakietu jest nieprawidłowa." >&2; exit 6; }

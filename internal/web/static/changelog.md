@@ -11,6 +11,7 @@
 - Usunięto wyścig danych w teście wyczerpania T1/N2: test odczytuje teraz negocjowaną liczbę prób pod blokadą menedżera sesji.
 - Długie wiadomości, również ciągi bez spacji, nie poszerzają już wierszy terminala; rozmowę można przewijać wyłącznie pionowo.
 - Digipeater obsługuje połączenia `VIA` pomiędzy różnymi TNC: wybiera port docelowej stacji według najnowszego bezpośredniego wpisu MHEARD, a przy braku użytecznej trasy zachowuje retransmisję na porcie wejściowym.
+- Sprawdzanie i instalowanie aktualizacji nie korzysta już z limitowanego GitHub API: release publikuje `VERSION.txt`, a paczki i sumy SHA-256 są pobierane bezpośrednio z `main-latest` lub `dev-latest`.
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 

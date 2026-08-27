@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,7 +32,7 @@ type updateJobStatus struct {
 }
 
 func branchReleaseEndpoint(channel string) string {
-	return "https://api.github.com/repos/SP5ME/UltimatePR/releases/tags/" + channel + "-latest"
+	return "https://github.com/SP5ME/UltimatePR/releases/download/" + channel + "-latest/VERSION.txt"
 }
 
 func loadBranchRelease(ctx context.Context, channel string) (githubRelease, error) {
@@ -41,7 +42,7 @@ func loadBranchRelease(ctx context.Context, channel string) (githubRelease, erro
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("Cache-Control", "no-cache")
 		req.Header.Set("User-Agent", "UltimatePR-updater")
 		return http.DefaultClient.Do(req)
 	}
@@ -65,13 +66,16 @@ func loadBranchRelease(ctx context.Context, channel string) (githubRelease, erro
 	if resp.StatusCode != http.StatusOK {
 		return githubRelease{}, fmt.Errorf("GitHub zwrócił status %d", resp.StatusCode)
 	}
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err != nil {
 		return githubRelease{}, fmt.Errorf("nieprawidłowa odpowiedź GitHub: %w", err)
 	}
-	return release, nil
+	version := strings.TrimSpace(string(body))
+	if version == "" {
+		return githubRelease{}, fmt.Errorf("GitHub zwrócił pustą wersję wydania")
+	}
+	return githubRelease{TagName: channel + "-latest", Name: version}, nil
 }
-
 func releaseVersion(release githubRelease) string {
 	if name := strings.TrimSpace(release.Name); name != "" {
 		return name

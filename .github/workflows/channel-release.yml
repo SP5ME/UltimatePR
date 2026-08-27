@@ -65,9 +65,10 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           cd release
-          sha256sum *.tar.gz > SHA256SUMS.txt
           tag="$GITHUB_REF_NAME-latest"
           title="$GITHUB_REF_NAME-${GITHUB_SHA::7}"
+          printf '%s\n' "$title" > VERSION.txt
+          sha256sum *.tar.gz > SHA256SUMS.txt
           notes="Automatyczny pakiet aktualizacyjny z gałęzi $GITHUB_REF_NAME. Konfiguracja użytkownika nie jest częścią pakietu."
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
             gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" -f sha="$GITHUB_SHA" -F force=true >/dev/null
