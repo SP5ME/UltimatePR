@@ -119,7 +119,7 @@ func terminalRemoteCommand(line string) string {
 }
 
 func terminalHelpResponse() string {
-	return "Komendy UltimatePR:\r\n/I - informacje o stacji\r\n/MH - ostatnio slyszane stacje\r\n/H lub /? - ta pomoc\r\n"
+	return "Komendy UltimatePR:\r\n/I - informacje o stacji\r\n/MH - ostatnio slyszane stacje\r\n/H lub /? - pomoc\r\n"
 }
 
 func formatMHeardResponse(entries []mheard.Entry) string {

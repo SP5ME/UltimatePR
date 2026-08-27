@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - more readable terminal input
 
+- The main terminal indicator now shows only the session state: Establishing connection, Connected, Ending connection, or Disconnected; frame transmission, ACK waiting, and T1 recovery no longer replace the Connected status.
+
 - The message field is two lines high, wraps long text and scrolls vertically so the whole message can be reviewed and corrected before sending.
 - MHEARD shows a right-aligned minute counter for every station, measured from its most recently received frame.
 - Fixed the two-line terminal field in the light theme and refined MHEARD: the time is more readable and stays at the right edge, while a middle column holds optional `via` information.

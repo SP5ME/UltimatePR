@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - czytelniejsze pole terminala
 
+- Główny status terminala pokazuje wyłącznie stan sesji: Nawiązywanie połączenia, Połączono, Kończenie połączenia albo Rozłączono; wysyłanie ramek, oczekiwanie na ACK i odzyskiwanie T1 nie zastępują już stanu Połączono.
+
 - Pole wpisywania ma wysokość dwóch wierszy, zawija długi tekst i przewija go pionowo, dzięki czemu można przejrzeć oraz poprawić całą wiadomość przed wysłaniem.
 - Lista MHEARD pokazuje przy każdej stacji wyrównany do prawej czas w minutach od ostatniej odebranej ramki.
 - Poprawiono jasny motyw dwuwierszowego pola terminala oraz układ MHEARD: czas jest czytelniejszy i pozostaje przy prawej krawędzi, a środkowa kolumna mieści opcjonalne `via`.
