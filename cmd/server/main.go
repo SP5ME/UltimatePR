@@ -244,11 +244,11 @@ func main() {
 	}
 	sendBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
-		return sendBeaconFrame(sendCtx, source, stationBeaconVia, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
+		return sendBeaconFrame(sendCtx, source, stationBeaconVia, beaconText(source, cfg.Application.Locator, heard.List(), digiAliases...))
 	}
 	sendBBSBeacon := func(sendCtx context.Context) error {
 		source := ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}
-		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, cfg.Application.QTH, heard.List(), digiAliases...))
+		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, heard.List(), digiAliases...))
 	}
 	inbound := session.NewInboundMux(senders, log)
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
@@ -463,13 +463,10 @@ func runBeaconSchedule(ctx context.Context, web *webui.Server, stationEnabled, b
 	}
 }
 
-func beaconText(source ax25.Address, locator, qth string, entries []mheard.Entry, excluded ...ax25.Address) string {
-	lines := []string{source.String()}
+func beaconText(source ax25.Address, locator string, entries []mheard.Entry, excluded ...ax25.Address) string {
+	lines := make([]string, 0, 4)
 	if locator = strings.ToUpper(strings.TrimSpace(locator)); locator != "" {
 		lines = append(lines, locator)
-	}
-	if qth = strings.TrimSpace(qth); qth != "" {
-		lines = append(lines, qth)
 	}
 	lines = append(lines, "DIGI", "UltimatePR")
 
@@ -480,7 +477,7 @@ func beaconText(source ax25.Address, locator, qth string, entries []mheard.Entry
 		if call == "" {
 			continue
 		}
-		own := false
+		own := call == source.String()
 		for _, alias := range excluded {
 			if call == alias.String() {
 				own = true

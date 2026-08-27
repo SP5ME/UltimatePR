@@ -17,16 +17,16 @@ func TestBeaconText(t *testing.T) {
 		{Callsign: "SP5BBB"}, {Callsign: "SP5CCC"}, {Callsign: "SP5DDD"},
 		{Callsign: "SP5EEE"}, {Callsign: "SP5FFF"},
 	}
-	want := "SP5ME-8\rKO02MD\rPruszkow\rDIGI\rUltimatePR\rSQ5AAA,SP5BBB,SP5CCC,SP5DDD,SP5EEE"
-	if got := beaconText(source, " ko02md ", " Pruszkow ", entries, source); got != want {
+	want := "KO02MD\rDIGI\rUltimatePR\rSQ5AAA,SP5BBB,SP5CCC,SP5DDD,SP5EEE"
+	if got := beaconText(source, " ko02md ", entries, source); got != want {
 		t.Fatalf("beacon text:\n got %q\nwant %q", got, want)
 	}
 }
 
 func TestBeaconTextOmitsMissingOptionalFields(t *testing.T) {
 	source, _ := ax25.ParseAddress("SP5ME")
-	want := "SP5ME\rDIGI\rUltimatePR"
-	if got := beaconText(source, "", "", nil, source); got != want {
+	want := "DIGI\rUltimatePR"
+	if got := beaconText(source, "", nil, source); got != want {
 		t.Fatalf("beacon text: got %q, want %q", got, want)
 	}
 }

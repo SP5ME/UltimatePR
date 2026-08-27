@@ -6,6 +6,7 @@
 - MHEARD shows a right-aligned minute counter for every station, measured from its most recently received frame.
 - Fixed the two-line terminal field in the light theme and refined MHEARD: the time is more readable and stays at the right edge, while a middle column holds optional `via` information.
 - Enter still sends the message, while Shift+Enter inserts a manual line break. Sent text also wraps in the conversation view.
+- Shortened the beacon: it no longer repeats the station callsign or QTH; it keeps the locator, `DIGI` and `UltimatePR` identifiers, and the recently heard station list.
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 
