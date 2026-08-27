@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## 2026-08-27 - UPRD and Packet Radio topology map
+
+- Added UPRD as a lightweight discovery system over AX.25 UI: a separate report with locator and MHEARD list, payload validation, and independent configuration for interval and station limit.
+- UPRD reuses the existing per-TNC MHEARD data, processes frames in RX order, and replaces the previous reporter state atomically without creating a parallel MHEARD table.
+- Extended MHEARD with `Direct` and `UPRD` modes, plus topology data and the best known route for the current graph.
+- The topology map now lives as a separate view, filters real configured TNCs, keeps stable interface colors, and updates dynamically without a page reload.
+- Double-clicking a station uses the existing Terminal/VIA logic to connect along the best known route.
+
 ## 2026-08-27 - more readable terminal input
 
 - Session tabs show only the station callsign, while the full description (callsign, return VIA path, and TNC) is available in the tooltip and terminal header; incoming sessions receive these details directly from the established AX.25 link. The top-right status now shows only TNC names with the existing status LEDs.

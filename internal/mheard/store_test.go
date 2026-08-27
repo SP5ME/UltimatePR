@@ -101,7 +101,22 @@ func TestHeardViaKeepsReversePathWithoutReplacingDirectRoute(t *testing.T) {
 	s.Heard("SP5ABC", "radio-x")
 	s.HeardVia("SP5ABC", "radio-y", "ECHO")
 	entries = s.List()
-	if len(entries) != 1 || entries[0].Indirect || entries[0].Port != "radio-x" || entries[0].Via != "" {
-		t.Fatalf("direct route replaced by via echo: %+v", entries)
+	if len(entries) != 2 {
+		t.Fatalf("entries=%d", len(entries))
+	}
+	var direct, via Entry
+	for _, entry := range entries {
+		if entry.Port == "radio-x" {
+			direct = entry
+		}
+		if entry.Port == "radio-y" {
+			via = entry
+		}
+	}
+	if direct.Indirect || direct.Via != "" || direct.SourceType != "direct" {
+		t.Fatalf("direct entry changed: %+v", direct)
+	}
+	if !via.Indirect || via.Via != "ECHO" || via.SourceType != "via" {
+		t.Fatalf("via entry changed: %+v", via)
 	}
 }

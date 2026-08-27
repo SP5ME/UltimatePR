@@ -23,6 +23,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
+	"github.com/packet-radio/ultimatepr/internal/uprd"
 	"github.com/packet-radio/ultimatepr/internal/session"
 	"github.com/packet-radio/ultimatepr/internal/tncproxy"
 	"github.com/packet-radio/ultimatepr/internal/transport"
@@ -85,6 +86,7 @@ func main() {
 		return out
 	}())
 	var restartRequested atomic.Bool
+	var rxOrder atomic.Uint64
 	rx := make(chan transport.Packet, 256)
 	portIDs := make([]string, 0, len(cfg.Ports))
 	senders := make(map[string]session.Sender, len(cfg.Ports))
@@ -192,6 +194,7 @@ func main() {
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
+	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: cfg.UPRD.Enabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit}, portIDs)
 	var historyStore *history.Store
 	if cfg.History.Enabled {
 		historyStore, err = history.Open(cfg.History.Database, history.Limits{MaxStations: cfg.History.MaxStations, MaxSessions: cfg.History.MaxSessionsPerStation, MaxLines: cfg.History.MaxLinesPerStation, MaxBytes: cfg.History.MaxBytes, RetentionDays: cfg.History.RetentionDays})
@@ -287,6 +290,7 @@ func main() {
 		MHeard:     heard,
 		History:    historyStore,
 		Monitor:    mon,
+		UPRD:       uprdMgr,
 		SendBeacon: sendBeacon,
 		BBSListen: func() string {
 			if cfg.BBS.Enabled {
@@ -306,6 +310,12 @@ func main() {
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
 	go runBeaconSchedule(ctx, web, true, cfg.BBS.Enabled, sendBeacon, sendBBSBeacon, log)
+	if cfg.UPRD.Enabled {
+		runUPRDSchedule(ctx, time.Duration(cfg.UPRD.IntervalSeconds)*time.Second, uprdMgr, portIDs, func(portID string) bool {
+			runtime := runtimes[portID]
+			return runtime != nil && runtime.enabled && runtime.port.Status().Connected
+		}, senders, log)
+	}
 	var bbsServer *bbs.Server
 	if cfg.BBS.Enabled {
 		store, err := bbs.Open(cfg.BBS.Database)
@@ -370,12 +380,16 @@ func main() {
 				log.Warn("invalid AX.25 frame", "port", pkt.PortID, "error", e)
 				continue
 			}
+			seq := rxOrder.Add(1)
 			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
 			if !isOwnCallsign(f.Source.String()) {
 				if via := mheardReturnPath(f); via != "" {
 					heard.HeardVia(f.Source.String(), pkt.PortID, via)
 				} else if directlyHeard(f) {
 					heard.Heard(f.Source.String(), pkt.PortID)
+				}
+				if uprdMgr != nil {
+					uprdMgr.Submit(pkt.PortID, seq, f)
 				}
 			}
 			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
@@ -506,6 +520,44 @@ func runBeaconSchedule(ctx context.Context, web *webui.Server, stationEnabled, b
 						if err := sendStation(ctx); err != nil {
 							log.Warn("station beacon failed", "error", err)
 						}
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+}
+
+func runUPRDSchedule(ctx context.Context, interval time.Duration, manager *uprd.Manager, ports []string, isPortActive func(string) bool, senders map[string]session.Sender, log *slog.Logger) {
+	if manager == nil || interval <= 0 {
+		return
+	}
+	for _, portID := range ports {
+		portID := portID
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if isPortActive != nil && !isPortActive(portID) {
+						continue
+					}
+					send := senders[portID]
+					if send == nil {
+						continue
+					}
+					frame, ok, err := manager.BuildFrame(portID)
+					if err != nil {
+						log.Warn("UPRD frame build failed", "port", portID, "error", err)
+						continue
+					}
+					if !ok {
+						continue
+					}
+					if err := send(ctx, frame); err != nil {
+						log.Warn("UPRD transmit failed", "port", portID, "error", err)
 					}
 				case <-ctx.Done():
 					return

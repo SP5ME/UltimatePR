@@ -16,6 +16,7 @@ type Entry struct {
 	Beacon   string    `json:"beacon,omitempty"`
 	Indirect bool      `json:"indirect,omitempty"`
 	Via      string    `json:"via,omitempty"`
+	SourceType string  `json:"source_type,omitempty"`
 }
 
 // Beacon records the latest beacon text without changing the frame counter.
@@ -25,7 +26,7 @@ func (s *Store) Beacon(call, port, text string) {
 	now := s.nowTime()
 	key := port + "\x00" + call
 	e := s.entries[key]
-	e.Callsign, e.Port = call, port
+	e.Callsign, e.Port, e.SourceType = call, port, "beacon"
 	if e.LastSeen.IsZero() {
 		e.LastSeen = now
 	}
@@ -61,14 +62,9 @@ func (s *Store) Heard(call, port string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.nowTime()
-	for key, entry := range s.entries {
-		if entry.Callsign == call && entry.Indirect {
-			delete(s.entries, key)
-		}
-	}
 	key := port + "\x00" + call
 	e := s.entries[key]
-	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via = call, port, now, e.Frames+1, false, ""
+	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via, e.SourceType = call, port, now, e.Frames+1, false, "", "direct"
 	s.entries[key] = e
 	s.pruneLocked(now)
 }
@@ -80,15 +76,9 @@ func (s *Store) HeardVia(call, port, via string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.nowTime()
-	for _, entry := range s.entries {
-		if entry.Callsign == call && !entry.Indirect {
-			s.pruneLocked(now)
-			return
-		}
-	}
-	key := "indirect\x00" + call
+	key := port + "\x00" + call
 	e := s.entries[key]
-	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via = call, port, now, e.Frames+1, true, via
+	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via, e.SourceType = call, port, now, e.Frames+1, true, via, "via"
 	s.entries[key] = e
 	s.pruneLocked(now)
 }
@@ -100,19 +90,12 @@ func (s *Store) Reported(calls []string, via, port string) {
 	defer s.mu.Unlock()
 	now := s.nowTime()
 	for _, call := range calls {
-		direct := false
-		for _, entry := range s.entries {
-			if entry.Callsign == call && !entry.Indirect {
-				direct = true
-				break
-			}
-		}
-		if direct {
+		key := port + "\x00" + call
+		if existing, ok := s.entries[key]; ok && existing.SourceType != "reported" {
 			continue
 		}
-		key := "indirect\x00" + call
 		e := s.entries[key]
-		e.Callsign, e.Port, e.LastSeen, e.Indirect, e.Via = call, port, now, true, via
+		e.Callsign, e.Port, e.LastSeen, e.Indirect, e.Via, e.SourceType = call, port, now, true, via, "reported"
 		s.entries[key] = e
 	}
 	s.pruneLocked(now)
@@ -178,6 +161,29 @@ func (s *Store) List() []Entry {
 	s.pruneLocked(now)
 	out := make([]Entry, 0, len(s.entries))
 	for key, e := range s.entries {
+		if b, ok := s.beacons[key]; ok && now.Sub(b.seen) <= entryTTL {
+			e.Beacon = b.text
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	return out
+}
+
+func (s *Store) ListByPort(port string) []Entry {
+	return s.ListByPortFilter(func(e Entry) bool { return e.Port == port })
+}
+
+func (s *Store) ListByPortFilter(match func(Entry) bool) []Entry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.nowTime()
+	s.pruneLocked(now)
+	out := make([]Entry, 0, len(s.entries))
+	for key, e := range s.entries {
+		if match != nil && !match(e) {
+			continue
+		}
 		if b, ok := s.beacons[key]; ok && now.Sub(b.seen) <= entryTTL {
 			e.Beacon = b.text
 		}

@@ -26,6 +26,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
+	"github.com/packet-radio/ultimatepr/internal/uprd"
 	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 	"github.com/packet-radio/ultimatepr/internal/transport"
 )
@@ -59,6 +60,7 @@ type Config struct {
 	MHeard             *mheard.Store
 	History            *history.Store
 	Monitor            *monitor.Store
+	UPRD               *uprd.Manager
 	SendBeacon         func(context.Context) error
 	BBSListen          string
 	BBS                *bbs.Store
@@ -198,6 +200,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /api/monitor", s.monitor)
 	mux.HandleFunc("DELETE /api/monitor", s.monitorClear)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
+	mux.HandleFunc("GET /api/uprd", s.uprd)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
 	mux.HandleFunc("GET /ws/notifications", s.notifications)
 	mux.HandleFunc("GET /api/bbs/messages", s.bbsList)
@@ -338,13 +341,61 @@ func (s *Server) beacon(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) mheard(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) mheard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+	if mode == "uprd" && s.cfg.UPRD != nil {
+		ports := s.requestedPorts(r)
+		_ = json.NewEncoder(w).Encode(s.cfg.UPRD.Snapshot(ports).MHeard)
+		return
+	}
 	if s.cfg.MHeard == nil {
 		_ = json.NewEncoder(w).Encode([]mheard.Entry{})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(s.cfg.MHeard.List())
+}
+
+func (s *Server) uprd(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if s.cfg.UPRD == nil {
+		_ = json.NewEncoder(w).Encode(struct {
+			Ports []string       `json:"ports"`
+			MHeard []mheard.Entry `json:"mheard"`
+			Nodes  []uprd.Node    `json:"nodes"`
+			Edges  []uprd.Edge    `json:"edges"`
+			Routes []uprd.Route   `json:"routes"`
+		}{Ports: s.cfg.Ports})
+		return
+	}
+	ports := s.requestedPorts(r)
+	snap := s.cfg.UPRD.Snapshot(ports)
+	_ = json.NewEncoder(w).Encode(struct {
+		Ports []string      `json:"ports"`
+		uprd.Snapshot
+	}{Ports: ports, Snapshot: snap})
+}
+
+func (s *Server) requestedPorts(r *http.Request) []string {
+	raw := strings.TrimSpace(r.URL.Query().Get("ports"))
+	if raw == "" {
+		return append([]string(nil), s.cfg.Ports...)
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		out = append(out, part)
+	}
+	return out
 }
 
 func (s *Server) configModelGet(w http.ResponseWriter, _ *http.Request) {

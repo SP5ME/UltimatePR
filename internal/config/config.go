@@ -45,6 +45,11 @@ type Beacon struct {
 	Text            string `yaml:"text"`
 	IntervalMinutes int    `yaml:"interval_minutes"`
 }
+type UPRD struct {
+	Enabled        bool `yaml:"enabled"`
+	IntervalSeconds int  `yaml:"interval_seconds"`
+	MHeardLimit    int  `yaml:"mheard_limit"`
+}
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
 	Database              string `yaml:"database"`
@@ -147,6 +152,7 @@ type Config struct {
 	Ports       []Port      `yaml:"ports"`
 	Terminal    Station     `yaml:"terminal"`
 	Beacon      Beacon      `yaml:"beacon"`
+	UPRD        UPRD        `yaml:"uprd"`
 	History     History     `yaml:"history"`
 	BBS         BBS         `yaml:"bbs"`
 	Node        Node        `yaml:"node"`
@@ -203,6 +209,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Application.AX25N1 == 0 {
 		c.Application.AX25N1 = 256
+	}
+	if c.UPRD.IntervalSeconds == 0 {
+		c.UPRD.IntervalSeconds = 600
+	}
+	if c.UPRD.MHeardLimit == 0 {
+		c.UPRD.MHeardLimit = 5
 	}
 	if strings.TrimSpace(c.Web.Listen) == "" {
 		c.Web.Listen = "0.0.0.0:8080"
@@ -302,6 +314,12 @@ func (c Config) Validate() error {
 	}
 	if c.Beacon.Enabled && (strings.TrimSpace(c.Beacon.Text) == "" || c.Beacon.IntervalMinutes < 1) {
 		return fmt.Errorf("beacon: text and interval >= 10 seconds are required")
+	}
+	if c.UPRD.IntervalSeconds < 1 || c.UPRD.IntervalSeconds > 86400 {
+		return fmt.Errorf("uprd.interval_seconds must be 1..86400")
+	}
+	if c.UPRD.MHeardLimit < 1 || c.UPRD.MHeardLimit > 10 {
+		return fmt.Errorf("uprd.mheard_limit must be 1..10")
 	}
 	if c.History.Enabled {
 		if strings.TrimSpace(c.History.Database) == "" || c.History.MaxStations < 1 || c.History.MaxSessionsPerStation < 1 || c.History.MaxLinesPerStation < 1 || c.History.MaxBytes < 1024 || c.History.RetentionDays < 1 {
