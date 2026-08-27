@@ -15,15 +15,26 @@ import (
 // authenticated by the AX.25 link header, not by text entered after connect.
 type AX25Service func(remote string, r io.Reader, w io.Writer)
 
+// InboundRoute describes the radio route of an accepted AX.25 connection.
+// Digipeaters are stored in return order with their repeated bits cleared.
+type InboundRoute struct {
+	Remote      string
+	Port        string
+	Digipeaters []ax25.Address
+}
+
+type RoutedAX25Service func(route InboundRoute, r io.Reader, w io.Writer)
+
 type InboundMux struct {
-	mu       sync.Mutex
-	services map[string]AX25Service
-	senders  map[string]Sender
-	links    map[string]*inboundLink
-	log      *slog.Logger
-	t1       time.Duration
-	n2       int
-	paclen   int
+	mu             sync.Mutex
+	services       map[string]AX25Service
+	routedServices map[string]RoutedAX25Service
+	senders        map[string]Sender
+	links          map[string]*inboundLink
+	log            *slog.Logger
+	t1             time.Duration
+	n2             int
+	paclen         int
 }
 
 type inboundLink struct {
@@ -48,7 +59,7 @@ type inboundLink struct {
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
-	return &InboundMux{services: map[string]AX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
+	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
 func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
@@ -70,6 +81,11 @@ func (m *InboundMux) Register(address ax25.Address, service AX25Service) {
 	defer m.mu.Unlock()
 	m.services[address.String()] = service
 }
+func (m *InboundMux) RegisterRouted(address ax25.Address, service RoutedAX25Service) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.routedServices[address.String()] = service
+}
 
 // Handle returns true when the frame belongs to a registered inbound service
 // or to an established inbound session.
@@ -78,36 +94,38 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	m.mu.Lock()
 	link := m.links[key]
 	service := m.services[f.Destination.String()]
+	routedService := m.routedServices[f.Destination.String()]
+	registered := service != nil || routedService != nil
 	m.mu.Unlock()
 
 	if link == nil {
-		if service != nil && f.Type == ax25.TypeXID && isCommand(f) {
+		if registered && f.Type == ax25.TypeXID && isCommand(f) {
 			if f.PollFinal {
 				_ = m.sendXIDResponse(port, f, nil)
 			}
 			return true
 		}
-		if service != nil && f.Type == ax25.TypeSABME && isCommand(f) {
+		if registered && f.Type == ax25.TypeSABME && isCommand(f) {
 			// This endpoint has not switched its receive decoder to modulo 128,
 			// therefore AX.25 requires a negative mode-setting response.
 			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
 			return true
 		}
-		if service != nil && f.Type == ax25.TypeTEST && isCommand(f) {
+		if registered && f.Type == ax25.TypeTEST && isCommand(f) {
 			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload)
 			return true
 		}
-		if service != nil && f.Type == ax25.TypeUI && isCommand(f) {
+		if registered && f.Type == ax25.TypeUI && isCommand(f) {
 			if f.PollFinal {
 				_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
 			}
 			return true
 		}
-		if service != nil && f.Type != ax25.TypeSABM && f.Type != ax25.TypeUI && isCommand(f) {
+		if registered && f.Type != ax25.TypeSABM && f.Type != ax25.TypeUI && isCommand(f) {
 			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
 			return true
 		}
-		if f.Type != ax25.TypeSABM || service == nil || !isCommand(f) {
+		if f.Type != ax25.TypeSABM || !registered || !isCommand(f) {
 			return false
 		}
 		m.mu.Lock()
@@ -125,7 +143,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		m.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
 		if created {
-			go link.run(service)
+			go link.run(service, routedService)
 		}
 		if m.log != nil {
 			m.log.Info("AX.25 inbound connected", "port", port, "remote", f.Source.String(), "service", f.Destination.String())
@@ -242,7 +260,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	return true
 }
 
-func (l *inboundLink) run(service AX25Service) {
+func (l *inboundLink) run(service AX25Service, routedService RoutedAX25Service) {
 	r, pw := io.Pipe()
 	pr, w := io.Pipe()
 	txDone := make(chan struct{})
@@ -279,7 +297,12 @@ func (l *inboundLink) run(service AX25Service) {
 		}
 	}()
 	go func() { l.transmit(); close(txDone) }()
-	service(l.remote.String(), r, w)
+	if routedService != nil {
+		route := InboundRoute{Remote: l.remote.String(), Port: l.port, Digipeaters: append([]ax25.Address(nil), l.digipeaters...)}
+		routedService(route, r, w)
+	} else {
+		service(l.remote.String(), r, w)
+	}
 	_ = w.Close()
 	select {
 	case <-txDone:

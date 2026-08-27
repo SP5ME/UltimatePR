@@ -304,7 +304,7 @@ func main() {
 		},
 		Version: bbs.BuildVersion,
 	}, log)
-	inbound.Register(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
+	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
 	go runBeaconSchedule(ctx, web, true, cfg.BBS.Enabled, sendBeacon, sendBBSBeacon, log)
 	var bbsServer *bbs.Server
 	if cfg.BBS.Enabled {

@@ -210,3 +210,31 @@ func decodeSent(t *testing.T, b []byte) ax25.Frame {
 	}
 	return f
 }
+
+func TestInboundRoutedServiceReceivesReturnPath(t *testing.T) {
+	sent := make(chan []byte, 4)
+	routes := make(chan InboundRoute, 1)
+	m := NewInboundMux(map[string]Sender{"radio-fast": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil }}, nil)
+	local, _ := ax25.ParseAddress("SP5ABC")
+	local.CommandResponse = true
+	remote, _ := ax25.ParseAddress("SQ9MDD")
+	digi1, _ := ax25.ParseAddress("DIGI1-1")
+	digi2, _ := ax25.ParseAddress("DIGI2-2")
+	digi1.Repeated = true
+	digi2.Repeated = true
+	m.RegisterRouted(local, func(route InboundRoute, _ io.Reader, _ io.Writer) { routes <- route })
+
+	if !m.Handle("radio-fast", ax25.Frame{Destination: local, Source: remote, Digipeaters: []ax25.Address{digi1, digi2}, Type: ax25.TypeSABM, PollFinal: true}) {
+		t.Fatal("routed SABM not handled")
+	}
+	_ = <-sent // UA
+	select {
+	case route := <-routes:
+		if route.Remote != "SQ9MDD" || route.Port != "radio-fast" {
+			t.Fatalf("route=%+v", route)
+		}
+		assertReversePath(t, route.Digipeaters)
+	case <-time.After(time.Second):
+		t.Fatal("routed service was not called")
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	appconfig "github.com/packet-radio/ultimatepr/internal/config"
 	"github.com/packet-radio/ultimatepr/internal/history"
@@ -86,18 +87,29 @@ type notification struct {
 	Call    string `json:"call"`
 	Service string `json:"service"`
 	Port    string `json:"port"`
+	Via     string `json:"via,omitempty"`
 	ID      uint64 `json:"id,omitempty"`
 }
 
 type operatorSession struct {
 	id      uint64
 	call    string
+	port    string
+	via     string
 	r       io.Reader
 	w       io.Writer
 	mu      sync.Mutex
 	done    chan struct{}
 	claimed chan struct{}
 	once    sync.Once
+}
+
+func inboundVia(digipeaters []ax25.Address) string {
+	parts := make([]string, 0, len(digipeaters))
+	for _, digi := range digipeaters {
+		parts = append(parts, digi.String())
+	}
+	return strings.Join(parts, ",")
 }
 
 func (s *operatorSession) close() {
@@ -126,13 +138,14 @@ func (s *Server) HasActiveBrowser() bool {
 
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
 // operator station in the web terminal. NODE and BBS links use other handlers.
-func (s *Server) ServeOperatorAX25(remote string, r io.Reader, w io.Writer) {
+func (s *Server) ServeOperatorAX25(route session.InboundRoute, r io.Reader, w io.Writer) {
 	id := s.incomingSeq.Add(1)
-	in := &operatorSession{id: id, call: remote, r: r, w: w, done: make(chan struct{}), claimed: make(chan struct{})}
+	via := inboundVia(route.Digipeaters)
+	in := &operatorSession{id: id, call: route.Remote, port: route.Port, via: via, r: r, w: w, done: make(chan struct{}), claimed: make(chan struct{})}
 	s.incomingMu.Lock()
 	s.incoming[id] = in
 	s.incomingMu.Unlock()
-	e := notification{Type: "incoming", Call: remote, Service: "TERMINAL", ID: id}
+	e := notification{Type: "incoming", Call: route.Remote, Service: "TERMINAL", Port: route.Port, Via: via, ID: id}
 	s.notifyMu.Lock()
 	for _, ch := range s.notify {
 		select {
@@ -891,7 +904,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie przychodzace nie jest juz dostepne."})
 					continue
 				}
-				historyStation, historyPort, historyDigi, historyConnected = incoming.call, "radio", "", true
+				historyStation, historyPort, historyDigi, historyConnected = incoming.call, incoming.port, incoming.via, true
 				if s.cfg.History != nil {
 					historySession = s.cfg.History.Connected("tnc", historyStation, historyPort, historyDigi)
 				}

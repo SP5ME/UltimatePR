@@ -141,3 +141,11 @@ func TestTerminalHelpListsRemoteCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestInboundViaFormatsReturnPath(t *testing.T) {
+	first, _ := ax25.ParseAddress("DIGI2-2")
+	second, _ := ax25.ParseAddress("DIGI1")
+	if got := inboundVia([]ax25.Address{first, second}); got != "DIGI2-2,DIGI1" {
+		t.Fatalf("inbound via=%q", got)
+	}
+}

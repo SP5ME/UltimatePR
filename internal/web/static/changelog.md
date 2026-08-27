@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - czytelniejsze pole terminala
 
+- Zakładki sesji pokazują tylko znak stacji, a pełny opis (znak, droga VIA i TNC) jest dostępny w dymku oraz nagłówku terminala; sesje przychodzące otrzymują te dane bezpośrednio z zestawionego łącza AX.25. W prawym górnym rogu wyświetlane są same nazwy TNC z dotychczasowymi diodami stanu.
+
 - Nowo utworzona sesja pojawia się jako pierwsza od lewej, a starsze zakładki sesji przesuwają się kolejno w prawo.
 
 - Dwuklik stacji w MHEARD nawiązuje połączenie z zapamiętaną drogą powrotną VIA; ścieżka digipeaterów jest automatycznie odwracana względem ostatnio odebranej ramki.

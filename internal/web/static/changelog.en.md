@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - more readable terminal input
 
+- Session tabs show only the station callsign, while the full description (callsign, return VIA path, and TNC) is available in the tooltip and terminal header; incoming sessions receive these details directly from the established AX.25 link. The top-right status now shows only TNC names with the existing status LEDs.
+
 - A newly created session appears first from the left, while older session tabs move successively to the right.
 
 - Double-clicking a station in MHEARD connects using its remembered return VIA route; the digipeater path is automatically reversed from the most recently received frame.
