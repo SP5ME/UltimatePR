@@ -355,6 +355,12 @@ func (s *Server) mheard(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]mheard.Entry{})
 		return
 	}
+	if mode == "direct" {
+		_ = json.NewEncoder(w).Encode(s.cfg.MHeard.ListByPortFilter(func(entry mheard.Entry) bool {
+			return entry.SourceType != "reported"
+		}))
+		return
+	}
 	_ = json.NewEncoder(w).Encode(s.cfg.MHeard.List())
 }
 

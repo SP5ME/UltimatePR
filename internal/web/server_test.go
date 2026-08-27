@@ -1,15 +1,33 @@
 package web
 
 import (
+	"encoding/json"
 	"net"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
 )
+
+func TestMHeardDirectExcludesUPRDReports(t *testing.T) {
+	store := mheard.New(10)
+	store.Heard("SP1AAA", "radio")
+	store.Reported([]string{"SP2BBB"}, "SP3CCC", "radio")
+	s := &Server{cfg: Config{MHeard: store}}
+	w := httptest.NewRecorder()
+	s.mheard(w, httptest.NewRequest("GET", "/api/mheard?mode=direct", nil))
+	var entries []mheard.Entry
+	if err := json.NewDecoder(w.Body).Decode(&entries); err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Callsign != "SP1AAA" {
+		t.Fatalf("direct MHEARD = %+v", entries)
+	}
+}
 
 func TestValidateWebListenerRejectsUnavailableAddress(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
