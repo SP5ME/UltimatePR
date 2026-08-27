@@ -110,6 +110,10 @@ func (p *Proxy) clientLoop(ctx context.Context, c *client) {
 				if encodeErr != nil {
 					continue
 				}
+				// Match the SQ5T proxy semantics: traffic produced by one client
+				// is visible to every other client as well as to the upstream TNC.
+				// Do not echo it back to its sender.
+				p.broadcastExcept(wire, c)
 				select {
 				case p.tx <- wire:
 				case <-ctx.Done():
@@ -198,9 +202,16 @@ func (p *Proxy) readUpstream(ctx context.Context, conn net.Conn, errch chan<- er
 }
 
 func (p *Proxy) broadcast(data []byte) {
+	p.broadcastExcept(data, nil)
+}
+
+func (p *Proxy) broadcastExcept(data []byte, excluded *client) {
 	p.mu.Lock()
 	clients := make([]*client, 0, len(p.clients))
 	for _, c := range p.clients {
+		if c == excluded {
+			continue
+		}
 		clients = append(clients, c)
 	}
 	p.mu.Unlock()

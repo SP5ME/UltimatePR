@@ -61,8 +61,10 @@ która kontroluje również dostęp do panelu WWW.
 
 Proxy utrzymuje połączenie z właściwym TNC niezależnie od ruchu klientów i
 przekazuje wyłącznie kompletne ramki KISS. Ramki odebrane z TNC są rozsyłane do
-klientów, natomiast transmisja jednego klienta nie jest przedstawiana innym
-klientom jako odbiór radiowy. Komendy `SET HARDWARE` i `RETURN` od klientów są
+wszystkich klientów. Ramka wysłana przez jednego klienta trafia do TNC oraz do
+wszystkich pozostałych klientów, ale nie jest odsyłana do nadawcy. Dzięki temu
+aplikacja monitorująca widzi również transmisje innych aplikacji, zgodnie z
+zachowaniem proxy SQ5T. Komendy `SET HARDWARE` i `RETURN` od klientów są
 blokowane, aby pojedyncza aplikacja nie mogła zmienić sprzętowego trybu pracy
 albo wyłączyć wspólnego interfejsu KISS.
 

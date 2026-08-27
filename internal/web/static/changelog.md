@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-27 - czytelniejsze pole terminala
+
+- Pole wpisywania ma wysokość dwóch wierszy, zawija długi tekst i przewija go pionowo, dzięki czemu można przejrzeć oraz poprawić całą wiadomość przed wysłaniem.
+- Lista MHEARD pokazuje przy każdej stacji wyrównany do prawej czas w minutach od ostatniej odebranej ramki.
+- Enter nadal wysyła wiadomość, a Shift+Enter pozwala ręcznie dodać podział wiersza. Wysłany tekst jest również zawijany w widoku rozmowy.
+
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 
 - Uzupełniono pełną negocjację XID po zestawieniu łącza: N1 respektuje limit odbiorczy partnera, T1 i N2 wybierają większą wartość, a nieobsługiwane funkcje są obniżane do profilu modulo 8, implicit REJ i k=1.
@@ -11,7 +17,7 @@
 - Terminal zachowuje tekst UTF-8 bez automatycznej zamiany polskich znaków na ASCII.
 - Naciśnięcie Enter wysyła również pusty wiersz, a transmisje trafiają do jednej kolejki i mogą zostać bezpiecznie anulowane podczas rozłączania.
 - Historia zapisuje wiadomość wychodzącą dopiero po udanym wysłaniu.
-- TNC Proxy rozdziela strumień na pełne ramki KISS, nie odsyła danych klienta do pozostałych klientów i przekazuje odebrane ramki TNC do wszystkich klientów.
+- TNC Proxy rozdziela strumień na pełne ramki KISS. Dane wysłane przez klienta przekazuje do TNC i pozostałych klientów, bez echa do nadawcy; ramki odebrane z TNC rozsyła do wszystkich klientów.
 - Proxy utrzymuje i ponawia połączenie TCP z TNC oraz blokuje komendy KISS `SET HARDWARE` i `RETURN`, które mogłyby zmienić stan wspólnego urządzenia.
 
 ## 2026-08-24 - korekta czasu odzyskiwania AX.25

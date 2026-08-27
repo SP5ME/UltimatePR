@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-27 - more readable terminal input
+
+- The message field is two lines high, wraps long text and scrolls vertically so the whole message can be reviewed and corrected before sending.
+- MHEARD shows a right-aligned minute counter for every station, measured from its most recently received frame.
+- Enter still sends the message, while Shift+Enter inserts a manual line break. Sent text also wraps in the conversation view.
+
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 
 - Completed post-connect XID negotiation: N1 respects the peer receive limit, T1 and N2 select the greater value, and unsupported features are reduced to the modulo-8, implicit-REJ, k=1 profile.
@@ -11,7 +17,7 @@
 - The terminal preserves UTF-8 text without automatically transliterating Polish characters to ASCII.
 - Pressing Enter can send an empty line; transmissions use one ordered queue and can be safely cancelled while disconnecting.
 - Outgoing messages are added to history only after successful transmission.
-- TNC Proxy separates the stream into complete KISS frames, does not echo client data to other clients, and distributes frames received from the TNC to every client.
+- TNC Proxy separates the stream into complete KISS frames. Client data is forwarded to the TNC and every other client without echoing it to the sender; frames received from the TNC are distributed to every client.
 - The proxy maintains and retries its TCP connection to the TNC and blocks the KISS `SET HARDWARE` and `RETURN` commands that could alter shared-device state.
 
 ## 2026-08-24 - AX.25 recovery timer correction

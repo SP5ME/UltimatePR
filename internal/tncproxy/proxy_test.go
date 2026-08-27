@@ -55,8 +55,11 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	if got := readKISSFrame(t, upstream); !bytes.Equal(got, want) {
 		t.Fatalf("upstream data = %x, want %x", got, want)
 	}
-	if got := readOptional(client2, 100*time.Millisecond); len(got) != 0 {
-		t.Fatalf("client transmission was echoed to peer: %x", got)
+	if got := readKISSFrame(t, client2); !bytes.Equal(got, want) {
+		t.Fatalf("peer data = %x, want %x", got, want)
+	}
+	if got := readOptional(client1, 100*time.Millisecond); len(got) != 0 {
+		t.Fatalf("client transmission was echoed to its sender: %x", got)
 	}
 
 	want = kissFrame(t, kiss.Frame{Port: 0, Command: kiss.CommandData, Data: []byte("tnc-frame")})
