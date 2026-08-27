@@ -58,3 +58,24 @@ func TestRejectsWrongNextAliasDuplicateAndOwnFrame(t *testing.T) {
 		t.Fatal("own frame repeated")
 	}
 }
+
+func TestConnectedModeRetriesAreNotSuppressed(t *testing.T) {
+	station, _ := ax25.ParseAddress("SP5ABC")
+	source, _ := ax25.ParseAddress("SQ5XYZ")
+	destination, _ := ax25.ParseAddress("SR5DDD")
+	original := ax25.Frame{Destination: destination, Source: source, Digipeaters: []ax25.Address{station}, Type: ax25.TypeSABM, PollFinal: true}
+	raw, err := ax25.Encode(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New(station)
+	for attempt := 1; attempt <= 2; attempt++ {
+		retry, err := ax25.Decode(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := d.Repeat(retry, raw); !ok {
+			t.Fatalf("connected-mode attempt %d was suppressed", attempt)
+		}
+	}
+}

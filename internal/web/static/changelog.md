@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## 2026-08-27 - czytelniejsze pole terminala
 
@@ -11,6 +11,7 @@
 - Usunięto wyścig danych w teście wyczerpania T1/N2: test odczytuje teraz negocjowaną liczbę prób pod blokadą menedżera sesji.
 - Długie wiadomości, również ciągi bez spacji, nie poszerzają już wierszy terminala; rozmowę można przewijać wyłącznie pionowo.
 - Digipeater obsługuje połączenia `VIA` pomiędzy różnymi TNC: wybiera port docelowej stacji według najnowszego bezpośredniego wpisu MHEARD, a przy braku użytecznej trasy zachowuje retransmisję na porcie wejściowym.
+- Usprawniono cross-TNC dla portów o różnych prędkościach: każdy TNC zachowuje niezależną kolejkę, retransmisje trybu connected nie są odrzucane jako duplikaty UI, a echo ramki z wykonanym VIA nie nadpisuje bezpośredniej trasy MHEARD.
 - Sprawdzanie i instalowanie aktualizacji nie korzysta już z limitowanego GitHub API: release publikuje `VERSION.txt`, a paczki i sumy SHA-256 są pobierane bezpośrednio z `main-latest` lub `dev-latest`.
 - Status paczki terminala rozróżnia fizyczne nadanie od potwierdzenia AX.25: po wysłaniu pokazuje oczekiwanie na ACK, a końcowy zielony status `ACK` pojawia się dopiero po poprawnym `N(R)`.
 - Przy wiadomości wieloramkowej potwierdzone części są na bieżąco scalane w jeden tekst; status poprzedniej paczki znika, a po zakończeniu pozostaje tylko końcowy `ACK` ostatniej paczki, np. `3/3`.

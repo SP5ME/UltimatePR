@@ -70,3 +70,17 @@ func TestDigipeaterOutputPortUsesMHeardCrossPort(t *testing.T) {
 		t.Fatalf("unavailable cross-port output=%q", got)
 	}
 }
+
+func TestDirectlyHeardRejectsRepeatedPath(t *testing.T) {
+	if !directlyHeard(ax25.Frame{}) {
+		t.Fatal("frame without a VIA path should be direct")
+	}
+	via, _ := ax25.ParseAddress("SP5ME")
+	if !directlyHeard(ax25.Frame{Digipeaters: []ax25.Address{via}}) {
+		t.Fatal("frame awaiting its first digipeater should be direct on the input port")
+	}
+	via.Repeated = true
+	if directlyHeard(ax25.Frame{Digipeaters: []ax25.Address{via}}) {
+		t.Fatal("echoed frame with a repeated VIA must not overwrite the direct port route")
+	}
+}

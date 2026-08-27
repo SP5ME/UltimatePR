@@ -29,7 +29,7 @@ func New(aliases ...ax25.Address) *Digipeater {
 }
 
 // Repeat returns the encoded frame with the matching VIA H bit set. A false
-// result means the frame is not addressed to this digipeater or is a duplicate.
+// result means the frame is not addressed to this digipeater or is a duplicate UI frame.
 func (d *Digipeater) Repeat(frame ax25.Frame, raw []byte) ([]byte, bool) {
 	if len(frame.Digipeaters) == 0 {
 		return nil, false
@@ -50,20 +50,25 @@ func (d *Digipeater) Repeat(frame ax25.Frame, raw []byte) ([]byte, bool) {
 	if _, ours := d.aliases[frame.Digipeaters[next].String()]; !ours {
 		return nil, false
 	}
-	key := sha256.Sum256(raw)
-	now := d.now()
-	d.mu.Lock()
-	for k, expires := range d.seen {
-		if !now.Before(expires) {
-			delete(d.seen, k)
+	// UI frames have no protocol acknowledgement, so suppress duplicate copies.
+	// Connected-mode frames must pass every time: an identical SABM, I, RR or
+	// DISC frame can be a required AX.25 retry after a lost response.
+	if frame.Type == ax25.TypeUI {
+		key := sha256.Sum256(raw)
+		now := d.now()
+		d.mu.Lock()
+		for k, expires := range d.seen {
+			if !now.Before(expires) {
+				delete(d.seen, k)
+			}
 		}
-	}
-	if expires, duplicate := d.seen[key]; duplicate && now.Before(expires) {
+		if expires, duplicate := d.seen[key]; duplicate && now.Before(expires) {
+			d.mu.Unlock()
+			return nil, false
+		}
+		d.seen[key] = now.Add(d.window)
 		d.mu.Unlock()
-		return nil, false
 	}
-	d.seen[key] = now.Add(d.window)
-	d.mu.Unlock()
 	frame.Digipeaters[next].Repeated = true
 	out, err := ax25.Encode(frame)
 	return out, err == nil

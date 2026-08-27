@@ -370,10 +370,10 @@ func main() {
 				continue
 			}
 			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
-			if !isOwnCallsign(f.Source.String()) {
+			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) {
 				heard.Heard(f.Source.String(), pkt.PortID)
 			}
-			if !isOwnCallsign(f.Source.String()) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
+			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
 				heard.Beacon(f.Source.String(), pkt.PortID, string(f.Payload))
 				reported := parseUltimatePRBeacon(string(f.Payload))
 				reported = withoutCallsigns(reported, append(digiAliases, ownCallsAsAddresses(ownCalls)...)...)
@@ -406,6 +406,14 @@ func main() {
 			return
 		}
 	}
+}
+func directlyHeard(frame ax25.Frame) bool {
+	for _, via := range frame.Digipeaters {
+		if via.Repeated {
+			return false
+		}
+	}
+	return true
 }
 func digipeaterOutputPort(input, destination string, heard *mheard.Store, usable func(string) bool) string {
 	output, found := heard.DirectPort(destination)

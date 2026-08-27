@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 ## 2026-08-27 - more readable terminal input
 
@@ -11,6 +11,7 @@
 - Removed a data race from the T1/N2 exhaustion test by reading the negotiated retry count under the session manager lock.
 - Long messages, including unbroken strings, no longer widen terminal rows; conversations now scroll vertically only.
 - The digipeater supports `VIA` connections across different TNCs: it selects the destination station port from the newest direct MHEARD entry and retains input-port repetition when no usable route exists.
+- Improved cross-TNC operation for ports with different speeds: every TNC keeps an independent queue, connected-mode retries are not discarded as UI duplicates, and an echoed frame with an already repeated VIA no longer overwrites the direct MHEARD route.
 - Update checks and installation no longer use the rate-limited GitHub API: releases publish `VERSION.txt`, while packages and SHA-256 sums are downloaded directly from `main-latest` or `dev-latest`.
 - Terminal packet status now distinguishes physical transmission from AX.25 acknowledgement: after sending it shows that ACK is pending, and the final green `ACK` appears only after a valid `N(R)`.
 - For multi-frame messages, acknowledged parts are progressively merged into one text; the previous packet status disappears, leaving only the final ACK of the last packet, for example `3/3`.
