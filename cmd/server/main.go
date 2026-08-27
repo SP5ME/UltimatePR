@@ -381,11 +381,15 @@ func main() {
 			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
 			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
-				if send := senders[pkt.PortID]; send != nil {
+				outputPort := digipeaterOutputPort(pkt.PortID, f.Destination.String(), heard, func(id string) bool {
+					runtime := runtimes[id]
+					return runtime != nil && runtime.enabled && runtime.port.Status().Connected
+				})
+				if send := senders[outputPort]; send != nil {
 					if err := send(ctx, repeated); err != nil {
-						log.Warn("digipeater transmit failed", "port", pkt.PortID, "error", err)
+						log.Warn("digipeater transmit failed", "input_port", pkt.PortID, "output_port", outputPort, "error", err)
 					} else {
-						log.Info("frame digipeated", "port", pkt.PortID, "source", f.Source.String())
+						log.Info("frame digipeated", "input_port", pkt.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
 					}
 				}
 				continue
@@ -402,6 +406,13 @@ func main() {
 			return
 		}
 	}
+}
+func digipeaterOutputPort(input, destination string, heard *mheard.Store, usable func(string) bool) string {
+	output, found := heard.DirectPort(destination)
+	if !found || output == input || !usable(output) {
+		return input
+	}
+	return output
 }
 func fmtPort(p uint16) string {
 	const digits = "0123456789"

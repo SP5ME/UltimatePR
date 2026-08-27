@@ -40,6 +40,8 @@ used. Link establishment and release require UA/DM
 responses with the Final bit set for locally transmitted SABM/DISC commands
 carrying Poll, as required by the AX.25 v2.2 state diagrams.
 
+Traditional AX.25 digipeating can cross configured radio ports. For a frame whose next unrepeated VIA entry is a local alias, UltimatePR selects the most recently heard usable port of the destination. Unknown, same-port, indirect-only, disabled, or disconnected routes fall back to repetition on the input port. Duplicate suppression remains global across ports to prevent reflected frames from looping.
+
 The personal-station client follows the T1 recovery sequence by polling with
 RR(P=1) before retransmitting an unacknowledged I frame. Exhausting N2 resets
 the local sequence and busy/reject state and reports the link as disconnected.

@@ -132,6 +132,25 @@ func (s *Store) pruneLocked(now time.Time) {
 	}
 }
 
+// DirectPort returns the port on which call was heard directly most recently.
+// Indirect beacon reports are never used for cross-port AX.25 digipeating.
+func (s *Store) DirectPort(call string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.nowTime()
+	s.pruneLocked(now)
+	var newest Entry
+	found := false
+	for _, entry := range s.entries {
+		if entry.Callsign != call || entry.Indirect || entry.Port == "" {
+			continue
+		}
+		if !found || entry.LastSeen.After(newest.LastSeen) {
+			newest, found = entry, true
+		}
+	}
+	return newest.Port, found
+}
 func (s *Store) List() []Entry {
 	s.mu.Lock()
 	defer s.mu.Unlock()

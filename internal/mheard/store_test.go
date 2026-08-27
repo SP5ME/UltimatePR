@@ -68,3 +68,24 @@ func TestOldEntryDisappearsFromList(t *testing.T) {
 		t.Fatalf("stale entry still visible: %+v", entries)
 	}
 }
+
+func TestDirectPortChoosesNewestDirectObservation(t *testing.T) {
+	now := time.Unix(3000, 0)
+	s := New(10)
+	s.now = func() time.Time { return now }
+	s.Heard("SR5DDD", "tnc-x")
+	now = now.Add(time.Minute)
+	s.Heard("SR5DDD", "tnc-y")
+	s.Reported([]string{"SQ9MDD"}, "OTHER", "tnc-z")
+
+	if port, ok := s.DirectPort("SR5DDD"); !ok || port != "tnc-y" {
+		t.Fatalf("direct port=%q ok=%v", port, ok)
+	}
+	if port, ok := s.DirectPort("SQ9MDD"); ok || port != "" {
+		t.Fatalf("indirect report selected as direct port=%q ok=%v", port, ok)
+	}
+	now = now.Add(46 * time.Minute)
+	if port, ok := s.DirectPort("SR5DDD"); ok || port != "" {
+		t.Fatalf("expired direct port=%q ok=%v", port, ok)
+	}
+}

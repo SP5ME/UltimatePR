@@ -19,6 +19,7 @@ Najważniejsze możliwości:
 - dwuwierszowe pole wpisywania, zawijanie długiego tekstu i pionowe przewijanie;
 - `Enter` wysyła tekst, a `Shift+Enter` dodaje ręczny podział wiersza;
 - monitor ramek RX/TX, MHEARD, historia i automatyczny beacon;
+- wieloportowy digipeater wybierający port wyjściowy według najnowszego wpisu MHEARD, dzięki czemu połączenia `VIA` mogą przechodzić między TNC;
 - MHEARD z kolorem aktywności oraz wyrównanym do prawej czasem w minutach od
   ostatniej odebranej ramki;
 - KISS TCP z reconnectem, portami KISS 0–15 i parametrami TXDELAY,
@@ -199,6 +200,7 @@ Highlights include:
 - a two-line composer with wrapping and vertical scrolling;
 - `Enter` sends, while `Shift+Enter` inserts a manual line break;
 - RX/TX monitor, MHEARD, history and automatic beacon;
+- multi-port digipeating that selects the output port from the newest MHEARD entry, allowing `VIA` connections to cross between TNCs;
 - MHEARD activity colour and right-aligned minutes since the last frame;
 - reconnecting KISS TCP, KISS ports 0–15 and link-parameter commands;
 - AXUDP with optional FCS and peer filtering;

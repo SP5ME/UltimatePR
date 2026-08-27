@@ -50,3 +50,23 @@ func TestParseUltimatePRBeaconAndExcludeOwnCalls(t *testing.T) {
 		t.Fatalf("foreign beacon parsed: %v", got)
 	}
 }
+
+func TestDigipeaterOutputPortUsesMHeardCrossPort(t *testing.T) {
+	heard := mheard.New(10)
+	heard.Heard("SQ9MDD", "tnc-x")
+	heard.Heard("SR5DDD", "tnc-y")
+	usable := func(port string) bool { return port == "tnc-y" }
+
+	if got := digipeaterOutputPort("tnc-x", "SR5DDD", heard, usable); got != "tnc-y" {
+		t.Fatalf("cross-port output=%q", got)
+	}
+	if got := digipeaterOutputPort("tnc-x", "UNKNOWN", heard, usable); got != "tnc-x" {
+		t.Fatalf("unknown destination output=%q", got)
+	}
+	if got := digipeaterOutputPort("tnc-y", "SR5DDD", heard, usable); got != "tnc-y" {
+		t.Fatalf("same-port output=%q", got)
+	}
+	if got := digipeaterOutputPort("tnc-x", "SR5DDD", heard, func(string) bool { return false }); got != "tnc-x" {
+		t.Fatalf("unavailable cross-port output=%q", got)
+	}
+}
