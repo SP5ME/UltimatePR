@@ -550,8 +550,11 @@ func TestKeepAliveDisconnectsUnresponsiveStation(t *testing.T) {
 	connectManager(t, m, sent)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	m.mu.Lock()
+	attempts := m.n2
+	m.mu.Unlock()
 	go m.KeepAlive(ctx, time.Millisecond)
-	for attempt := 0; attempt < m.n2; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
 		if poll := decodeFrame(t, <-sent); poll.Type != ax25.TypeRR || !poll.PollFinal {
 			t.Fatalf("keepalive poll %d=%+v", attempt+1, poll)
 		}
