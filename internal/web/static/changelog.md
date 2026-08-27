@@ -7,6 +7,7 @@
 - Poprawiono jasny motyw dwuwierszowego pola terminala oraz układ MHEARD: czas jest czytelniejszy i pozostaje przy prawej krawędzi, a środkowa kolumna mieści opcjonalne `via`.
 - Enter nadal wysyła wiadomość, a Shift+Enter pozwala ręcznie dodać podział wiersza. Wysłany tekst jest również zawijany w widoku rozmowy.
 - Skrócono beacon: nie powtarza już własnego znaku ani QTH; pozostawia locator, oznaczenia `DIGI` i `UltimatePR` oraz listę ostatnio słyszanych stacji.
+- Procedura XID używa teraz osobnych parametrów zarządzania TAPR `TM201` i `NM201`: jedna komenda oraz najwyżej dwie retransmisje co 10 sekund, niezależnie od ustawień `T1` i `N2`.
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 

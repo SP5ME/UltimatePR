@@ -7,6 +7,7 @@
 - Fixed the two-line terminal field in the light theme and refined MHEARD: the time is more readable and stays at the right edge, while a middle column holds optional `via` information.
 - Enter still sends the message, while Shift+Enter inserts a manual line break. Sent text also wraps in the conversation view.
 - Shortened the beacon: it no longer repeats the station callsign or QTH; it keeps the locator, `DIGI` and `UltimatePR` identifiers, and the recently heard station list.
+- XID recovery now uses the separate TAPR management parameters `TM201` and `NM201`: one command and at most two retransmissions at 10-second intervals, independently of the `T1` and `N2` settings.
 
 ## 2026-08-26 - AX.25 terminal and safe TNC Proxy
 

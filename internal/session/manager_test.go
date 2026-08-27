@@ -688,6 +688,47 @@ func TestHubClaimsOutgoingInformationBeforeInboundMux(t *testing.T) {
 	}
 }
 
+func TestXIDUsesIndependentManagementRetryLimit(t *testing.T) {
+	m, sent := testManager(t)
+	m.Configure(30*time.Millisecond, 7, 256)
+	m.mu.Lock()
+	m.tm201 = 10 * time.Millisecond
+	m.nm201 = 2
+	m.mu.Unlock()
+
+	done := make(chan error, 1)
+	go func() { done <- m.Connect(context.Background(), "radio", "REMOTE-1") }()
+	if sabm := decodeFrame(t, <-sent); sabm.Type != ax25.TypeSABM {
+		t.Fatalf("first frame=%+v", sabm)
+	}
+	m.Handle("radio", response(ax25.TypeUA, 0))
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	for transmission := 1; transmission <= 3; transmission++ {
+		select {
+		case raw := <-sent:
+			if xid := decodeFrame(t, raw); xid.Type != ax25.TypeXID || !xid.PollFinal || !isCommand(xid) {
+				t.Fatalf("transmission %d=%+v", transmission, xid)
+			}
+		case <-time.After(100 * time.Millisecond):
+			t.Fatalf("missing XID transmission %d", transmission)
+		}
+	}
+	select {
+	case raw := <-sent:
+		t.Fatalf("unexpected fourth XID=%+v", decodeFrame(t, raw))
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	m.mu.Lock()
+	t1, n2 := m.t1, m.n2
+	m.mu.Unlock()
+	if t1 != 3*time.Second || n2 != 10 {
+		t.Fatalf("legacy fallback T1=%s N2=%d", t1, n2)
+	}
+}
 func decodeFrame(t *testing.T, b []byte) ax25.Frame {
 	t.Helper()
 	f, err := ax25.Decode(b)

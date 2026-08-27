@@ -31,7 +31,10 @@ command with P=1 and accepts only an XID response with F=1. N1 and window are
 receive-limit notifications; the peer receive N1 limits transmitted frame size.
 T1 and N2 use the greater offered value, while duplex, reject mode and modulo
 fall back to the mutually supported lower capability. UltimatePR remains
-half-duplex, implicit REJ, modulo 8 and window k=1. A peer that rejects XID with
+half-duplex, implicit REJ, modulo 8 and window k=1. XID recovery uses the
+management data-link parameters TM201=10 seconds and NM201=2 retransmissions
+(three transmissions total), independently of the data-link T1 and N2 settings.
+A peer that rejects XID with
 FRMR or does not respond causes the AX.25 v2.0 compatibility defaults to be
 used. Link establishment and release require UA/DM
 responses with the Final bit set for locally transmitted SABM/DISC commands

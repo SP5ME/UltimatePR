@@ -37,6 +37,10 @@ const (
 	defaultT3 = 5 * time.Minute
 	// AX.25 v2.2 defines 256 octets as the default N1.
 	defaultN1 = 256
+	// TM201 and NM201 belong to the management data-link state machine and
+	// are deliberately independent of the data-link T1 and N2 parameters.
+	defaultTM201 = 10 * time.Second
+	defaultNM201 = 2 // retransmissions after the initial XID command
 )
 
 type SendPacketProgress struct {
@@ -87,6 +91,8 @@ type Manager struct {
 	configuredT1 time.Duration
 	configuredN2 int
 	configuredN1 int
+	tm201        time.Duration
+	nm201        int
 	xid          chan xidEvent
 	xidCancel    context.CancelFunc
 	peerBusy     bool
@@ -95,7 +101,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), xid: make(chan xidEvent, 4), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1, receiveN1: defaultN1, configuredT1: defaultT1, configuredN2: 10, configuredN1: defaultN1}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), xid: make(chan xidEvent, 4), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1, receiveN1: defaultN1, configuredT1: defaultT1, configuredN2: 10, configuredN1: defaultN1, tm201: defaultTM201, nm201: defaultNM201}
 }
 
 // Configure applies the negotiated-link defaults used for future operations.
@@ -165,7 +171,7 @@ func (m *Manager) negotiateXID(ctx context.Context, send Sender, started chan st
 	defer signalStarted()
 	m.mu.Lock()
 	local := xidSettings(m.configuredN1, m.configuredT1, m.configuredN2)
-	timeout, attempts := m.configuredT1, m.configuredN2
+	timeout, retries := m.tm201, m.nm201
 	m.mu.Unlock()
 	payload, err := ax25.EncodeXID(ax25.XIDParameters(local))
 	if err != nil {
@@ -173,7 +179,7 @@ func (m *Manager) negotiateXID(ctx context.Context, send Sender, started chan st
 	}
 	frame := m.command(ax25.TypeXID, true, nil, 0, 0)
 	frame.Payload = payload
-	for attempt := 0; attempt < attempts; attempt++ {
+	for attempt := 0; attempt <= retries; attempt++ {
 		if err := m.sendFrame(ctx, send, frame); err != nil {
 			return
 		}
