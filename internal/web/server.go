@@ -26,9 +26,9 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
-	"github.com/packet-radio/ultimatepr/internal/uprd"
 	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 	"github.com/packet-radio/ultimatepr/internal/transport"
+	"github.com/packet-radio/ultimatepr/internal/uprd"
 )
 
 //go:embed static/*
@@ -62,6 +62,7 @@ type Config struct {
 	Monitor            *monitor.Store
 	UPRD               *uprd.Manager
 	SendBeacon         func(context.Context) error
+	SendUPRD           func(context.Context) error
 	BBSListen          string
 	BBS                *bbs.Store
 	ConfigPath         string
@@ -201,6 +202,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("DELETE /api/monitor", s.monitorClear)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
 	mux.HandleFunc("GET /api/uprd", s.uprd)
+	mux.HandleFunc("POST /api/uprd/send", s.uprdSend)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
 	mux.HandleFunc("GET /ws/notifications", s.notifications)
 	mux.HandleFunc("GET /api/bbs/messages", s.bbsList)
@@ -356,11 +358,23 @@ func (s *Server) mheard(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(s.cfg.MHeard.List())
 }
 
+func (s *Server) uprdSend(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.SendUPRD == nil {
+		http.Error(w, "UPRD unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := s.cfg.SendUPRD(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) uprd(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if s.cfg.UPRD == nil {
 		_ = json.NewEncoder(w).Encode(struct {
-			Ports []string       `json:"ports"`
+			Ports  []string       `json:"ports"`
 			MHeard []mheard.Entry `json:"mheard"`
 			Nodes  []uprd.Node    `json:"nodes"`
 			Edges  []uprd.Edge    `json:"edges"`
@@ -371,7 +385,7 @@ func (s *Server) uprd(w http.ResponseWriter, r *http.Request) {
 	ports := s.requestedPorts(r)
 	snap := s.cfg.UPRD.Snapshot(ports)
 	_ = json.NewEncoder(w).Encode(struct {
-		Ports []string      `json:"ports"`
+		Ports []string `json:"ports"`
 		uprd.Snapshot
 	}{Ports: ports, Snapshot: snap})
 }

@@ -190,9 +190,6 @@ func (m *Manager) BuildFrame(port string) ([]byte, bool, error) {
 		return nil, false, nil
 	}
 	entries := m.heard.ListByPort(port)
-	if len(entries) == 0 {
-		return nil, false, nil
-	}
 	filtered := make([]string, 0, len(entries))
 	seen := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
@@ -211,9 +208,6 @@ func (m *Manager) BuildFrame(port string) ([]byte, bool, error) {
 		if len(filtered) == m.limit() {
 			break
 		}
-	}
-	if len(filtered) == 0 {
-		return nil, false, nil
 	}
 	payload, err := EncodePayload(m.local, m.locator, filtered, m.limit())
 	if err != nil {

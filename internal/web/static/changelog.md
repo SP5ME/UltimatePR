@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## 2026-08-27 - poprawki mapy, MHEARD i beaconu
+
+- Mapa jest dostępna także bez odebranych stacji i zawiera ręczne wysyłanie statusu UPRD.
+- Usunięto osobną pozycję MHEARD z głównej nawigacji; tryby `Direct` i `UPRD` są dostępne bezpośrednio w prawym panelu MHEARD.
+- Opcje klasycznego beaconu są widoczne w konfiguracji, a domyślny interwał wysyłania wynosi 30 minut.
+
 ## 2026-08-27 - UPRD i mapa topologii Packet Radio
 
 - Dodano UPRD jako lekki system discovery nad AX.25 UI: osobny raport z locatora i listy MHEARD, walidacja payloadu oraz niezależna konfiguracja z interwałem i limitem stacji.

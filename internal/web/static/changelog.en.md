@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## 2026-08-27 - map, MHEARD and beacon fixes
+
+- The map is available even with no heard stations and includes manual UPRD status sending.
+- Removed the separate MHEARD item from the main navigation; `Direct` and `UPRD` modes are available directly in the right MHEARD panel.
+- Classic beacon options are visible in configuration, with a default transmit interval of 30 minutes.
+
 ## 2026-08-27 - UPRD and Packet Radio topology map
 
 - Added UPRD as a lightweight discovery system over AX.25 UI: a separate report with locator and MHEARD list, payload validation, and independent configuration for interval and station limit.

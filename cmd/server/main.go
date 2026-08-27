@@ -23,12 +23,12 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
-	"github.com/packet-radio/ultimatepr/internal/uprd"
 	"github.com/packet-radio/ultimatepr/internal/session"
 	"github.com/packet-radio/ultimatepr/internal/tncproxy"
 	"github.com/packet-radio/ultimatepr/internal/transport"
 	"github.com/packet-radio/ultimatepr/internal/transport/axudp"
 	"github.com/packet-radio/ultimatepr/internal/transport/kiss"
+	"github.com/packet-radio/ultimatepr/internal/uprd"
 	webui "github.com/packet-radio/ultimatepr/internal/web"
 )
 
@@ -254,6 +254,43 @@ func main() {
 		source := ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}
 		return sendBeaconFrame(sendCtx, source, bbsBeaconVia, beaconText(source, cfg.Application.Locator, heard.List(), digiAliases...))
 	}
+	sendUPRD := func(sendCtx context.Context) error {
+		sent := 0
+		failed := make([]string, 0)
+		for _, portID := range portIDs {
+			runtime := runtimes[portID]
+			if runtime == nil || !runtime.enabled || !runtime.port.Status().Connected {
+				continue
+			}
+			frame, _, err := uprdMgr.BuildFrame(portID)
+			if err != nil {
+				failed = append(failed, portID+": "+err.Error())
+				continue
+			}
+			if frame == nil {
+				continue
+			}
+			send := senders[portID]
+			if send == nil {
+				continue
+			}
+			if err := send(sendCtx, frame); err != nil {
+				failed = append(failed, portID+": "+err.Error())
+				continue
+			}
+			sent++
+		}
+		if sent == 0 {
+			if len(failed) > 0 {
+				return fmt.Errorf("UPRD failed on active TNC ports: %s", strings.Join(failed, "; "))
+			}
+			return fmt.Errorf("no active TNC ports available for UPRD")
+		}
+		if len(failed) > 0 {
+			log.Warn("UPRD failed on some active TNC ports", "errors", strings.Join(failed, "; "), "sent", sent)
+		}
+		return nil
+	}
 	inbound := session.NewInboundMux(senders, log)
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	web := webui.New(webui.Config{
@@ -292,6 +329,7 @@ func main() {
 		Monitor:    mon,
 		UPRD:       uprdMgr,
 		SendBeacon: sendBeacon,
+		SendUPRD:   sendUPRD,
 		BBSListen: func() string {
 			if cfg.BBS.Enabled {
 				return cfg.BBS.Listen
@@ -309,7 +347,7 @@ func main() {
 		Version: bbs.BuildVersion,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
-	go runBeaconSchedule(ctx, web, true, cfg.BBS.Enabled, sendBeacon, sendBBSBeacon, log)
+	go runBeaconSchedule(ctx, true, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
 	if cfg.UPRD.Enabled {
 		runUPRDSchedule(ctx, time.Duration(cfg.UPRD.IntervalSeconds)*time.Second, uprdMgr, portIDs, func(portID string) bool {
 			runtime := runtimes[portID]
@@ -484,8 +522,10 @@ func fmtPort(p uint16) string {
 	return string(b[i:])
 }
 
-func runBeaconSchedule(ctx context.Context, web *webui.Server, stationEnabled, bbsEnabled bool, sendStation, sendBBS func(context.Context) error, log *slog.Logger) {
-	const interval = 10 * time.Minute
+func runBeaconSchedule(ctx context.Context, stationEnabled, bbsEnabled bool, interval time.Duration, sendStation, sendBBS func(context.Context) error, log *slog.Logger) {
+	if interval <= 0 {
+		interval = 30 * time.Minute
+	}
 	if bbsEnabled {
 		go func() {
 			timer := time.NewTimer(interval / 2)
@@ -516,10 +556,8 @@ func runBeaconSchedule(ctx context.Context, web *webui.Server, stationEnabled, b
 			for {
 				select {
 				case <-ticker.C:
-					if web.HasActiveBrowser() {
-						if err := sendStation(ctx); err != nil {
-							log.Warn("station beacon failed", "error", err)
-						}
+					if err := sendStation(ctx); err != nil {
+						log.Warn("station beacon failed", "error", err)
 					}
 				case <-ctx.Done():
 					return
