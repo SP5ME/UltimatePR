@@ -13,6 +13,7 @@
 - Digipeater obsługuje połączenia `VIA` pomiędzy różnymi TNC: wybiera port docelowej stacji według najnowszego bezpośredniego wpisu MHEARD, a przy braku użytecznej trasy zachowuje retransmisję na porcie wejściowym.
 - Sprawdzanie i instalowanie aktualizacji nie korzysta już z limitowanego GitHub API: release publikuje `VERSION.txt`, a paczki i sumy SHA-256 są pobierane bezpośrednio z `main-latest` lub `dev-latest`.
 - Status paczki terminala rozróżnia fizyczne nadanie od potwierdzenia AX.25: po wysłaniu pokazuje oczekiwanie na ACK, a końcowy zielony status `ACK` pojawia się dopiero po poprawnym `N(R)`.
+- Przy wiadomości wieloramkowej potwierdzone części są na bieżąco scalane w jeden tekst; status poprzedniej paczki znika, a po zakończeniu pozostaje tylko końcowy `ACK` ostatniej paczki, np. `3/3`.
 
 ## 2026-08-26 - terminal AX.25 i bezpieczne TNC Proxy
 
