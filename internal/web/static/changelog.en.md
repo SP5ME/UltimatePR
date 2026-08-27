@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - more readable terminal input
 
+- A newly created session appears first from the left, while older session tabs move successively to the right.
+
 - Double-clicking a station in MHEARD connects using its remembered return VIA route; the digipeater path is automatically reversed from the most recently received frame.
 
 - The main terminal indicator now shows only the session state: Establishing connection, Connected, Ending connection, or Disconnected; frame transmission, ACK waiting, and T1 recovery no longer replace the Connected status.

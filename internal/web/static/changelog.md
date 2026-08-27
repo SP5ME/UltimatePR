@@ -2,6 +2,8 @@
 
 ## 2026-08-27 - czytelniejsze pole terminala
 
+- Nowo utworzona sesja pojawia się jako pierwsza od lewej, a starsze zakładki sesji przesuwają się kolejno w prawo.
+
 - Dwuklik stacji w MHEARD nawiązuje połączenie z zapamiętaną drogą powrotną VIA; ścieżka digipeaterów jest automatycznie odwracana względem ostatnio odebranej ramki.
 
 - Główny status terminala pokazuje wyłącznie stan sesji: Nawiązywanie połączenia, Połączono, Kończenie połączenia albo Rozłączono; wysyłanie ramek, oczekiwanie na ACK i odzyskiwanie T1 nie zastępują już stanu Połączono.
