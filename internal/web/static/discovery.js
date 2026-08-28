@@ -19,7 +19,59 @@
   function applyMapTransform(){const canvas=$('topologyCanvas');if(canvas)canvas.style.transform=`translate(${state.map.x}px,${state.map.y}px) scale(${state.map.scale})`;const zoom=$('mapZoomValue');if(zoom)zoom.textContent=`${Math.round(state.map.scale*100)}%`}
   function setupMapNavigation(){const graph=$('topologyGraph');if(!graph||graph.dataset.navigation)return;graph.dataset.navigation='true';graph.addEventListener('wheel',e=>{e.preventDefault();state.map.scale=Math.min(2.5,Math.max(.5,state.map.scale*(e.deltaY<0?1.1:.9)));applyMapTransform()},{passive:false});graph.addEventListener('dblclick',e=>{if(e.target.closest('.topology-node'))window.showPage?.('terminal')},true);graph.addEventListener('pointerdown',e=>{if(e.target.closest('.topology-node'))return;state.map.drag=true;state.map.startX=e.clientX;state.map.startY=e.clientY;state.map.originX=state.map.x;state.map.originY=state.map.y;graph.setPointerCapture(e.pointerId);graph.classList.add('dragging')});graph.addEventListener('pointermove',e=>{if(!state.map.drag)return;state.map.x=state.map.originX+e.clientX-state.map.startX;state.map.y=state.map.originY+e.clientY-state.map.startY;applyMapTransform()});const stop=e=>{state.map.drag=false;graph.classList.remove('dragging');if(e.pointerId!==undefined&&graph.hasPointerCapture(e.pointerId))graph.releasePointerCapture(e.pointerId)};graph.addEventListener('pointerup',stop);graph.addEventListener('pointercancel',stop);$('mapZoomIn').onclick=()=>{state.map.scale=Math.min(2.5,state.map.scale*1.15);applyMapTransform()};$('mapZoomOut').onclick=()=>{state.map.scale=Math.max(.5,state.map.scale/1.15);applyMapTransform()};$('mapZoomReset').onclick=()=>{state.map={...state.map,x:0,y:0,scale:1};applyMapTransform()}}
   function setupMapHover(){const graph=$('topologyGraph');if(!graph||graph.dataset.hover)return;graph.dataset.hover='true';graph.addEventListener('mouseover',e=>{const node=e.target.closest('.topology-node');if(!node)return;const locator=node.querySelector('small')?.textContent.trim(),interfaces=[...node.querySelectorAll('.tnc-underlines i')].map(i=>i.title).filter(Boolean);node.title=[locator&&`Lokator: ${locator}`,interfaces.length&&`Interfejsy: ${interfaces.join(', ')}`,`Status: ${node.classList.contains('green')?'świeży':node.classList.contains('yellow')?'starszy':'nieaktualny'}`].filter(Boolean).join(' · ')})}
-  function renderMap(s){const graph=$('topologyGraph');if(!graph)return;const root=s.root||'LOCAL',nodes=(s.nodes&&s.nodes.length?s.nodes:[{callsign:root,locator:'',interfaces:[],last_seen:new Date().toISOString()}]),edges=s.edges||[],pos=positions(nodes,root,edges),controls=graph.querySelector('.map-zoom');graph.replaceChildren();const canvas=document.createElement('div');canvas.id='topologyCanvas';canvas.className='topology-canvas';const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.className='topology-edges';for(const e of edges){const a=pos.get(e.from),b=pos.get(e.to);if(!a||!b)continue;const line=document.createElementNS('http://www.w3.org/2000/svg','line');line.setAttribute('x1',a.x);line.setAttribute('y1',a.y);line.setAttribute('x2',b.x);line.setAttribute('y2',b.y);line.setAttribute('stroke',color(e.interface_id));line.classList.add(freshness(e.last_seen));svg.appendChild(line)}canvas.appendChild(svg);for(const n of nodes){const p=pos.get(n.callsign),button=document.createElement('button'),route=(s.routes||[]).find(r=>r.destination===n.callsign);button.className=`topology-node ${freshness(n.effective_seen||n.last_seen)} ${n.callsign===root?'root':''}`;button.style.left=`${p.x}%`;button.style.top=`${p.y}%`;button.innerHTML=`<strong>${esc(n.callsign)}</strong><small>${esc(n.locator||'')}</small><span class="tnc-underlines">${(n.interfaces||[]).filter(x=>x!=='LOCAL').map(x=>`<i style="background:${color(x)}" title="${esc(x)}"></i>`).join('')}</span>`;button.ondblclick=()=>{if(route&&n.callsign!==root)window.connectRadioStation?.(n.callsign,route.tnc,(route.via||[]).join(','))};canvas.appendChild(button)}graph.appendChild(canvas);if(controls)graph.appendChild(controls);applyMapTransform();setupMapNavigation();const routes=$('mapRoutes');if(routes)routes.innerHTML=(s.routes||[]).filter(r=>r.destination!==root).map(r=>`<div class="route-row"><strong>${esc(r.destination)}</strong><span>${esc(r.path.join(' → '))}</span><em>${esc(r.tnc)}</em></div>`).join('')||'<p class="empty-list">Brak znanych tras.</p>';if($('mapSummary'))$('mapSummary').textContent=`${nodes.length} stacji · ${edges.length} relacji · ${new Date(s.generated).toLocaleTimeString()}`}
+  function routePoints(route,pos){if(!route||!Array.isArray(route.path)||route.path.length<2)return'';const points=[];for(const callsign of route.path){const point=pos.get(callsign);if(!point)return'';points.push(`${point.x},${point.y}`)}return points.join(' ')}
+  function renderMap(s){
+    const graph=$('topologyGraph');
+    if(!graph)return;
+    const root=s.root||'LOCAL',nodes=(s.nodes&&s.nodes.length?s.nodes:[{callsign:root,locator:'',interfaces:[],last_seen:new Date().toISOString()}]),edges=s.edges||[],routes=s.routes||[],pos=positions(nodes,root,edges),controls=graph.querySelector('.map-zoom');
+    graph.replaceChildren();
+    const canvas=document.createElement('div');
+    canvas.id='topologyCanvas';
+    canvas.className='topology-canvas';
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 100 100');
+    svg.setAttribute('preserveAspectRatio','none');
+    svg.className='topology-edges';
+    for(const route of routes){
+      if(route.destination===root)continue;
+      const points=routePoints(route,pos);
+      if(!points)continue;
+      const polyline=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+      polyline.setAttribute('points',points);
+      polyline.setAttribute('stroke',color(route.tnc||route.path?.[1]||''));
+      polyline.classList.add('route',freshness(route.effective_seen));
+      svg.appendChild(polyline);
+    }
+    for(const e of edges){
+      const a=pos.get(e.from),b=pos.get(e.to);
+      if(!a||!b)continue;
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',a.x);
+      line.setAttribute('y1',a.y);
+      line.setAttribute('x2',b.x);
+      line.setAttribute('y2',b.y);
+      line.setAttribute('stroke',color(e.interface_id));
+      line.classList.add(freshness(e.last_seen));
+      svg.appendChild(line);
+    }
+    canvas.appendChild(svg);
+    for(const n of nodes){
+      const p=pos.get(n.callsign),button=document.createElement('button'),route=routes.find(r=>r.destination===n.callsign);
+      button.className=`topology-node ${freshness(n.effective_seen||n.last_seen)} ${n.callsign===root?'root':''}`;
+      button.style.left=`${p.x}%`;
+      button.style.top=`${p.y}%`;
+      button.innerHTML=`<strong>${esc(n.callsign)}</strong><small>${esc(n.locator||'')}</small><span class="tnc-underlines">${(n.interfaces||[]).filter(x=>x!=='LOCAL').map(x=>`<i style="background:${color(x)}" title="${esc(x)}"></i>`).join('')}</span>`;
+      button.ondblclick=()=>{if(route&&n.callsign!==root)window.connectRadioStation?.(n.callsign,route.tnc,(route.via||[]).join(','))};
+      canvas.appendChild(button);
+    }
+    graph.appendChild(canvas);
+    if(controls)graph.appendChild(controls);
+    applyMapTransform();
+    setupMapNavigation();
+    const routeList=$('mapRoutes');
+    if(routeList)routeList.innerHTML=routes.filter(r=>r.destination!==root).map(r=>`<div class="route-row"><strong>${esc(r.destination)}</strong><span>${esc(r.path.join(' → '))}</span><em>${esc(r.tnc)}</em></div>`).join('')||'<p class="empty-list">Brak znanych tras.</p>';
+    if($('mapSummary'))$('mapSummary').textContent=`${nodes.length} stacji · ${edges.length} relacji · ${new Date(s.generated).toLocaleTimeString()}`
+  }
   function renderPorts(){const box=$('mapPorts'),legend=$('mapLegend');if(!box||!legend)return;box.innerHTML='<label class="map-check-all"><input type="checkbox" data-map-port="*" checked> Wszystkie</label>'+state.ports.map(p=>`<label><input type="checkbox" data-map-port="${esc(p)}" checked><i class="map-port-color" style="background:${color(p)}"></i>${esc(p)}</label>`).join('');legend.innerHTML=state.ports.map(p=>`<span><i style="background:${color(p)}"></i>${esc(p)}</span>`).join('');box.querySelectorAll('input').forEach(i=>i.onchange=()=>{if(i.dataset.mapPort==='*')box.querySelectorAll('input:not([data-map-port="*"])').forEach(x=>x.checked=i.checked);refreshMap()});const send=$('sendUprdNow');if(send&&!send.dataset.bound){send.dataset.bound='true';send.onclick=async()=>{send.disabled=true;try{const r=await fetch('/api/uprd/send',{method:'POST'});if(!r.ok)throw new Error(await r.text());send.textContent='Status UPRD wysłany';setTimeout(()=>send.textContent='Wyślij status UPRD',1800)}catch(e){alert(`Nie wysłano UPRD: ${e.message}`)}finally{send.disabled=false}}}}
   async function refreshMap(){try{const selected=[...document.querySelectorAll('#mapPorts input:not([data-map-port="*"]):checked')].map(i=>i.dataset.mapPort),all=$('#mapPorts input[data-map-port="*"]')?.checked!==false,q=all||!selected.length?'':`?ports=${encodeURIComponent(selected.join(','))}`,s=await fetch('/api/uprd'+q,{cache:'no-store'}).then(r=>r.json());renderMap(s)}catch{}}
   function setup(){addNav();addConfig();addBeaconConfig();setupPanelMHeard();setupMapHover();syncNavigation();wrapPages();fetch('/api/status',{cache:'no-store'}).then(r=>r.json()).then(s=>{state.ports=(s.ports||s.tncs||[]).map(p=>typeof p==='string'?p:(p.id||p.ID||p.name)).filter(Boolean);renderPorts()}).catch(()=>{});setInterval(()=>{if(state.page==='map')refreshMap();refreshPanelMHeard()},2000)}
