@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"net"
 	"net/http/httptest"
@@ -165,5 +166,38 @@ func TestInboundViaFormatsReturnPath(t *testing.T) {
 	second, _ := ax25.ParseAddress("DIGI1")
 	if got := inboundVia([]ax25.Address{first, second}); got != "DIGI2-2,DIGI1" {
 		t.Fatalf("inbound via=%q", got)
+	}
+}
+
+func TestHasActiveBrowserTracksNotificationConnections(t *testing.T) {
+	s := New(Config{}, nil)
+	if s.HasActiveBrowser() {
+		t.Fatal("new server reports an active browser")
+	}
+	s.notify[1] = make(chan notification, 1)
+	if !s.HasActiveBrowser() {
+		t.Fatal("notification connection is not reported as an active browser")
+	}
+}
+
+func TestOperatorStationRunsInBackgroundWithoutBrowser(t *testing.T) {
+	s := New(Config{
+		TerminalCallsign: "SP5ME",
+		TerminalAway:     "Czesc {REMOTE}, operator nieobecny, tu {CALL}",
+		TerminalInfo:     "Info {CALL}",
+	}, nil)
+	input := bytes.NewBufferString("/I\r")
+	var output bytes.Buffer
+
+	s.ServeOperatorAX25(session.InboundRoute{Remote: "SQ9ABC", Port: "radio"}, input, &output)
+
+	got := output.String()
+	for _, want := range []string{"Czesc SQ9ABC, operator nieobecny, tu SP5ME\r\n", "Info SP5ME\r\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("background station output %q does not contain %q", got, want)
+		}
+	}
+	if len(s.incoming) != 0 {
+		t.Fatalf("background connection was left waiting for a browser: %+v", s.incoming)
 	}
 }

@@ -60,6 +60,9 @@ func (c *Config) applyTerminalMessageDefaults() {
 	if current := strings.TrimSpace(c.Application.WelcomeMessage); current == "" || current == legacyWelcome {
 		c.Application.WelcomeMessage = welcome
 	}
+	if strings.TrimSpace(c.Application.AwayMessage) == "" {
+		c.Application.AwayMessage = "Witaj {REMOTE}, de {CALL}.\r\nOperatora nie ma obecnie przy stacji.\r\nDostepne komendy: /I, /MH, /H lub /?."
+	}
 	if strings.TrimSpace(c.Application.GoodbyeMessage) == "" {
 		c.Application.GoodbyeMessage = "73 {REMOTE}, de {CALL}."
 	}

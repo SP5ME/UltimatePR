@@ -307,6 +307,7 @@ func main() {
 		ApplicationLocator: cfg.Application.Locator,
 		ApplicationQTH:     cfg.Application.QTH,
 		TerminalWelcome:    cfg.Application.WelcomeMessage,
+		TerminalAway:       cfg.Application.AwayMessage,
 		TerminalGoodbye:    cfg.Application.GoodbyeMessage,
 		TerminalInfo:       cfg.Application.InfoMessage,
 		TerminalEOL:        cfg.Application.TerminalEOL,

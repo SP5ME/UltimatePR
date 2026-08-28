@@ -30,6 +30,7 @@ type Application struct {
 	Language       string `yaml:"language"`
 	UpdateChannel  string `yaml:"update_channel"`
 	WelcomeMessage string `yaml:"welcome_message"`
+	AwayMessage    string `yaml:"away_message"`
 	GoodbyeMessage string `yaml:"goodbye_message"`
 	InfoMessage    string `yaml:"info_message"`
 	TerminalEOL    string `yaml:"terminal_eol"`

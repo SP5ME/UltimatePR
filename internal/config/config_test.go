@@ -67,8 +67,11 @@ func TestTerminalMessageDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(c.Application.WelcomeMessage) == "" || strings.TrimSpace(c.Application.GoodbyeMessage) == "" || strings.TrimSpace(c.Application.InfoMessage) == "" {
+	if strings.TrimSpace(c.Application.WelcomeMessage) == "" || strings.TrimSpace(c.Application.AwayMessage) == "" || strings.TrimSpace(c.Application.GoodbyeMessage) == "" || strings.TrimSpace(c.Application.InfoMessage) == "" {
 		t.Fatalf("terminal message defaults missing: %+v", c.Application)
+	}
+	if !strings.Contains(c.Application.AwayMessage, "Operatora nie ma") {
+		t.Fatalf("away message does not report operator absence: %q", c.Application.AwayMessage)
 	}
 }
 

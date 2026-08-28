@@ -49,6 +49,7 @@ type Config struct {
 	ApplicationLocator string
 	ApplicationQTH     string
 	TerminalWelcome    string
+	TerminalAway       string
 	TerminalGoodbye    string
 	TerminalInfo       string
 	TerminalEOL        string
@@ -142,6 +143,14 @@ func (s *Server) HasActiveBrowser() bool {
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
 // operator station in the web terminal. NODE and BBS links use other handlers.
 func (s *Server) ServeOperatorAX25(route session.InboundRoute, r io.Reader, w io.Writer) {
+	// The web panel is only a UI for the operator station. When no application
+	// page is open, keep serving the station on the server instead of waiting
+	// for a browser to claim the link and dropping it after the claim timeout.
+	if !s.HasActiveBrowser() {
+		s.serveOperatorInBackground(route, r, w)
+		return
+	}
+
 	id := s.incomingSeq.Add(1)
 	via := inboundVia(route.Digipeaters)
 	in := &operatorSession{id: id, call: route.Remote, port: route.Port, via: via, r: r, w: w, done: make(chan struct{}), claimed: make(chan struct{})}
@@ -169,6 +178,78 @@ func (s *Server) ServeOperatorAX25(route session.InboundRoute, r io.Reader, w io
 	s.incomingMu.Lock()
 	delete(s.incoming, id)
 	s.incomingMu.Unlock()
+}
+
+func (s *Server) serveOperatorInBackground(route session.InboundRoute, r io.Reader, w io.Writer) {
+	if closer, ok := r.(io.Closer); ok {
+		defer closer.Close()
+	}
+	if closer, ok := w.(io.Closer); ok {
+		defer closer.Close()
+	}
+
+	codec, _ := terminalcodec.New(terminalcodec.Default)
+	localCall := callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)
+	macros := terminalMacroContext(localCall, route.Remote, s.cfg)
+	writeReply := func(text string) bool {
+		text = terminalResponseText(text)
+		if text == "" {
+			return true
+		}
+		data, err := codec.Encode(text)
+		if err != nil {
+			return false
+		}
+		_, err = w.Write(data)
+		return err == nil
+	}
+
+	var historySession uint64
+	if s.cfg.History != nil {
+		historySession = s.cfg.History.Connected("tnc", route.Remote, route.Port, inboundVia(route.Digipeaters))
+		defer s.cfg.History.Disconnected(historySession)
+	}
+	if !writeReply(terminalReplyText(s.cfg.TerminalAway, macros)) {
+		return
+	}
+
+	buf := make([]byte, 4096)
+	commands := &terminalLineBuffer{}
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			text := codec.Decode(buf[:n])
+			if s.cfg.History != nil {
+				s.cfg.History.Add("tnc", route.Remote, route.Port, inboundVia(route.Digipeaters), "rx", text)
+			}
+			for _, line := range commands.Push(text) {
+				var reply string
+				switch terminalRemoteCommand(line) {
+				case "mheard":
+					if s.cfg.MHeard != nil {
+						reply = formatMHeardResponse(s.cfg.MHeard.List())
+					} else {
+						reply = "Brak odebranych stacji.\r\n"
+					}
+				case "info":
+					reply = terminalReplyText(s.cfg.TerminalInfo, macros)
+				case "help":
+					reply = terminalHelpResponse()
+				}
+				if reply != "" {
+					if !writeReply(reply) {
+						return
+					}
+					if s.cfg.History != nil {
+						s.cfg.History.Add("tnc", route.Remote, route.Port, inboundVia(route.Digipeaters), "tx", terminalResponseText(reply))
+					}
+				}
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (s *Server) claimOperatorSession(id uint64) *operatorSession {
