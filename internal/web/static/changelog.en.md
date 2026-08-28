@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## 2026-08-28 - configuration and terminal layout cleanup
+
+- Reorganized server configuration: categories are now available in a vertical navigation rail, with the selected section shown in a separate content column.
+- Updated the terminal layout: the new-connection bar now occupies only the center column, while History and MHEARD fill the full workspace height.
+- Moved `Reconnect` and `Disconnect` into the active terminal header, while `Monitor` remains next to the session list.
+- Renamed the `Beacon` button to `Send beacon` and aligned the `Direct` / `UPRD` switch in the MHEARD panel.
+
 ## 2026-08-27 - map, MHEARD and beacon fixes
 
 - The map is available even with no heard stations and includes manual UPRD status sending.

@@ -1,5 +1,12 @@
 ﻿# Changelog
 
+## 2026-08-28 - uporządkowanie konfiguracji i terminala
+
+- Uporządkowano konfigurację serwera: kategorie są dostępne w pionowym pasku, a treść wybranej sekcji jest wyświetlana w osobnej kolumnie.
+- Zmieniono układ terminala: pasek nowego połączenia zajmuje tylko środkową kolumnę, a Historia i MHEARD wypełniają całą wysokość obszaru roboczego.
+- Przyciski `Połącz ponownie` i `Rozłącz` znajdują się w nagłówku aktywnego terminala, natomiast `Monitor` pozostaje przy liście sesji.
+- Przycisk `Beacon` opisano jako `Wyślij beacon`, a przełącznik `Direct` / `UPRD` wyrównano w panelu MHEARD.
+
 ## 2026-08-27 - poprawki mapy, MHEARD i beaconu
 
 - Mapa jest dostępna także bez odebranych stacji i zawiera ręczne wysyłanie statusu UPRD.
