@@ -1,4 +1,11 @@
 #beaconTextVisible,#beaconDestinationVisible,#beaconViaVisible,#beaconIntervalVisible{background:#f7fbf8;color:#13231a;border-color:#bcd1c1}
+#applicationConfigPanel #experimentalFeaturesCard{order:1;display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 14px;padding:10px 14px}
+#applicationConfigPanel #experimentalFeaturesCard h3{margin:0;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+#applicationConfigPanel #experimentalFeaturesCard>p{display:none}
+#applicationConfigPanel #experimentalFeaturesCard>.check{display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+#applicationConfigPanel #experimentalFeaturesCard>.check input{width:18px;height:18px;margin:0}
+#applicationConfigPanel #experimentalFeaturesList{grid-column:1/-1;gap:8px;margin-top:2px}
+#applicationConfigPanel #experimentalFeaturesList .check{padding:0}
 #beaconTextVisible{min-height:90px;resize:vertical}
 #mheardPanelTabs{width:150px;height:42px;align-self:center;grid-template-columns:1fr 1fr}
 .map-actions{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px}
