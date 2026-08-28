@@ -6,6 +6,9 @@
 #applicationConfigPanel #experimentalFeaturesList{grid-column:1/-1;gap:8px;margin-top:2px}
 #applicationConfigPanel #experimentalFeaturesList .check{padding:0}
 #terminalConfigPanel .field-grid label small{display:block;margin-top:5px;color:var(--muted);font-family:inherit;font-size:14px;font-weight:500;letter-spacing:0;line-height:1.55;text-transform:none}
+#terminalConfigPanel .field-grid>label small{min-height:66px}
+@media(max-width:1050px){#terminalConfigPanel .field-grid>label small{min-height:88px}}
+@media(max-width:650px){#terminalConfigPanel .field-grid>label small{min-height:0}}
 #mheardPanelTabs{width:150px;height:42px;align-self:center;grid-template-columns:1fr 1fr}
 .map-actions{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px}
 .map-actions button{width:auto;margin:0;padding:0 14px}
