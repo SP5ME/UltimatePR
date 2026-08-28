@@ -1,0 +1,62 @@
+.mobile-mheard-toggle,.mobile-mheard-close,.mobile-mheard-backdrop{display:none}
+
+@media(max-width:760px){
+  html,body{height:100%;min-height:100%;overflow:hidden}
+  body{padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left)}
+  header{height:56px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  header .eyebrow,header .system-status,body>nav,body>footer{display:none!important}
+  header h1{margin:0;font-size:20px}
+  .mobile-mheard-toggle{display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 15px;border:1px solid var(--cyan);border-radius:6px;background:var(--panel);color:var(--cyan);font-weight:800}
+  .mobile-mheard-toggle[aria-expanded="true"]{border-color:var(--green);color:var(--green)}
+
+  #terminalView,#terminalView[hidden]{display:block!important;height:calc(100dvh - 56px);padding:8px;overflow:hidden}
+  #configView,#infoView,#monitorView,#mheardView,#mapView{display:none!important}
+  .terminal-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:7px;height:100%}
+  .terminal-body{display:contents}
+  .history-panel{display:none!important}
+
+  .connection-bar{grid-column:1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;padding:7px}
+  .connection-bar .segmented,.connection-bar #bbsFields{display:none!important}
+  .connection-bar #tncFields{display:grid;grid-template-columns:minmax(92px,.75fr) minmax(120px,1.25fr);gap:7px}
+  .connection-bar #digi{display:none}
+  .connection-bar input,.connection-bar select{height:40px;font-size:16px;line-height:40px}
+  .connection-bar .primary,.connection-bar .danger-button{width:auto;min-width:82px;height:40px;padding:0 12px}
+
+  .terminal-body .terminal-panel{grid-column:1;grid-row:2;height:100%;min-height:0;grid-template-rows:46px minmax(0,1fr) 58px;border-radius:6px}
+  .terminal-head{min-width:0;padding:7px 9px}
+  .terminal-head>div:first-child{min-width:0}
+  .terminal-head>div:first-child>span{display:none}
+  .terminal-head #sessionLabel{margin:0;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+  .terminal-head-actions{min-width:max-content;gap:5px}
+  .terminal-state{margin:0 3px 0 0}
+  .terminal-state strong{display:none}
+  .terminal-head-actions #reconnectSession,.terminal-head-actions #clear{display:none}
+  .terminal-head-actions .danger-button{height:32px;padding:0 10px;font-size:12px}
+  .chat-screen{padding:10px;font-size:13px}
+  .message-bubble,.message-row.tx .message-bubble{font-size:13px;line-height:1.4}
+  #sendForm{grid-template-columns:14px minmax(0,1fr) 62px;padding:5px 6px;gap:3px}
+  #sendForm #command{min-height:46px;max-height:46px;padding:5px 7px;font-size:16px}
+  #sendForm button{font-size:12px}
+
+  .session-dock{grid-column:1;grid-row:3;min-height:48px;padding:6px 7px;gap:7px}
+  .dock-title{display:none}
+  .session-tabs{gap:5px}
+  .session-tab{height:34px}
+  .session-select,.session-remove{height:32px}
+  .session-select span{max-width:145px}
+  .session-monitor{display:none}
+
+  .mobile-mheard-backdrop{position:fixed;z-index:79;inset:0;display:block;border:0;background:#020709aa;opacity:0;pointer-events:none;transition:opacity .18s ease}
+  .mheard-panel{position:fixed;z-index:80;top:calc(56px + env(safe-area-inset-top));right:env(safe-area-inset-right);bottom:env(safe-area-inset-bottom);width:min(88vw,360px);height:auto;padding:0;border-radius:8px 0 0 8px;box-shadow:-12px 0 30px #0008;transform:translateX(105%);transition:transform .18s ease}
+  .mheard-panel .side-head{padding:13px 14px}
+  .mheard-panel .side-head small{margin-left:auto;margin-right:12px}
+  .mobile-mheard-close{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--line);border-radius:5px;background:transparent;color:var(--text);font-size:22px;line-height:1}
+  .mheard-list{height:calc(100% - 59px);padding-bottom:14px}
+  body.mobile-mheard-open .mobile-mheard-backdrop{opacity:1;pointer-events:auto}
+  body.mobile-mheard-open .mheard-panel{transform:translateX(0)}
+}
+
+@media(max-width:390px){
+  .connection-bar #tncFields{grid-template-columns:88px minmax(0,1fr)}
+  .connection-bar .primary,.connection-bar .danger-button{min-width:74px;padding:0 9px}
+}
