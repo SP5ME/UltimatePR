@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## 2026-08-29 - terminal mobilny i praca stacji w tle
+
+- Dodano uproszczony interfejs terminala dla telefonów i małych ekranów: zwarty układ połączenia i sesji, pole wiadomości dopasowane do obsługi dotykowej oraz wysuwany panel MHEARD.
+- Stacja operatora pozostaje aktywna po zamknięciu panelu WWW i obsługuje w tle połączenia przychodzące oraz komendy `/I`, `/MH`, `/H` i `/?`.
+- Dodano wykrywanie obecności operatora na podstawie otwartego panelu WWW oraz osobną, edytowalną wiadomość `Nieobecny`, wysyłaną zamiast zwykłego powitania podczas pracy w tle.
+
 ## 2026-08-28 - uporządkowanie konfiguracji i terminala
 
 - Uporządkowano konfigurację serwera: kategorie są dostępne w pionowym pasku, a treść wybranej sekcji jest wyświetlana w osobnej kolumnie.

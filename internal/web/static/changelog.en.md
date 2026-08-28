@@ -1,5 +1,11 @@
 ﻿# Changelog
 
+## 2026-08-29 - mobile terminal and background station operation
+
+- Added a simplified terminal interface for phones and small screens, with a compact connection and session layout, touch-friendly message input, and a slide-out MHEARD panel.
+- The operator station remains active after the web panel is closed and handles incoming connections plus `/I`, `/MH`, `/H`, and `/?` commands in the background.
+- Added operator-presence detection based on an open web panel and a separate editable `Away` message, sent instead of the regular welcome while the station runs in the background.
+
 ## 2026-08-28 - configuration and terminal layout cleanup
 
 - Reorganized server configuration: categories are now available in a vertical navigation rail, with the selected section shown in a separate content column.
