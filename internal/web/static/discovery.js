@@ -1,6 +1,5 @@
 (function () {
   const featureFlags = {
-    buildAllowsExperimental: false,
     uprd: false,
     map: false,
     mheardToggle: false,
@@ -132,8 +131,8 @@
     const uprd = $("uprdirectExperimental");
     if (!card || !master || !list || !uprd) return;
 
-    card.hidden = !featureFlags.buildAllowsExperimental;
-    if (!featureFlags.buildAllowsExperimental || master.dataset.bound) return;
+    card.hidden = false;
+    if (master.dataset.bound) return;
     master.dataset.bound = "true";
     uprd.dataset.bound = "true";
 
@@ -163,53 +162,6 @@
     };
     uprd.onchange = apply;
     apply();
-  }
-
-  function addBeaconConfig() {
-    const panel = $("stationConfigPanel");
-    if (!panel || $("beaconConfigCard")) return;
-
-    const card = document.createElement("div");
-    card.id = "beaconConfigCard";
-    card.className = "settings-card";
-    card.innerHTML = `
-      <h3>Beacon stacji</h3>
-      <p>Klasyczny beacon AX.25, niezależny od UPRD. Domyślnie wysyłany co 30 minut.</p>
-      <div class="field-grid">
-        <label class="check"><input id="beaconEnabledVisible" type="checkbox"> Beacon aktywny</label>
-        <label>Interwał (minuty)<input id="beaconIntervalVisible" type="number" min="1" max="1440"></label>
-        <label>Destination<input id="beaconDestinationVisible"></label>
-        <label>VIA / DIGI<input id="beaconViaVisible"></label>
-        <label>Treść<textarea id="beaconTextVisible" rows="3"></textarea></label>
-      </div>
-    `;
-    panel.appendChild(card);
-
-    const oldFill = window.fillBeacon;
-    if (typeof oldFill === "function") {
-      window.fillBeacon = (c) => {
-        oldFill(c);
-        const b = c.Beacon || {};
-        const text = String(b.Text || "").trim();
-        $("beaconEnabledVisible").checked = !!b.Enabled;
-        $("beaconIntervalVisible").value = Number(b.IntervalMinutes) || 30;
-        $("beaconDestinationVisible").value = b.Destination || "BEACON";
-        $("beaconViaVisible").value = b.Via || "";
-        $("beaconTextVisible").value = text || "{CALL} {LOC} UltimatePR";
-      };
-    }
-
-    const save = $("saveConfig")?.onclick;
-    if (save) {
-      $("saveConfig").onclick = async () => {
-        $("beaconEnabled").checked = $("beaconEnabledVisible").checked;
-        $("beaconInterval").value = Number($("beaconIntervalVisible").value) || 30;
-        $("beaconDestination").value = $("beaconDestinationVisible").value;
-        $("beaconVia").value = $("beaconViaVisible").value;
-        $("beaconText").value = $("beaconTextVisible").value;
-        return save();
-      };
-    }
   }
 
   function hide() {
@@ -576,7 +528,7 @@
   function setup() {
     addNav();
     addConfig();
-    addBeaconConfig();
+    setupExperimentalControls();
     setupPanelMHeard();
     if (featureFlags.map) {
       setupMapHover();
@@ -587,8 +539,6 @@
     fetch("/api/status", { cache: "no-store" })
       .then((r) => r.json())
       .then((s) => {
-        featureFlags.buildAllowsExperimental = s.experimental_features === true;
-        setupExperimentalControls();
         state.ports = (s.ports || s.tncs || []).map((p) => typeof p === "string" ? p : (p.id || p.ID || p.name)).filter(Boolean);
         renderPorts();
       })

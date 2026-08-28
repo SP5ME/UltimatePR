@@ -35,41 +35,40 @@ import (
 var assets embed.FS
 
 type Config struct {
-	Listen               string
-	Username             string
-	PasswordHash         string
-	AllowedAddresses     []string
-	NodeCallsign         string
-	NodeSSID             uint8
-	BBSCallsign          string
-	BSSSID               uint8
-	TerminalCallsign     string
-	TerminalSSID         uint8
-	OperatorName         string
-	ApplicationLocator   string
-	ApplicationQTH       string
-	TerminalWelcome      string
-	TerminalGoodbye      string
-	TerminalInfo         string
-	TerminalEOL          string
-	AX25T3               time.Duration
-	Ports                []string
-	PortStatus           func() []transport.Status
-	NodeEnabled          bool
-	Radio                *session.Hub
-	MHeard               *mheard.Store
-	History              *history.Store
-	Monitor              *monitor.Store
-	UPRD                 *uprd.Manager
-	SendBeacon           func(context.Context) error
-	SendUPRD             func(context.Context) error
-	BBSListen            string
-	BBS                  *bbs.Store
-	ConfigPath           string
-	ReconnectPort        func(string) error
-	RequestRestart       func()
-	Version              string
-	ExperimentalFeatures bool
+	Listen             string
+	Username           string
+	PasswordHash       string
+	AllowedAddresses   []string
+	NodeCallsign       string
+	NodeSSID           uint8
+	BBSCallsign        string
+	BSSSID             uint8
+	TerminalCallsign   string
+	TerminalSSID       uint8
+	OperatorName       string
+	ApplicationLocator string
+	ApplicationQTH     string
+	TerminalWelcome    string
+	TerminalGoodbye    string
+	TerminalInfo       string
+	TerminalEOL        string
+	AX25T3             time.Duration
+	Ports              []string
+	PortStatus         func() []transport.Status
+	NodeEnabled        bool
+	Radio              *session.Hub
+	MHeard             *mheard.Store
+	History            *history.Store
+	Monitor            *monitor.Store
+	UPRD               *uprd.Manager
+	SendBeacon         func(context.Context) error
+	SendUPRD           func(context.Context) error
+	BBSListen          string
+	BBS                *bbs.Store
+	ConfigPath         string
+	ReconnectPort      func(string) error
+	RequestRestart     func()
+	Version            string
 }
 
 type Server struct {
@@ -682,7 +681,6 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		"version": s.cfg.Version, "node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
 		"ports": s.cfg.Ports, "uptime_seconds": int(time.Since(s.started).Seconds()), "terminal_clients": s.wsClients.Load(),
 		"bbs_enabled": s.cfg.BBSListen != "", "node_enabled": s.cfg.NodeEnabled, "port_status": ports,
-		"experimental_features": s.cfg.ExperimentalFeatures,
 	})
 }
 

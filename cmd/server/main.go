@@ -343,8 +343,7 @@ func main() {
 			restartRequested.Store(true)
 			stop()
 		},
-		Version:              bbs.BuildVersion,
-	ExperimentalFeatures: bbs.BuildChannel == "dev",
+		Version: bbs.BuildVersion,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
 	go runBeaconSchedule(ctx, true, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)

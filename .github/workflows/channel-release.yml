@@ -47,7 +47,7 @@ jobs:
           version="${base}.dev-$(date -u +%Y-%m-%d)-${short}"
           dir="ultimatepr-$channel-linux-${{ matrix.suffix }}"
           mkdir -p "dist/$dir"
-          go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=$version -X github.com/packet-radio/ultimatepr/internal/bbs.BuildChannel=dev" -o "dist/$dir/ultimatepr" ./cmd/server
+          go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=$version" -o "dist/$dir/ultimatepr" ./cmd/server
           cp README.md LICENSE dist/$dir/
           cp install-ultimatepr.sh scripts/install.sh scripts/ultimatepr-update scripts/ultimatepr.service scripts/ultimatepr.openrc dist/$dir/
           chmod +x "dist/$dir/ultimatepr" "dist/$dir/install-ultimatepr.sh" "dist/$dir/install.sh" "dist/$dir/ultimatepr-update" "dist/$dir/ultimatepr.openrc"
