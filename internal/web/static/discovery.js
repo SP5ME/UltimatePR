@@ -16,6 +16,9 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  const applyDynamicLanguage = () => {
+    if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
+  };
   const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;",
     "<": "&lt;",
@@ -222,6 +225,7 @@
         </div>
       `).join("")
       : '<p class="empty-list">Brak odebranych stacji.</p>';
+    applyDynamicLanguage();
 
     el.querySelectorAll(".heard-row").forEach((row) => {
       row.ondblclick = () => window.connectRadioStation?.(row.dataset.call, row.dataset.port, row.dataset.via || "");
@@ -284,7 +288,7 @@
 
       el.innerHTML = list.length
         ? list.slice(0, 60).map((e) => `
-          <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}" title="Dwuklik: połącz">
+          <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}" title="${uiLanguage === "en" ? "Double-click to connect" : "Dwuklik: połącz"}">
             <strong>${typeof activityLED === "function" ? activityLED(e.callsign, e.last_seen) : ""}${e.indirect ? "*" : ""}${esc(e.callsign)}</strong>
             <span class="mheard-via">${e.via ? "via " + esc(e.via) : ""}</span>
             <time>${age(e.last_seen)}</time>
@@ -297,6 +301,7 @@
       });
 
       if (typeof updateActivityLEDs === "function") updateActivityLEDs();
+      applyDynamicLanguage();
     } catch {
       // no-op
     }
@@ -393,7 +398,7 @@
       node.title = [
         locator && `Lokator: ${locator}`,
         interfaces.length && `Interfejsy: ${interfaces.join(", ")}`,
-        `Status: ${node.classList.contains("green") ? "świeży" : node.classList.contains("yellow") ? "starszy" : "nieaktualny"}`,
+        `${uiLanguage === "en" ? "Status" : "Status"}: ${node.classList.contains("green") ? (uiLanguage === "en" ? "fresh" : "świeży") : node.classList.contains("yellow") ? (uiLanguage === "en" ? "stale" : "starszy") : (uiLanguage === "en" ? "outdated" : "nieaktualny")}`,
       ].filter(Boolean).join(" · ");
     });
   }
@@ -470,7 +475,10 @@
       `).join("") || '<p class="empty-list">Brak znanych tras.</p>';
     }
 
-    if ($("mapSummary")) $("mapSummary").textContent = `${nodes.length} stacji · ${edges.length} relacji · ${new Date(s.generated).toLocaleTimeString()}`;
+    if ($("mapSummary")) $("mapSummary").textContent = uiLanguage === "en"
+      ? `${nodes.length} stations · ${edges.length} relations · ${new Date(s.generated).toLocaleTimeString()}`
+      : `${nodes.length} stacji · ${edges.length} relacji · ${new Date(s.generated).toLocaleTimeString()}`;
+    applyDynamicLanguage();
   }
 
   function renderPorts() {
@@ -481,6 +489,7 @@
     box.innerHTML = '<label class="map-check-all"><input type="checkbox" data-map-port="*" checked> Wszystkie</label>'
       + state.ports.map((p) => `<label><input type="checkbox" data-map-port="${esc(p)}" checked><i class="map-port-color" style="background:${color(p)}"></i>${esc(p)}</label>`).join("");
     legend.innerHTML = state.ports.map((p) => `<span><i style="background:${color(p)}"></i>${esc(p)}</span>`).join("");
+    applyDynamicLanguage();
 
     box.querySelectorAll("input").forEach((i) => {
       i.onchange = () => {
@@ -501,10 +510,10 @@
         try {
           const r = await fetch("/api/uprd/send", { method: "POST" });
           if (!r.ok) throw new Error(await r.text());
-          send.textContent = "Status UPRD wysłany";
-          setTimeout(() => { send.textContent = "Wyślij status UPRD"; }, 1800);
+          send.textContent = uiLanguage === "en" ? "UPRD status sent" : "Status UPRD wysłany";
+          setTimeout(() => { send.textContent = uiLanguage === "en" ? "Send UPRD status" : "Wyślij status UPRD"; }, 1800);
         } catch (e) {
-          alert(`Nie wysłano UPRD: ${e.message}`);
+          alert(`${uiLanguage === "en" ? "UPRD was not sent" : "Nie wysłano UPRD"}: ${e.message}`);
         } finally {
           send.disabled = false;
         }
@@ -529,6 +538,7 @@
     addNav();
     addConfig();
     setupExperimentalControls();
+    if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     setupPanelMHeard();
     if (featureFlags.map) {
       setupMapHover();
