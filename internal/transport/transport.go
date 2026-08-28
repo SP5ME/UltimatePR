@@ -19,5 +19,5 @@ type Status struct {
 	ID        string `json:"id"`
 	Type      string `json:"type"`
 	Connected bool   `json:"connected"`
-	Enabled   bool   `json:"enabled,omitempty"`
+	Enabled   bool   `json:"enabled"`
 }
