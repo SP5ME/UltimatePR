@@ -70,6 +70,17 @@ input::placeholder, textarea::placeholder { color: #91a3a5; opacity: 1; }
 .config-notice { font-size: 14px; font-weight: 600; line-height: 1.45; }
 .info-panel .settings-card p, .info-panel .settings-card li, .info-panel .settings-card dd,
 #changelogContent { font-size: 15px; line-height: 1.6; }
+.changelog-content { color: #14241b; }
+.changelog-content { font-family: "Segoe UI", system-ui, sans-serif; font-size: 16px; line-height: 1.65; letter-spacing: .005em; }
+.changelog-content h1, .changelog-content h2, .changelog-content h3 { color: #122018; line-height: 1.25; }
+.changelog-content h1 { margin: 0 0 16px; font-size: 26px; }
+.changelog-content h2 { margin: 22px 0 8px; font-size: 18px; }
+.changelog-content h3 { margin: 18px 0 6px; font-size: 16px; }
+.changelog-content p { margin: 0 0 10px; }
+.changelog-list { margin: 0 0 12px; padding-left: 22px; }
+.changelog-list li { margin: 5px 0; }
+.changelog-content code { padding: 2px 5px; border-radius: 4px; background: #e5eee7; color: #0b5f49; font: 0.9em ui-monospace, Consolas, monospace; }
+.changelog-content a { color: #0e6f58; }
 footer { color: #91a6a8; font-size: 11px; font-weight: 800; }
 
 [data-theme="light"] label,

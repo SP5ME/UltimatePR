@@ -1,4 +1,4 @@
 package bbs
 
-// BuildVersion is replaced with the Git tag by the release workflow.
-var BuildVersion = "0.4.0-dev"
+// BuildVersion is replaced by the release workflow for packaged builds.
+var BuildVersion = "0.4.3.dev - development"
