@@ -645,12 +645,22 @@ func beaconText(source ax25.Address, locator string, entries []mheard.Entry, exc
 }
 
 func expandBeaconText(template string, source ax25.Address, name, locator, qth string) string {
-	return strings.NewReplacer(
+	expanded := strings.NewReplacer(
 		"{CALL}", strings.ToUpper(strings.TrimSpace(source.Callsign)),
 		"{NAME}", strings.TrimSpace(name),
 		"{LOC}", strings.ToUpper(strings.TrimSpace(locator)),
 		"{QTH}", strings.TrimSpace(qth),
 	).Replace(template)
+	expanded = strings.ReplaceAll(expanded, "\r\n", "\n")
+	expanded = strings.ReplaceAll(expanded, "\r", "\n")
+	lines := strings.Split(expanded, "\n")
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line = strings.Join(strings.Fields(line), " "); line != "" {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\r")
 }
 
 func withoutCallsigns(calls []string, excluded ...ax25.Address) []string {

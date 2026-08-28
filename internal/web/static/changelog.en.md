@@ -5,6 +5,9 @@
 - Added a simplified terminal interface for phones and small screens, with a compact connection and session layout, touch-friendly message input, and a slide-out MHEARD panel.
 - The operator station remains active after the web panel is closed and handles incoming connections plus `/I`, `/MH`, `/H`, and `/?` commands in the background.
 - Added operator-presence detection based on an open web panel and a separate editable `Away` message, sent instead of the regular welcome while the station runs in the background.
+- Standardized configuration naming: the classic beacon tab is now labeled `Beacon`.
+- Simplified the left terminal panel heading to `HISTORY` only.
+- The station beacon now defaults to the `{LOC}` macro only; without a configured locator it expands to empty text. A `Restore defaults` button was added next to the editor.
 
 ## 2026-08-28 - configuration and terminal layout cleanup
 

@@ -5,6 +5,9 @@
 - Dodano uproszczony interfejs terminala dla telefonów i małych ekranów: zwarty układ połączenia i sesji, pole wiadomości dopasowane do obsługi dotykowej oraz wysuwany panel MHEARD.
 - Stacja operatora pozostaje aktywna po zamknięciu panelu WWW i obsługuje w tle połączenia przychodzące oraz komendy `/I`, `/MH`, `/H` i `/?`.
 - Dodano wykrywanie obecności operatora na podstawie otwartego panelu WWW oraz osobną, edytowalną wiadomość `Nieobecny`, wysyłaną zamiast zwykłego powitania podczas pracy w tle.
+- Ujednolicono nazewnictwo konfiguracji: zakładka klasycznego beaconu nosi teraz standardową nazwę `Beacon`.
+- Uproszczono nagłówek lewego panelu terminala do samej nazwy `HISTORIA`.
+- Domyślna treść beaconu stacji to wyłącznie makro `{LOC}`; bez skonfigurowanego lokatora rozwija się do pustego tekstu. Obok edytora dodano przycisk `Przywróć domyślne`.
 
 ## 2026-08-28 - uporządkowanie konfiguracji i terminala
 

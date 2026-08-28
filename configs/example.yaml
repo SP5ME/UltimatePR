@@ -24,7 +24,7 @@ beacon:
   enabled: false
   destination: BEACON
   via: ""
-  text: N0CALL UltimatePR
+  text: "{LOC}"
   interval_minutes: 30
 history:
   enabled: true

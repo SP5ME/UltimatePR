@@ -31,6 +31,17 @@ func TestBeaconTextOmitsMissingOptionalFields(t *testing.T) {
 	}
 }
 
+func TestExpandBeaconTextUsesLocatorAndOmitsEmptyValue(t *testing.T) {
+	source, _ := ax25.ParseAddress("SP5ME-8")
+	template := "{LOC}"
+	if got, want := expandBeaconText(template, source, "", " ko02md ", " Warszawa "), "KO02MD"; got != want {
+		t.Fatalf("expanded beacon: got %q, want %q", got, want)
+	}
+	if got, want := expandBeaconText(template, source, "", "", ""), ""; got != want {
+		t.Fatalf("beacon with empty optional values: got %q, want %q", got, want)
+	}
+}
+
 func TestParseUltimatePRBeaconAndExcludeOwnCalls(t *testing.T) {
 	text := "SP5ME-8\rKO02MD\rPruszkow\rDIGI\rUltimatePR\rSQ5AAA,SP5ME,SP5ME-8,bad call,SP5CCC"
 	got := parseUltimatePRBeacon(text)
