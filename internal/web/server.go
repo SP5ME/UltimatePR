@@ -74,17 +74,19 @@ type Config struct {
 }
 
 type Server struct {
-	cfg         Config
-	log         *slog.Logger
-	started     time.Time
-	wsClients   atomic.Int64
-	notifyMu    sync.Mutex
-	notifySeq   uint64
-	notify      map[uint64]chan notification
-	incomingSeq atomic.Uint64
-	incomingMu  sync.Mutex
-	incoming    map[uint64]*operatorSession
-	authMu      sync.RWMutex
+	cfg           Config
+	log           *slog.Logger
+	started       time.Time
+	wsClients     atomic.Int64
+	notifyMu      sync.Mutex
+	notifySeq     uint64
+	notify        map[uint64]chan notification
+	incomingSeq   atomic.Uint64
+	incomingMu    sync.Mutex
+	incoming      map[uint64]*operatorSession
+	authMu        sync.RWMutex
+	activeSession string
+	sessionSwitch bool
 }
 
 type notification struct {
@@ -142,6 +144,12 @@ func (s *Server) HasActiveBrowser() bool {
 }
 
 func (s *Server) presenceChanged() {
+	s.authMu.Lock()
+	if s.sessionSwitch {
+		s.authMu.Unlock()
+		return
+	}
+	s.authMu.Unlock()
 	if s.cfg.PresenceChanged != nil {
 		s.cfg.PresenceChanged()
 	}
@@ -337,9 +345,13 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 	id := s.notifySeq
 	ch := make(chan notification, 8)
 	s.notify[id] = ch
+	s.authMu.Lock()
+	switching := s.sessionSwitch
+	s.sessionSwitch = false
+	s.authMu.Unlock()
 	becameActive := len(s.notify) == 1
 	s.notifyMu.Unlock()
-	if becameActive {
+	if becameActive && !switching {
 		s.presenceChanged()
 	}
 	defer func() {
@@ -360,6 +372,10 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ticker.C:
+			if cookie, err := r.Cookie(sessionCookie); err != nil || !s.validSession(cookie.Value) {
+				_ = ws.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "session replaced"), time.Now().Add(time.Second))
+				return
+			}
 			if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(3*time.Second)); err != nil {
 				return
 			}

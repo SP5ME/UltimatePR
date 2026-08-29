@@ -594,6 +594,25 @@
     addNav();
     addConfig();
     setupActiveStatusButton();
+    document.documentElement.dataset.singleWebSession = "true";
+    const monitorRenderer = () => {
+      const list = $("monitorList");
+      if (!list) return;
+      list.innerHTML = monitorEntries.length ? monitorEntries.map((e) => {
+        const content = e.content || "—";
+        return `<div class="monitor-row"><time>${esc(new Date(e.time).toLocaleTimeString())}</time><b class="${esc(String(e.direction || "").toLowerCase())}">${esc(e.direction || "")}</b><span>${esc(e.port || "")}</span><div class="monitor-route"><strong>${esc(e.source || "")} → ${esc(e.destination || "")}</strong>${e.via ? `<span class="monitor-via">via ${esc(e.via)}</span>` : ""}</div><span class="monitor-content" title="${esc(content)}">${esc(content)}</span><em>${esc(e.type || "")} · ${Number(e.bytes) || 0} B</em></div>`;
+      }).join("") : '<p class="empty-list">Brak ramek.</p>';
+    };
+    if (typeof renderMonitorList === "function") renderMonitorList = monitorRenderer;
+    const checkWebSession = async () => {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        if (response.status === 401) location.replace("/login.html");
+      } catch {
+        // Temporary network failures do not log the operator out.
+      }
+    };
+    setInterval(checkWebSession, 2000);
     setupExperimentalControls();
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     setupPanelMHeard();

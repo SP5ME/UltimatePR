@@ -34,6 +34,7 @@
 .topology-node.yellow{border-color:#ffd166;background:#2a2108f5}
 .topology-node.red{border-color:#ff7272;background:#2b0d12f5}
 .topology-node.root{border-color:#72e6ff;background:#073743f7}
+.operator-presence{display:none!important}
 .map-zoom{position:absolute;z-index:4;right:12px;top:12px;display:flex;align-items:center;gap:5px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
 .map-zoom button{width:auto;min-width:30px;height:28px;margin:0;padding:0 7px}
 .map-zoom span{min-width:42px;text-align:center;color:var(--muted);font:11px ui-monospace,Consolas,monospace}

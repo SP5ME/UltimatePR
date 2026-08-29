@@ -93,11 +93,24 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cannot create session", http.StatusInternalServerError)
 		return
 	}
+	s.authMu.Lock()
+	if s.activeSession != "" && s.activeSession != token {
+		s.sessionSwitch = true
+	}
+	s.activeSession = token
+	s.authMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: int(sessionMaxAge.Seconds()), Expires: time.Now().Add(sessionMaxAge)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(sessionCookie); err == nil {
+		s.authMu.Lock()
+		if s.activeSession == cookie.Value {
+			s.activeSession = ""
+		}
+		s.authMu.Unlock()
+	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -105,7 +118,11 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) validSession(token string) bool {
 	s.authMu.RLock()
 	hash := s.cfg.PasswordHash
+	active := s.activeSession
 	s.authMu.RUnlock()
+	if active != "" && token != active {
+		return false
+	}
 	return verifySessionToken(hash, token, time.Now())
 }
 
