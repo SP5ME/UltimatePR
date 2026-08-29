@@ -109,6 +109,8 @@ func terminalRemoteCommand(line string) string {
 	switch strings.ToUpper(strings.TrimSpace(line)) {
 	case "/I":
 		return "info"
+	case "/V":
+		return "version"
 	case "/MH":
 		return "mheard"
 	case "/H", "/?":
@@ -119,7 +121,15 @@ func terminalRemoteCommand(line string) string {
 }
 
 func terminalHelpResponse() string {
-	return "Komendy UltimatePR:\r\n/I - informacje o stacji\r\n/MH - ostatnio slyszane stacje\r\n/H lub /? - pomoc\r\n"
+	return "Komendy UltimatePR:\r\n/I - informacje o stacji\r\n/V - wersja aplikacji\r\n/MH - ostatnio slyszane stacje\r\n/H lub /? - pomoc\r\n"
+}
+
+func terminalVersionResponse(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		version = "unknown"
+	}
+	return terminalResponseText("UltimatePR " + version)
 }
 
 func formatMHeardResponse(entries []mheard.Entry) string {

@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http/httptest"
@@ -12,7 +13,21 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
+	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 )
+
+func TestBeaconEndpointAlwaysSendsClassicBeacon(t *testing.T) {
+	beaconCalls, uprdCalls := 0, 0
+	s := &Server{cfg: Config{
+		SendBeacon: func(context.Context) error { beaconCalls++; return nil },
+		SendUPRD:   func(context.Context) error { uprdCalls++; return nil },
+	}}
+	w := httptest.NewRecorder()
+	s.beacon(w, httptest.NewRequest("POST", "/api/beacon", nil))
+	if w.Code != 204 || beaconCalls != 1 || uprdCalls != 0 {
+		t.Fatalf("beacon endpoint calls = beacon:%d uprd:%d status:%d", beaconCalls, uprdCalls, w.Code)
+	}
+}
 
 func TestMHeardDirectExcludesUPRDReports(t *testing.T) {
 	store := mheard.New(10)
@@ -93,6 +108,25 @@ func TestTerminalTemplateExpansion(t *testing.T) {
 	}
 }
 
+func TestAutomaticWelcomePayloadEndsWithCRLF(t *testing.T) {
+	text := terminalReplyText("Hello, for help type: /h", nil)
+	codec, err := terminalcodec.New(terminalcodec.Default)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := codec.Encode(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte("Hello, for help type: /h\r\n")
+	if !bytes.Equal(payload, want) {
+		t.Fatalf("welcome payload = % X, want % X", payload, want)
+	}
+	if bytes.HasSuffix(payload, []byte("\r\n\r\n")) || bytes.HasSuffix(payload, []byte("\n\n")) {
+		t.Fatalf("welcome payload has duplicated line ending: % X", payload)
+	}
+}
+
 func TestExpandTerminalMessageAtSendTime(t *testing.T) {
 	cfg := Config{TerminalCallsign: "SP5ME", TerminalSSID: 3, OperatorName: "Miki", ApplicationLocator: "KO02MD", ApplicationQTH: "Warszawa"}
 	values := terminalMacroContext(callsign(cfg.TerminalCallsign, cfg.TerminalSSID), "SQ9ABC-7", cfg)
@@ -136,6 +170,7 @@ func TestMonitorClearEndpoint(t *testing.T) {
 func TestTerminalRemoteCommandsRequireSlashAndSeparateLine(t *testing.T) {
 	tests := map[string]string{
 		"/i":        "info",
+		"/v":        "version",
 		" /MH ":     "mheard",
 		"/h":        "help",
 		"/?":        "help",
@@ -154,10 +189,16 @@ func TestTerminalRemoteCommandsRequireSlashAndSeparateLine(t *testing.T) {
 
 func TestTerminalHelpListsRemoteCommands(t *testing.T) {
 	help := terminalHelpResponse()
-	for _, command := range []string{"/I", "/MH", "/H", "/?"} {
+	for _, command := range []string{"/I", "/V", "/MH", "/H", "/?"} {
 		if !strings.Contains(help, command) {
 			t.Errorf("help does not list %s: %q", command, help)
 		}
+	}
+}
+
+func TestTerminalVersionResponse(t *testing.T) {
+	if got := terminalVersionResponse("0.4.4-dev.0+local"); got != "UltimatePR 0.4.4-dev.0+local\r\n" {
+		t.Fatalf("version response = %q", got)
 	}
 }
 

@@ -250,9 +250,6 @@ func main() {
 		return nil
 	}
 	sendBeacon := func(sendCtx context.Context) error {
-		if cfg.UPRD.Enabled {
-			return fmt.Errorf("classic beacon is disabled while UPRD is enabled")
-		}
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
 		return sendBeaconFrame(sendCtx, source, stationBeaconVia, expandBeaconText(cfg.Beacon.Text, source, cfg.Application.OperatorName, cfg.Application.Locator, cfg.Application.QTH))
 	}
@@ -361,7 +358,7 @@ func main() {
 		Version: bbs.BuildVersion,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
-	go runBeaconSchedule(ctx, !cfg.UPRD.Enabled, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
+	go runBeaconSchedule(ctx, cfg.Beacon.Enabled, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
 	if cfg.UPRD.Enabled {
 		runUPRDSchedule(ctx, time.Duration(cfg.UPRD.IntervalSeconds)*time.Second, uprdMgr, portIDs, func(portID string) bool {
 			runtime := runtimes[portID]

@@ -5,16 +5,20 @@
 ### Added
 
 - Added a binary operator-status byte to UPRD frames and support for interpreting it in MHEARD.
+- Added the remote `/V` command, which returns the UltimatePR application version.
 
 ### Changed
 
-- UPRD is enabled by default and replaces the classic beacon while active; the header button sends whichever status is currently active.
+- Separated the manual classic beacon button from automatic UPRD; both mechanisms can operate independently.
+- Moved beacon settings to a dedicated `Beacon` tab; closing History now expands the new-connection bar.
+- UPRD is enabled by default and operates independently of the classic beacon; the header button sends only the classic beacon.
 - Added status transmission when the first web session opens and the last one closes, without an extra frame when switching applications.
 - Limited the web panel to one active session; a new login automatically invalidates the previous application.
 
 ### Fixed
 
 - The monitor now shows the actual UPRD frame content instead of only the status description.
+- Fixed the incoming AX.25 welcome message so its payload ends with one `CRLF` (`0x0D 0x0A`).
 
 ## 2026-08-29 - mobile terminal and background station operation
 

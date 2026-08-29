@@ -22,6 +22,8 @@
     if (experimental?.parentElement?.lastChild) experimental.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
     const uprdTab = $("configUPRDirectTab");
     if (uprdTab) uprdTab.textContent = "UPRdirect";
+    const beaconTab = $("configBeaconTab");
+    if (beaconTab) beaconTab.textContent = uiLanguage === "en" ? "Beacon" : "Beacon";
     const appearanceTab = $("configAppearanceTab");
     if (appearanceTab) appearanceTab.textContent = uiLanguage === "en" ? "Appearance & sounds" : "Wygląd i dźwięki";
     const cardDescription = $("uprdCardDescription");
@@ -38,8 +40,8 @@
     if (helpButton) helpButton.setAttribute("aria-label", uiLanguage === "en" ? "UPRD help" : "Pomoc UPRD");
     const info = $("uprdInfoText");
     if (info) info.textContent = uiLanguage === "en"
-      ? "Beacon and UPRD cannot be enabled at the same time because that would unnecessarily occupy the radio channel. When enabled, UPRD serves as the beacon."
-      : "Jednoczesne włączenie beaconu i UPRD jest zablokowane, ponieważ niepotrzebnie obciążałoby kanał radiowy. Włączony UPRD pełni funkcję beaconu.";
+      ? "Beacon and UPRD are independent and can be enabled at the same time."
+      : "Beacon i UPRD są niezależne i mogą działać jednocześnie.";
   };
   const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;",
@@ -91,8 +93,8 @@
     if (!panel || $("uprdConfigCard")) return;
 
     const beacon = $("beaconConfigCard");
-    const stationPanel = $("stationConfigPanel");
-    if (beacon && stationPanel) stationPanel.appendChild(beacon);
+    const beaconPanel = $("beaconConfigPanel");
+    if (beacon && beaconPanel) beaconPanel.appendChild(beacon);
 
     const card = document.createElement("div");
     card.id = "uprdConfigCard";
@@ -114,16 +116,6 @@
     panel.appendChild(card);
     $("configUPRDirectTab")?.toggleAttribute("hidden", false);
 
-    const syncBeaconMode = () => {
-      const enabled = !!$("uprdEnabled")?.checked;
-      for (const id of ["beaconEnabled", "beaconInterval", "beaconDestination", "beaconVia", "beaconText", "beaconTextDefault"]) {
-        const control = $(id);
-        if (control) control.disabled = enabled;
-      }
-      $("beaconConfigCard")?.classList.toggle("beacon-disabled", enabled);
-      if (enabled && $("beaconEnabled")) $("beaconEnabled").checked = false;
-    };
-
     const oldFill = window.fillApplication;
     if (typeof oldFill === "function") {
       window.fillApplication = (c) => {
@@ -132,15 +124,14 @@
         $("uprdEnabled").checked = !!u.Enabled;
         $("uprdInterval").value = Math.max(1, Math.round((u.IntervalSeconds || 600) / 60));
         $("uprdLimit").value = u.MHeardLimit || 5;
-        syncBeaconMode();
         applyExperimentalVisibility();
       };
     }
 
-    $("uprdEnabled").onchange = () => { syncBeaconMode(); applyExperimentalVisibility(); };
+    $("uprdEnabled").onchange = () => { applyExperimentalVisibility(); };
     const helpText = () => $("uprdHelpText").textContent = uiLanguage === "en"
-      ? "UPRD is a direct AX.25 status report for sharing the station locator and recently heard stations. It also reports whether the operator is present. The report is sent periodically and when the web panel opens or the last panel closes. UPRD is intended to replace the classic beacon while it is enabled."
-      : "UPRD to bezpośredni raport AX.25 zawierający lokator stacji, ostatnio słyszane stacje oraz informację o obecności operatora. Raport jest wysyłany okresowo, a także przy otwarciu panelu WWW i po zamknięciu ostatniego panelu. Włączony UPRD zastępuje klasyczny beacon.";
+      ? "UPRD is a direct AX.25 status report for sharing the station locator and recently heard stations. It also reports whether the operator is present. The report is sent periodically and when the web panel opens or the last panel closes. UPRD and the classic beacon are independent."
+      : "UPRD to bezpośredni raport AX.25 zawierający lokator stacji, ostatnio słyszane stacje oraz informację o obecności operatora. Raport jest wysyłany okresowo, a także przy otwarciu panelu WWW i po zamknięciu ostatniego panelu. UPRD i klasyczny beacon działają niezależnie.";
     const showHelp = () => { helpText(); $("uprdHelpModal").hidden = false; };
     const hideHelp = () => { $("uprdHelpModal").hidden = true; };
     $("uprdHelpButton").onclick = showHelp;
@@ -153,7 +144,6 @@
     if (save) {
       $("saveConfig").onclick = async () => {
         if (typeof configModel !== "undefined" && configModel) {
-          syncBeaconMode();
           configModel.UPRD = {
             Enabled: $("uprdEnabled").checked,
             IntervalSeconds: (Number($("uprdInterval").value) || 10) * 60,
@@ -163,6 +153,16 @@
         return save();
       };
     }
+    const oldShowConfigPart = showConfigPart;
+    showConfigPart = (part) => {
+      if (part === "beacon") {
+        document.querySelectorAll(".config-panels > .settings-panel").forEach((item) => { item.hidden = item.id !== "beaconConfigPanel"; });
+        document.querySelectorAll(".config-tabs button").forEach((item) => item.classList.toggle("active", item === $("configBeaconTab")));
+        return;
+      }
+      oldShowConfigPart(part);
+    };
+    $("configBeaconTab")?.addEventListener("click", () => showConfigPart("beacon"));
   }
 
   function applyExperimentalVisibility() {
@@ -562,23 +562,6 @@
       };
     });
 
-    const send = $("sendUprdNow");
-    if (send && !send.dataset.bound) {
-      send.dataset.bound = "true";
-      send.onclick = async () => {
-        send.disabled = true;
-        try {
-          const r = await fetch("/api/uprd/send", { method: "POST" });
-          if (!r.ok) throw new Error(await r.text());
-          send.textContent = uiLanguage === "en" ? "UPRD status sent" : "Status UPRD wysłany";
-          setTimeout(() => { send.textContent = uiLanguage === "en" ? "Send UPRD status" : "Wyślij status UPRD"; }, 1800);
-        } catch (e) {
-          alert(`${uiLanguage === "en" ? "UPRD was not sent" : "Nie wysłano UPRD"}: ${e.message}`);
-        } finally {
-          send.disabled = false;
-        }
-      };
-    }
   }
 
   async function refreshMap() {
@@ -594,26 +577,27 @@
     }
   }
 
-  function setupActiveStatusButton() {
+  function setupHeaderStatusButton() {
     const button = $("sendBeacon");
     if (!button || button.dataset.activeStatusBound) return;
     button.dataset.activeStatusBound = "true";
-    const label = () => uiLanguage === "en" ? "Send UPRD/beacon" : "Wyślij UPRD/beacon";
-    button.textContent = label();
-    button.onclick = async () => {
+    const send = async (label, success, failure) => {
       button.disabled = true;
       try {
         const response = await fetch("/api/beacon", { method: "POST" });
         if (!response.ok) throw new Error(await response.text());
-        button.textContent = uiLanguage === "en" ? "UPRD/beacon sent" : "UPRD/beacon wysłany";
+        button.textContent = success();
         setTimeout(() => { button.textContent = label(); }, 1800);
       } catch (error) {
-        alert(`${uiLanguage === "en" ? "UPRD/beacon was not sent" : "Nie wysłano UPRD/beacon"}: ${error.message}`);
+        alert(`${failure()}: ${error.message}`);
         button.textContent = label();
       } finally {
         button.disabled = false;
       }
     };
+    const beaconLabel = () => uiLanguage === "en" ? "Send beacon" : "Wyślij beacon";
+    button.textContent = beaconLabel();
+    button.onclick = () => send(beaconLabel, () => uiLanguage === "en" ? "Beacon sent" : "Beacon wysłany", () => uiLanguage === "en" ? "Beacon was not sent" : "Nie wysłano beaconu");
   }
 
   function setupHistoryPanel() {
@@ -726,7 +710,7 @@
     setupHistoryConnection();
     setupAppearanceConfig();
     removeHeaderPreferences();
-    setupActiveStatusButton();
+    setupHeaderStatusButton();
     document.documentElement.dataset.singleWebSession = "true";
     const monitorRenderer = () => {
       const list = $("monitorList");

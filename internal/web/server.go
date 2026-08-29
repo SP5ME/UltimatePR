@@ -248,6 +248,8 @@ func (s *Server) serveOperatorInBackground(route session.InboundRoute, r io.Read
 					}
 				case "info":
 					reply = terminalReplyText(s.cfg.TerminalInfo, macros)
+				case "version":
+					reply = terminalVersionResponse(s.cfg.Version)
 				case "help":
 					reply = terminalHelpResponse()
 				}
@@ -298,7 +300,6 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("DELETE /api/monitor", s.monitorClear)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
 	mux.HandleFunc("GET /api/uprd", s.uprd)
-	mux.HandleFunc("POST /api/uprd/send", s.uprdSend)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
 	mux.HandleFunc("GET /ws/notifications", s.notifications)
 	mux.HandleFunc("GET /api/bbs/messages", s.bbsList)
@@ -449,11 +450,8 @@ func (s *Server) monitorClear(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *Server) beacon(w http.ResponseWriter, r *http.Request) {
 	send := s.cfg.SendBeacon
-	if s.cfg.UPRD != nil && s.cfg.UPRD.Enabled() {
-		send = s.cfg.SendUPRD
-	}
 	if send == nil {
-		http.Error(w, "UPRD/beacon unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "beacon unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if err := send(r.Context()); err != nil {
@@ -482,18 +480,6 @@ func (s *Server) mheard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(s.cfg.MHeard.List())
-}
-
-func (s *Server) uprdSend(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.SendUPRD == nil {
-		http.Error(w, "UPRD unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if err := s.cfg.SendUPRD(r.Context()); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) uprd(w http.ResponseWriter, r *http.Request) {
@@ -945,13 +931,16 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				}
 			case "info":
 				reply(expandReply(terminalInfo, historyStation))
+			case "version":
+				reply(terminalVersionResponse(s.cfg.Version))
 			case "help":
 				reply(terminalHelpResponse())
 			}
 		}
 	}
 	sendIncomingReply := func(text string, id string, remote string) {
-		text = expandReply(text, remote)
+		// Normalize automatic incoming replies before writing the AX.25 payload.
+		text = terminalResponseText(expandReply(text, remote))
 		if text == "" || incoming == nil {
 			return
 		}
@@ -1341,6 +1330,8 @@ func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station strin
 					}
 				case "info":
 					writeOperatorReply(ws, in, codec, terminalReplyText(s.cfg.TerminalInfo, terminalMacroContext(terminalCall, station, s.cfg)))
+				case "version":
+					writeOperatorReply(ws, in, codec, terminalVersionResponse(s.cfg.Version))
 				case "help":
 					writeOperatorReply(ws, in, codec, terminalHelpResponse())
 				}

@@ -5,16 +5,20 @@
 ### Added
 
 - Dodano binarny bajt statusu operatora do ramek UPRD oraz obsługę jego interpretacji w MHEARD.
+- Dodano zdalną komendę `/V`, zwracającą wersję aplikacji UltimatePR.
 
 ### Changed
 
-- UPRD jest domyślnie włączone i zastępuje klasyczny beacon, gdy pozostaje aktywne; przycisk nagłówka wysyła aktualnie aktywny status.
+- Rozdzielono ręczny przycisk klasycznego beaconu od automatycznego UPRD; oba mechanizmy mogą działać niezależnie.
+- Przeniesiono ustawienia beaconu do osobnej zakładki `Beacon`, a zamknięcie Historii rozszerza pasek nowego połączenia.
+- UPRD jest domyślnie włączone i działa niezależnie od klasycznego beaconu; przycisk nagłówka wysyła wyłącznie klasyczny beacon.
 - Dodano wysyłanie statusu przy otwarciu pierwszej i zamknięciu ostatniej sesji WWW, bez dodatkowej ramki przy przełączeniu aplikacji.
 - Ograniczono panel WWW do jednej aktywnej sesji; nowe logowanie automatycznie unieważnia poprzednią aplikację.
 
 ### Fixed
 
 - Monitor ponownie pokazuje rzeczywistą zawartość ramek UPRD zamiast samego opisu statusu.
+- Naprawiono automatyczne powitanie połączenia przychodzącego AX.25: payload jest kończony pojedynczym `CRLF` (`0x0D 0x0A`).
 
 ## 2026-08-29 - terminal mobilny i praca stacji w tle
 
