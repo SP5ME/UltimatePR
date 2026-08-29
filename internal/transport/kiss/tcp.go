@@ -125,7 +125,9 @@ func acceptFrame(f Frame, port uint8) bool {
 	if f.Command != 0 {
 		return false
 	}
-	return f.Port == port
+	// Some TNC applications transmit received data on the standard KISS
+	// channel 0 even when the configured TX channel is different.
+	return f.Port == 0 || f.Port == port
 }
 func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error) {
 	if err := p.writeParameters(c); err != nil {
