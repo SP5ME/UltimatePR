@@ -125,7 +125,9 @@ func acceptFrame(f Frame, port uint8) bool {
 	if f.Command != 0 {
 		return false
 	}
-	return f.Port == port
+	// Keep accepting the standard KISS data channel as older TNC software did.
+	// A configured channel remains accepted as well for multi-channel devices.
+	return f.Port == 0 || f.Port == port
 }
 func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error) {
 	if err := p.writeParameters(c); err != nil {

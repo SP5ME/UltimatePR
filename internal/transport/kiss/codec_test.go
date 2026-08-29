@@ -75,7 +75,10 @@ func TestDecoderKeepsEscapeStateAcrossReads(t *testing.T) {
 
 func TestAcceptFrame(t *testing.T) {
 	if !acceptFrame(Frame{Port: 3, Command: 0}, 3) {
-		t.Fatal("expected KISS TCP frames from Direwolf channel 0 to be accepted")
+		t.Fatal("expected configured KISS data channel to be accepted")
+	}
+	if !acceptFrame(Frame{Port: 0, Command: 0}, 3) {
+		t.Fatal("expected standard KISS data channel to be accepted")
 	}
 	if acceptFrame(Frame{Port: 1, Command: 0}, 3) {
 		t.Fatal("unexpected accept for non-zero channel")
