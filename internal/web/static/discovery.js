@@ -153,16 +153,6 @@
         return save();
       };
     }
-    const oldShowConfigPart = showConfigPart;
-    showConfigPart = (part) => {
-      if (part === "beacon") {
-        document.querySelectorAll(".config-panels > .settings-panel").forEach((item) => { item.hidden = item.id !== "beaconConfigPanel"; });
-        document.querySelectorAll(".config-tabs button").forEach((item) => item.classList.toggle("active", item === $("configBeaconTab")));
-        return;
-      }
-      oldShowConfigPart(part);
-    };
-    $("configBeaconTab")?.addEventListener("click", () => showConfigPart("beacon"));
   }
 
   function applyExperimentalVisibility() {
@@ -676,15 +666,6 @@
     panel.hidden = true;
     panel.innerHTML = `<div class="settings-card"><h3>${uiLanguage === "en" ? "Appearance" : "Wygląd"}</h3><div class="field-grid"><label class="check"><input id="historyPanelEnabled" type="checkbox"> ${uiLanguage === "en" ? "Show conversation history" : "Pokaż historię rozmów"}</label><label>${uiLanguage === "en" ? "Theme" : "Motyw"}<select id="appearanceTheme"><option value="dark">${uiLanguage === "en" ? "Dark" : "Ciemny"}</option><option value="light">${uiLanguage === "en" ? "Light" : "Jasny"}</option></select></label></div></div><div class="settings-card"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpButton" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Sound notification help" : "Pomoc powiadomień dźwiękowych"}">?</button></div><p>${uiLanguage === "en" ? "One tone indicates a new message. Three tones indicate a new incoming connection." : "Jeden sygnał oznacza nową wiadomość. Trzy sygnały oznaczają nowe połączenie przychodzące."}</p><div class="field-grid"><label class="check"><input id="appearanceSoundEnabled" type="checkbox"> ${uiLanguage === "en" ? "Enable sound notifications" : "Włącz powiadomienia dźwiękowe"}</label><label>${uiLanguage === "en" ? "Notification volume" : "Głośność powiadomień"}<input id="appearanceSoundVolume" type="range" min="0" max="100" step="1"></label></div></div><div id="soundHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true"><div class="uprd-help-content"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpClose" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Close" : "Zamknij"}">×</button></div><p>${uiLanguage === "en" ? "A single tone is played for a new message. Three short tones are played for a new incoming connection. The volume slider applies to both notification types." : "Przy nowej wiadomości odtwarzany jest jeden sygnał. Przy nowym połączeniu przychodzącym odtwarzane są trzy krótkie sygnały. Suwak głośności dotyczy obu rodzajów powiadomień."}</p><button id="soundHelpOk" class="secondary" type="button">OK</button></div></div>`;
     panels.appendChild(panel);
-    const oldShowConfigPart = showConfigPart;
-    showConfigPart = (part) => {
-      if (part === "appearance") {
-        document.querySelectorAll(".config-panels > .settings-panel").forEach((item) => { item.hidden = item !== panel; });
-        document.querySelectorAll(".config-tabs button").forEach((item) => item.classList.toggle("active", item === tab));
-        return;
-      }
-      oldShowConfigPart(part);
-    };
     tab.onclick = () => showConfigPart("appearance");
     $("historyPanelEnabled").checked = localStorage.getItem("historyPanelVisible") !== "off";
     $("historyPanelEnabled").onchange = () => {

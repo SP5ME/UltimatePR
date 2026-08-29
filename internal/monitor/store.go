@@ -23,7 +23,7 @@ type Entry struct {
 	Raw         string    `json:"raw"`
 }
 type Store struct {
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	items []Entry
 	limit int
 }
@@ -65,8 +65,8 @@ func uprStatus(f ax25.Frame) string {
 	return fmt.Sprintf("0x%02X (operator absent)", status)
 }
 func (s *Store) List() []Entry {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	out := make([]Entry, len(s.items))
 	for i := range s.items {
 		out[len(out)-1-i] = s.items[i]
