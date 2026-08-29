@@ -8,3 +8,9 @@
 .sound-control>input::-webkit-slider-thumb{width:14px;height:14px;margin-top:-5px;border:0;border-radius:50%;background:var(--green);appearance:none}
 .sound-control>input::-moz-range-track{height:4px;border-radius:4px;background:var(--line)}
 .sound-control>input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--green)}
+.operator-presence{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;color:var(--muted)}
+.operator-icon{width:18px;height:18px;display:inline-block;vertical-align:-4px;margin-right:5px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.operator-icon.present{color:var(--green);fill:currentColor;stroke:currentColor}
+.operator-presence:not([data-present="true"]){position:relative}
+.operator-presence:not([data-present="true"])::after{content:"";position:absolute;width:24px;height:2px;background:var(--red);transform:rotate(-45deg)}
+.heard-row .operator-icon{width:15px;height:15px;margin-right:3px}

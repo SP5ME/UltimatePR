@@ -280,6 +280,23 @@ func TestValidLocatorAccepted(t *testing.T) {
 	}
 }
 
+func TestUPRDDefaultsOnLegacyConfigButHonorsExplicitDisable(t *testing.T) {
+	legacy, err := Parse([]byte("server: {callsign: N0CALL}\nterminal: {callsign: N0CALL}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !legacy.UPRD.Enabled {
+		t.Fatal("UPRD should be enabled for a legacy config without an uprd section")
+	}
+	disabled, err := Parse([]byte("server: {callsign: N0CALL}\nterminal: {callsign: N0CALL}\nuprd: {enabled: false, interval_seconds: 600, mheard_limit: 5}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled.UPRD.Enabled {
+		t.Fatal("explicitly disabled UPRD was enabled")
+	}
+}
+
 func TestStableChannelMigratesToMain(t *testing.T) {
 	raw := []byte("application: {update_channel: stable}\nserver: {callsign: N0CALL}\nterminal: {callsign: N0CALL}\n")
 	c, err := Parse(raw)

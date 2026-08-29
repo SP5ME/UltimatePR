@@ -64,6 +64,7 @@ type Config struct {
 	UPRD               *uprd.Manager
 	SendBeacon         func(context.Context) error
 	SendUPRD           func(context.Context) error
+	PresenceChanged    func()
 	BBSListen          string
 	BBS                *bbs.Store
 	ConfigPath         string
@@ -138,6 +139,12 @@ func (s *Server) HasActiveBrowser() bool {
 	s.notifyMu.Lock()
 	defer s.notifyMu.Unlock()
 	return len(s.notify) > 0
+}
+
+func (s *Server) presenceChanged() {
+	if s.cfg.PresenceChanged != nil {
+		s.cfg.PresenceChanged()
+	}
 }
 
 // ServeOperatorAX25 exposes a radio connection addressed specifically to the
@@ -330,8 +337,20 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 	id := s.notifySeq
 	ch := make(chan notification, 8)
 	s.notify[id] = ch
+	becameActive := len(s.notify) == 1
 	s.notifyMu.Unlock()
-	defer func() { s.notifyMu.Lock(); delete(s.notify, id); s.notifyMu.Unlock() }()
+	if becameActive {
+		s.presenceChanged()
+	}
+	defer func() {
+		s.notifyMu.Lock()
+		delete(s.notify, id)
+		becameInactive := len(s.notify) == 0
+		s.notifyMu.Unlock()
+		if becameInactive {
+			s.presenceChanged()
+		}
+	}()
 	ticker := time.NewTicker(25 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -413,11 +432,15 @@ func (s *Server) monitorClear(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 func (s *Server) beacon(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.SendBeacon == nil {
-		http.Error(w, "Beacon unavailable", http.StatusServiceUnavailable)
+	send := s.cfg.SendBeacon
+	if s.cfg.UPRD != nil && s.cfg.UPRD.Enabled() {
+		send = s.cfg.SendUPRD
+	}
+	if send == nil {
+		http.Error(w, "UPRD/beacon unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := s.cfg.SendBeacon(r.Context()); err != nil {
+	if err := send(r.Context()); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -762,6 +785,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		"version": s.cfg.Version, "node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
 		"ports": s.cfg.Ports, "uptime_seconds": int(time.Since(s.started).Seconds()), "terminal_clients": s.wsClients.Load(),
 		"bbs_enabled": s.cfg.BBSListen != "", "node_enabled": s.cfg.NodeEnabled, "port_status": ports,
+		"operator_present": s.HasActiveBrowser(),
 	})
 }
 

@@ -12,9 +12,10 @@ import (
 )
 
 type Config struct {
-	Enabled     bool
-	Interval    time.Duration
-	MHeardLimit int
+	Enabled         bool
+	Interval        time.Duration
+	MHeardLimit     int
+	OperatorPresent func() bool
 }
 
 type Edge struct {
@@ -27,12 +28,13 @@ type Edge struct {
 }
 
 type Node struct {
-	Callsign      string    `json:"callsign"`
-	Locator       string    `json:"locator,omitempty"`
-	LastSeen      time.Time `json:"last_seen"`
-	EffectiveSeen time.Time `json:"effective_seen"`
-	Interfaces    []string  `json:"interfaces,omitempty"`
-	Sources       []string  `json:"sources,omitempty"`
+	Callsign        string    `json:"callsign"`
+	Locator         string    `json:"locator,omitempty"`
+	LastSeen        time.Time `json:"last_seen"`
+	EffectiveSeen   time.Time `json:"effective_seen"`
+	Interfaces      []string  `json:"interfaces,omitempty"`
+	Sources         []string  `json:"sources,omitempty"`
+	OperatorPresent *bool     `json:"operator_present,omitempty"`
 }
 
 type Route struct {
@@ -55,12 +57,13 @@ type Snapshot struct {
 }
 
 type reportState struct {
-	Port     string
-	Reporter string
-	Locator  string
-	Heard    []string
-	LastSeen time.Time
-	Order    uint64
+	Port            string
+	Reporter        string
+	Locator         string
+	Heard           []string
+	OperatorPresent bool
+	LastSeen        time.Time
+	Order           uint64
 }
 
 type queuedFrame struct {
@@ -76,27 +79,62 @@ type Manager struct {
 	locator string
 	heard   *mheard.Store
 
-	mu      sync.RWMutex
-	reports map[string]reportState
-	queues  map[string]chan queuedFrame
-	active  map[string]struct{}
+	mu            sync.RWMutex
+	reports       map[string]reportState
+	queues        map[string]chan queuedFrame
+	active        map[string]struct{}
+	resetSchedule chan struct{}
+	scheduleCount int
+}
+
+// Enabled reports whether this manager is configured to transmit UPRD frames.
+func (m *Manager) Enabled() bool {
+	return m != nil && m.cfg.Enabled
 }
 
 func New(ctx context.Context, local ax25.Address, locator string, heard *mheard.Store, cfg Config, ports []string) *Manager {
 	m := &Manager{
-		cfg:     cfg,
-		ctx:     ctx,
-		local:   local,
-		locator: NormalizeLocator(locator),
-		heard:   heard,
-		reports: make(map[string]reportState),
-		queues:  make(map[string]chan queuedFrame, len(ports)),
-		active:  make(map[string]struct{}, len(ports)),
+		cfg:           cfg,
+		ctx:           ctx,
+		local:         local,
+		locator:       NormalizeLocator(locator),
+		heard:         heard,
+		reports:       make(map[string]reportState),
+		queues:        make(map[string]chan queuedFrame, len(ports)),
+		active:        make(map[string]struct{}, len(ports)),
+		resetSchedule: make(chan struct{}, 256),
+		scheduleCount: len(ports),
 	}
 	for _, port := range ports {
 		m.startWorker(ctx, port)
 	}
 	return m
+}
+
+// ResetSchedule restarts the periodic UPRD countdown after a presence change.
+func (m *Manager) ResetSchedule() {
+	if m == nil || m.resetSchedule == nil {
+		return
+	}
+	count := m.scheduleCount
+	if count < 1 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		select {
+		case m.resetSchedule <- struct{}{}:
+		default:
+			return
+		}
+	}
+}
+
+// ScheduleResetChannel is consumed by the periodic sender.
+func (m *Manager) ScheduleResetChannel() <-chan struct{} {
+	if m == nil || m.resetSchedule == nil {
+		return nil
+	}
+	return m.resetSchedule
 }
 
 func (m *Manager) startWorker(ctx context.Context, port string) {
@@ -162,12 +200,16 @@ func (m *Manager) apply(job queuedFrame) {
 		return
 	}
 	m.reports[key] = reportState{
-		Port:     job.port,
-		Reporter: reporter,
-		Locator:  parsed.Locator,
-		Heard:    append([]string(nil), parsed.MHeard...),
-		LastSeen: now,
-		Order:    job.order,
+		Port:            job.port,
+		Reporter:        reporter,
+		Locator:         parsed.Locator,
+		Heard:           append([]string(nil), parsed.MHeard...),
+		OperatorPresent: parsed.OperatorPresent,
+		LastSeen:        now,
+		Order:           job.order,
+	}
+	if m.heard != nil {
+		m.heard.SetOperatorPresent(job.frame.Source.String(), job.port, parsed.OperatorPresent)
 	}
 }
 
@@ -178,7 +220,7 @@ func ParseFrame(frame ax25.Frame) (Payload, bool) {
 	if frame.Type != ax25.TypeUI || frame.PID == nil || *frame.PID != 0xF0 || len(frame.Digipeaters) != 0 {
 		return Payload{}, false
 	}
-	parsed, err := ParsePayload(string(frame.Payload), frame.Source)
+	parsed, err := ParsePayload(frame.Payload, frame.Source)
 	if err != nil {
 		return Payload{}, false
 	}
@@ -210,7 +252,11 @@ func (m *Manager) BuildFrame(port string) ([]byte, bool, error) {
 			break
 		}
 	}
-	payload, err := EncodePayload(m.local, m.locator, filtered, m.limit())
+	present := false
+	if m.cfg.OperatorPresent != nil {
+		present = m.cfg.OperatorPresent()
+	}
+	payload, err := EncodePayload(m.local, m.locator, filtered, m.limit(), present)
 	if err != nil {
 		return nil, false, err
 	}
@@ -220,7 +266,7 @@ func (m *Manager) BuildFrame(port string) ([]byte, bool, error) {
 		Source:      m.local,
 		Type:        ax25.TypeUI,
 		PID:         &pid,
-		Payload:     []byte(payload),
+		Payload:     payload,
 	}
 	b, err := ax25.Encode(frame)
 	if err != nil {
@@ -316,6 +362,8 @@ func (m *Manager) Snapshot(activePorts []string) Snapshot {
 		reporterNode := ensureNode(nodes, reporter)
 		reporterNode.Callsign = reporter
 		reporterNode.Locator = report.Locator
+		operatorPresent := report.OperatorPresent
+		reporterNode.OperatorPresent = &operatorPresent
 		reporterNode.LastSeen = maxTime(reporterNode.LastSeen, report.LastSeen)
 		reporterNode.Interfaces = uniqueAppend(reporterNode.Interfaces, report.Port)
 		reporterNode.Sources = uniqueAppend(reporterNode.Sources, "uprd")

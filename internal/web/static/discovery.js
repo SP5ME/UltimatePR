@@ -18,6 +18,12 @@
   const $ = (id) => document.getElementById(id);
   const applyDynamicLanguage = () => {
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
+    const experimental = $("uprdirectExperimental");
+    if (experimental?.parentElement?.lastChild) experimental.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
+    const info = $("uprdInfoText");
+    if (info) info.textContent = uiLanguage === "en"
+      ? "Beacon and UPRD cannot be enabled at the same time because that would unnecessarily occupy the radio channel. When enabled, UPRD serves as the beacon."
+      : "Jednoczesne włączenie beaconu i UPRD jest zablokowane, ponieważ niepotrzebnie obciążałoby kanał radiowy. Włączony UPRD pełni funkcję beaconu.";
   };
   const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;",
@@ -72,18 +78,31 @@
     card.id = "uprdConfigCard";
     card.className = "settings-card";
     card.innerHTML = `
-      <h3>UPR Direct</h3>
+      <div class="settings-card-heading"><h3>Beacon/UPRD</h3><button id="uprdHelpButton" class="help-button" type="button" aria-label="Pomoc UPRD">?</button></div>
       <p>UPRD wysyła krótki raport lokalnej wiedzy RF nad standardowym AX.25 UI. Funkcja jest niezależna od klasycznego beaconu.</p>
       <div class="field-grid">
         <label class="check"><input id="uprdEnabled" type="checkbox"> UPRD aktywne</label>
         <label>Interwał (minuty)<input id="uprdInterval" type="number" min="1" max="1440"></label>
         <label>Limit MHEARD (maks.)<input id="uprdLimit" type="number" min="1" max="10"></label>
       </div>
+      <div id="uprdHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="uprdHelpTitle">
+        <div class="uprd-help-content"><div class="settings-card-heading"><h3 id="uprdHelpTitle">UPRD</h3><button id="uprdHelpClose" class="help-button" type="button" aria-label="Zamknij">×</button></div><p id="uprdHelpText"></p><button id="uprdHelpOk" class="secondary" type="button">OK</button></div>
+      </div>
     `;
 
-    card.hidden = !featureFlags.uprd;
-    panel.appendChild(card);
+    card.hidden = false;
+    panel.insertBefore(card, $("beaconConfigCard") || null);
     $("configUPRDirectTab")?.toggleAttribute("hidden", !featureFlags.uprd);
+
+    const syncBeaconMode = () => {
+      const enabled = !!$("uprdEnabled")?.checked;
+      for (const id of ["beaconEnabled", "beaconInterval", "beaconDestination", "beaconVia", "beaconText", "beaconTextDefault"]) {
+        const control = $(id);
+        if (control) control.disabled = enabled;
+      }
+      $("beaconConfigCard")?.classList.toggle("beacon-disabled", enabled);
+      if (enabled && $("beaconEnabled")) $("beaconEnabled").checked = false;
+    };
 
     const oldFill = window.fillApplication;
     if (typeof oldFill === "function") {
@@ -93,13 +112,27 @@
         $("uprdEnabled").checked = !!u.Enabled;
         $("uprdInterval").value = Math.max(1, Math.round((u.IntervalSeconds || 600) / 60));
         $("uprdLimit").value = u.MHeardLimit || 5;
+        syncBeaconMode();
       };
     }
+
+    $("uprdEnabled").onchange = syncBeaconMode;
+    const helpText = () => $("uprdHelpText").textContent = uiLanguage === "en"
+      ? "UPRD is a direct AX.25 status report for sharing the station locator and recently heard stations. It also reports whether the operator is present. The report is sent periodically and when the web panel opens or the last panel closes. UPRD is intended to replace the classic beacon while it is enabled."
+      : "UPRD to bezpośredni raport AX.25 zawierający lokator stacji, ostatnio słyszane stacje oraz informację o obecności operatora. Raport jest wysyłany okresowo, a także przy otwarciu panelu WWW i po zamknięciu ostatniego panelu. Włączony UPRD zastępuje klasyczny beacon.";
+    const showHelp = () => { helpText(); $("uprdHelpModal").hidden = false; };
+    const hideHelp = () => { $("uprdHelpModal").hidden = true; };
+    $("uprdHelpButton").onclick = showHelp;
+    $("uprdHelpClose").onclick = hideHelp;
+    $("uprdHelpOk").onclick = hideHelp;
+    $("uprdHelpModal").onclick = (event) => { if (event.target === $("uprdHelpModal")) hideHelp(); };
+    applyDynamicLanguage();
 
     const save = $("saveConfig")?.onclick;
     if (save) {
       $("saveConfig").onclick = async () => {
         if (typeof configModel !== "undefined" && configModel) {
+          syncBeaconMode();
           configModel.UPRD = {
             Enabled: $("uprdEnabled").checked,
             IntervalSeconds: (Number($("uprdInterval").value) || 10) * 60,
@@ -112,8 +145,8 @@
   }
 
   function applyExperimentalVisibility() {
-    featureFlags.map = featureFlags.uprd;
-    featureFlags.mheardToggle = featureFlags.uprd;
+    featureFlags.uprd = true;
+    featureFlags.mheardToggle = true;
 
     const mapButton = $("navMap");
     if (mapButton) {
@@ -140,8 +173,9 @@
     uprd.dataset.bound = "true";
 
     const apply = () => {
-      featureFlags.uprd = master.checked && uprd.checked;
+      featureFlags.map = master.checked && uprd.checked;
       list.hidden = !master.checked;
+      if (uprd.parentElement?.lastChild) uprd.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
       applyExperimentalVisibility();
     };
 
@@ -219,7 +253,7 @@
     el.innerHTML = list.length
       ? list.slice(0, 200).map((e) => `
         <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}">
-          <strong>${esc(e.callsign)}</strong>
+          <strong>${e.operator_present !== undefined && typeof operatorPresenceIcon === "function" ? operatorPresenceIcon(e.operator_present) : ""}${esc(e.callsign)}</strong>
           <span class="mheard-via">${e.via ? "via " + esc(e.via) : esc(e.port)}</span>
           <time>${age(e.last_seen)}</time>
         </div>
@@ -289,7 +323,7 @@
       el.innerHTML = list.length
         ? list.slice(0, 60).map((e) => `
           <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}" title="${uiLanguage === "en" ? "Double-click to connect" : "Dwuklik: połącz"}">
-            <strong>${typeof activityLED === "function" ? activityLED(e.callsign, e.last_seen) : ""}${e.indirect ? "*" : ""}${esc(e.callsign)}</strong>
+            <strong>${typeof activityLED === "function" ? activityLED(e.callsign, e.last_seen) : ""}${e.indirect ? "*" : ""}${e.operator_present !== undefined && typeof operatorPresenceIcon === "function" ? operatorPresenceIcon(e.operator_present) : ""}${esc(e.callsign)}</strong>
             <span class="mheard-via">${e.via ? "via " + esc(e.via) : ""}</span>
             <time>${age(e.last_seen)}</time>
           </div>
@@ -534,9 +568,32 @@
     }
   }
 
+  function setupActiveStatusButton() {
+    const button = $("sendBeacon");
+    if (!button || button.dataset.activeStatusBound) return;
+    button.dataset.activeStatusBound = "true";
+    const label = () => uiLanguage === "en" ? "Send UPRD/beacon" : "Wyślij UPRD/beacon";
+    button.textContent = label();
+    button.onclick = async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch("/api/beacon", { method: "POST" });
+        if (!response.ok) throw new Error(await response.text());
+        button.textContent = uiLanguage === "en" ? "UPRD/beacon sent" : "UPRD/beacon wysłany";
+        setTimeout(() => { button.textContent = label(); }, 1800);
+      } catch (error) {
+        alert(`${uiLanguage === "en" ? "UPRD/beacon was not sent" : "Nie wysłano UPRD/beacon"}: ${error.message}`);
+        button.textContent = label();
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
+
   function setup() {
     addNav();
     addConfig();
+    setupActiveStatusButton();
     setupExperimentalControls();
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     setupPanelMHeard();

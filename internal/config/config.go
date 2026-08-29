@@ -47,9 +47,9 @@ type Beacon struct {
 	IntervalMinutes int    `yaml:"interval_minutes"`
 }
 type UPRD struct {
-	Enabled        bool `yaml:"enabled"`
+	Enabled         bool `yaml:"enabled"`
 	IntervalSeconds int  `yaml:"interval_seconds"`
-	MHeardLimit    int  `yaml:"mheard_limit"`
+	MHeardLimit     int  `yaml:"mheard_limit"`
 }
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
@@ -210,6 +210,10 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Application.AX25N1 == 0 {
 		c.Application.AX25N1 = 256
+	}
+	if !c.UPRD.Enabled && c.UPRD.IntervalSeconds == 0 && c.UPRD.MHeardLimit == 0 {
+		// UPRD was added after older configuration files were created.
+		c.UPRD.Enabled = true
 	}
 	if c.UPRD.IntervalSeconds == 0 {
 		c.UPRD.IntervalSeconds = 600

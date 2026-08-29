@@ -26,6 +26,10 @@ beacon:
   via: ""
   text: "{LOC}"
   interval_minutes: 30
+uprd:
+  enabled: true
+  interval_seconds: 600
+  mheard_limit: 5
 history:
   enabled: true
   database: data/history.json

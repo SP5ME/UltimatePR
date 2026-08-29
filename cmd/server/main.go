@@ -194,7 +194,10 @@ func main() {
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
-	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: cfg.UPRD.Enabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit}, portIDs)
+	var web *webui.Server
+	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: cfg.UPRD.Enabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
+		return web != nil && web.HasActiveBrowser()
+	}}, portIDs)
 	var historyStore *history.Store
 	if cfg.History.Enabled {
 		historyStore, err = history.Open(cfg.History.Database, history.Limits{MaxStations: cfg.History.MaxStations, MaxSessions: cfg.History.MaxSessionsPerStation, MaxLines: cfg.History.MaxLinesPerStation, MaxBytes: cfg.History.MaxBytes, RetentionDays: cfg.History.RetentionDays})
@@ -247,6 +250,9 @@ func main() {
 		return nil
 	}
 	sendBeacon := func(sendCtx context.Context) error {
+		if cfg.UPRD.Enabled {
+			return fmt.Errorf("classic beacon is disabled while UPRD is enabled")
+		}
 		source := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
 		return sendBeaconFrame(sendCtx, source, stationBeaconVia, expandBeaconText(cfg.Beacon.Text, source, cfg.Application.OperatorName, cfg.Application.Locator, cfg.Application.QTH))
 	}
@@ -292,7 +298,7 @@ func main() {
 	}
 	inbound := session.NewInboundMux(senders, log)
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
-	web := webui.New(webui.Config{
+	web = webui.New(webui.Config{
 		Listen:             cfg.Web.Listen,
 		Username:           cfg.Web.Username,
 		PasswordHash:       cfg.Web.PasswordHash,
@@ -330,6 +336,14 @@ func main() {
 		UPRD:       uprdMgr,
 		SendBeacon: sendBeacon,
 		SendUPRD:   sendUPRD,
+		PresenceChanged: func() {
+			uprdMgr.ResetSchedule()
+			go func() {
+				if err := sendUPRD(context.Background()); err != nil {
+					log.Warn("UPRD presence update failed", "error", err)
+				}
+			}()
+		},
 		BBSListen: func() string {
 			if cfg.BBS.Enabled {
 				return cfg.BBS.Listen
@@ -347,7 +361,7 @@ func main() {
 		Version: bbs.BuildVersion,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
-	go runBeaconSchedule(ctx, true, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
+	go runBeaconSchedule(ctx, !cfg.UPRD.Enabled, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
 	if cfg.UPRD.Enabled {
 		runUPRDSchedule(ctx, time.Duration(cfg.UPRD.IntervalSeconds)*time.Second, uprdMgr, portIDs, func(portID string) bool {
 			runtime := runtimes[portID]
@@ -574,29 +588,42 @@ func runUPRDSchedule(ctx context.Context, interval time.Duration, manager *uprd.
 	for _, portID := range ports {
 		portID := portID
 		go func() {
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
+			timer := time.NewTimer(interval)
+			defer timer.Stop()
 			for {
 				select {
-				case <-ticker.C:
+				case <-timer.C:
 					if isPortActive != nil && !isPortActive(portID) {
+						timer.Reset(interval)
 						continue
 					}
 					send := senders[portID]
 					if send == nil {
+						timer.Reset(interval)
 						continue
 					}
 					frame, ok, err := manager.BuildFrame(portID)
 					if err != nil {
 						log.Warn("UPRD frame build failed", "port", portID, "error", err)
+						timer.Reset(interval)
 						continue
 					}
 					if !ok {
+						timer.Reset(interval)
 						continue
 					}
 					if err := send(ctx, frame); err != nil {
 						log.Warn("UPRD transmit failed", "port", portID, "error", err)
 					}
+					timer.Reset(interval)
+				case <-manager.ScheduleResetChannel():
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(interval)
 				case <-ctx.Done():
 					return
 				}

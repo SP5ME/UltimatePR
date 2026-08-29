@@ -1,6 +1,7 @@
 package uprd
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -10,10 +11,12 @@ import (
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 type Payload struct {
-	EncodedCall string
-	Locator     string
-	MHeard      []string
-	Shift       int
+	EncodedCall     string
+	Status          byte
+	OperatorPresent bool
+	Locator         string
+	MHeard          []string
+	Shift           int
 }
 
 func BaseCall(call string) string {
@@ -137,32 +140,47 @@ func decodeBaseCall(encoded string, shift int) (string, error) {
 	return out.String(), nil
 }
 
-func EncodePayload(source ax25.Address, locator string, heard []string, limit int) (string, error) {
+func EncodePayload(source ax25.Address, locator string, heard []string, limit int, operatorPresent bool) ([]byte, error) {
 	locator = NormalizeLocator(locator)
 	if locator != "" && !ValidLocator(locator) {
-		return "", fmt.Errorf("invalid locator")
+		return nil, fmt.Errorf("invalid locator")
 	}
 	list := sanitizeMHeard(heard, limit)
 	plainHeard := strings.Join(list, ",")
 	shift := shiftFor(locator, list)
 	encCall, err := encodeBaseCall(source.Callsign, shift)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return fmt.Sprintf("%s|%s|%s", encCall, locator, plainHeard), nil
+	status := byte(0)
+	if !operatorPresent {
+		status = 0x01
+	}
+	payload := make([]byte, 0, len(encCall)+len(locator)+len(plainHeard)+4)
+	payload = append(payload, encCall...)
+	payload = append(payload, '|', status, '|')
+	payload = append(payload, locator...)
+	payload = append(payload, '|')
+	payload = append(payload, plainHeard...)
+	return payload, nil
 }
 
-func ParsePayload(payload string, source ax25.Address) (Payload, error) {
-	parts := strings.Split(payload, "|")
-	if len(parts) != 3 {
+func ParsePayload(payload []byte, source ax25.Address) (Payload, error) {
+	firstSep := bytes.IndexByte(payload, '|')
+	if firstSep < 1 || firstSep+2 >= len(payload) || payload[firstSep+2] != '|' {
 		return Payload{}, fmt.Errorf("invalid UPRD payload")
 	}
-	encCall := BaseCall(parts[0])
-	locator := NormalizeLocator(parts[1])
+	encCall := BaseCall(string(payload[:firstSep]))
+	status := payload[firstSep+1]
+	parts := strings.Split(string(payload[firstSep+3:]), "|")
+	if len(parts) != 2 {
+		return Payload{}, fmt.Errorf("invalid UPRD payload")
+	}
+	locator := NormalizeLocator(parts[0])
 	if locator != "" && !ValidLocator(locator) {
 		return Payload{}, fmt.Errorf("invalid locator")
 	}
-	heard := sanitizeMHeard(strings.Split(parts[2], ","), 10)
+	heard := sanitizeMHeard(strings.Split(parts[1], ","), 10)
 	shift := shiftFor(locator, heard)
 	decoded, err := decodeBaseCall(encCall, shift)
 	if err != nil {
@@ -172,10 +190,12 @@ func ParsePayload(payload string, source ax25.Address) (Payload, error) {
 		return Payload{}, fmt.Errorf("callsign mismatch")
 	}
 	return Payload{
-		EncodedCall: encCall,
-		Locator:     locator,
-		MHeard:      heard,
-		Shift:       shift,
+		EncodedCall:     encCall,
+		Status:          status,
+		OperatorPresent: status&0x01 == 0,
+		Locator:         locator,
+		MHeard:          heard,
+		Shift:           shift,
 	}, nil
 }
 

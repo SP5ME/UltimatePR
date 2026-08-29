@@ -9,14 +9,15 @@ import (
 const entryTTL = 45 * time.Minute
 
 type Entry struct {
-	Callsign string    `json:"callsign"`
-	Port     string    `json:"port"`
-	LastSeen time.Time `json:"last_seen"`
-	Frames   uint64    `json:"frames"`
-	Beacon   string    `json:"beacon,omitempty"`
-	Indirect bool      `json:"indirect,omitempty"`
-	Via      string    `json:"via,omitempty"`
-	SourceType string  `json:"source_type,omitempty"`
+	Callsign        string    `json:"callsign"`
+	Port            string    `json:"port"`
+	LastSeen        time.Time `json:"last_seen"`
+	Frames          uint64    `json:"frames"`
+	Beacon          string    `json:"beacon,omitempty"`
+	Indirect        bool      `json:"indirect,omitempty"`
+	Via             string    `json:"via,omitempty"`
+	SourceType      string    `json:"source_type,omitempty"`
+	OperatorPresent *bool     `json:"operator_present,omitempty"`
 }
 
 // Beacon records the latest beacon text without changing the frame counter.
@@ -67,6 +68,19 @@ func (s *Store) Heard(call, port string) {
 	e.Callsign, e.Port, e.LastSeen, e.Frames, e.Indirect, e.Via, e.SourceType = call, port, now, e.Frames+1, false, "", "direct"
 	s.entries[key] = e
 	s.pruneLocked(now)
+}
+
+// SetOperatorPresent associates the latest directly heard UPRD status with a station.
+func (s *Store) SetOperatorPresent(call, port string, present bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := port + "\x00" + call
+	e, ok := s.entries[key]
+	if !ok || e.Indirect {
+		return
+	}
+	e.OperatorPresent = &present
+	s.entries[key] = e
 }
 
 // HeardVia records a frame received through digipeaters. The via argument is

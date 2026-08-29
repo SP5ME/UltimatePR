@@ -19,6 +19,7 @@ type Entry struct {
 	Type        string    `json:"type"`
 	Bytes       int       `json:"bytes"`
 	Content     string    `json:"content"`
+	UPRStatus   string    `json:"upr_status,omitempty"`
 	Raw         string    `json:"raw"`
 }
 type Store struct {
@@ -40,10 +41,28 @@ func (s *Store) Add(direction, port string, f ax25.Frame, n int) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.items = append(s.items, Entry{Time: time.Now(), Direction: direction, Port: port, Source: f.Source.String(), Destination: f.Destination.String(), Via: formatVia(f.Digipeaters), Type: typeName(f.Type), Bytes: n, Content: string(f.Payload), Raw: raw})
+	s.items = append(s.items, Entry{Time: time.Now(), Direction: direction, Port: port, Source: f.Source.String(), Destination: f.Destination.String(), Via: formatVia(f.Digipeaters), Type: typeName(f.Type), Bytes: n, Content: string(f.Payload), UPRStatus: uprStatus(f), Raw: raw})
 	if len(s.items) > s.limit {
 		s.items = s.items[len(s.items)-s.limit:]
 	}
+}
+
+func uprStatus(f ax25.Frame) string {
+	if !strings.EqualFold(f.Destination.String(), "UPR") || len(f.Payload) < 3 {
+		return ""
+	}
+	sep := 0
+	for sep < len(f.Payload) && f.Payload[sep] != '|' {
+		sep++
+	}
+	if sep == 0 || sep+2 >= len(f.Payload) || f.Payload[sep+2] != '|' {
+		return ""
+	}
+	status := f.Payload[sep+1]
+	if status&0x01 == 0 {
+		return fmt.Sprintf("0x%02X (operator present)", status)
+	}
+	return fmt.Sprintf("0x%02X (operator absent)", status)
 }
 func (s *Store) List() []Entry {
 	s.mu.Lock()
