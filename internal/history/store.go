@@ -55,14 +55,20 @@ func Open(path string, limits Limits) (*Store, error) {
 		}
 		for i := range d.Conversations {
 			c := d.Conversations[i]
-			s.items[c.Key] = &c
+			key := Key(c.Mode, c.Station, c.Port, c.Digi)
+			c.Key = key
+			if previous := s.items[key]; previous != nil {
+				mergeConversations(previous, &c)
+				continue
+			}
+			s.items[key] = &c
 		}
 	}
 	s.prune()
 	return s, nil
 }
 func Key(mode, station, port, digi string) string {
-	return strings.ToUpper(mode + "|" + station + "|" + port + "|" + digi)
+	return strings.ToUpper(strings.TrimSpace(mode) + "|" + strings.TrimSpace(station))
 }
 func (s *Store) Connected(mode, station, port, digi string) uint64 {
 	s.mu.Lock()
@@ -72,6 +78,9 @@ func (s *Store) Connected(mode, station, port, digi string) uint64 {
 	if c == nil {
 		c = &Conversation{Key: key, Station: station, Mode: mode, Port: port, Digi: digi}
 		s.items[key] = c
+	} else {
+		// Keep the last route used for the callsign available to the history reconnect action.
+		c.Port, c.Digi = port, digi
 	}
 	c.Sessions++
 	now := time.Now()
@@ -154,6 +163,9 @@ func (s *Store) Get(key string) (Conversation, bool) {
 	defer s.mu.Unlock()
 	c, ok := s.items[key]
 	if !ok {
+		c, ok = s.items[legacyKeyToKey(key)]
+	}
+	if !ok {
 		return Conversation{}, false
 	}
 	v := *c
@@ -163,16 +175,37 @@ func (s *Store) Get(key string) (Conversation, bool) {
 func (s *Store) Delete(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.items[key]; !ok {
+	canonical := key
+	if _, ok := s.items[canonical]; !ok {
+		canonical = legacyKeyToKey(key)
+	}
+	if _, ok := s.items[canonical]; !ok {
 		return os.ErrNotExist
 	}
-	delete(s.items, key)
+	delete(s.items, canonical)
 	for sessionID, activeKey := range s.active {
-		if activeKey == key {
+		if activeKey == canonical {
 			delete(s.active, sessionID)
 		}
 	}
 	return s.saveLocked()
+}
+
+func legacyKeyToKey(key string) string {
+	parts := strings.Split(key, "|")
+	if len(parts) >= 2 {
+		return Key(parts[0], parts[1], "", "")
+	}
+	return strings.ToUpper(key)
+}
+
+func mergeConversations(dst, src *Conversation) {
+	dst.Sessions += src.Sessions
+	if src.LastSeen.After(dst.LastSeen) {
+		dst.LastSeen, dst.Port, dst.Digi = src.LastSeen, src.Port, src.Digi
+	}
+	dst.Lines = append(dst.Lines, src.Lines...)
+	sort.SliceStable(dst.Lines, func(i, j int) bool { return dst.Lines[i].Time.Before(dst.Lines[j].Time) })
 }
 func (s *Store) Clear() error {
 	s.mu.Lock()
@@ -212,7 +245,7 @@ func (s *Store) pruneLocked() {
 }
 func (s *Store) encodedSize() int { b, _ := json.Marshal(s.data()); return len(b) }
 func (s *Store) data() fileData {
-	d := fileData{Version: 3}
+	d := fileData{Version: 4}
 	for _, c := range s.items {
 		d.Conversations = append(d.Conversations, *c)
 	}

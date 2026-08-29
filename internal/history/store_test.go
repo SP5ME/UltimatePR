@@ -84,6 +84,21 @@ func TestHistoryStoresConnectionLifecycle(t *testing.T) {
 	}
 }
 
+func TestHistoryGroupsCallsignAcrossRadioPorts(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "history.json"), Limits{MaxStations: 2, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Connected("tnc", "SR5DDD", "radio-1", "")
+	s.Add("tnc", "SR5DDD", "radio-1", "", "rx", "first")
+	s.Connected("tnc", "SR5DDD", "radio-2", "SR5DIGI")
+	s.Add("tnc", "SR5DDD", "radio-2", "SR5DIGI", "rx", "second")
+	c, ok := s.Get(Key("tnc", "SR5DDD", "radio-2", "SR5DIGI"))
+	if !ok || c.Sessions != 2 || c.Port != "radio-2" || len(c.Lines) != 4 {
+		t.Fatalf("conversation was not grouped by callsign: %+v", c)
+	}
+}
+
 func TestDeleteAndClearHistory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.json")
 	limits := Limits{MaxStations: 10, MaxSessions: 10, MaxLines: 10, MaxBytes: 4096, RetentionDays: 90}

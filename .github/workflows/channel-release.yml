@@ -43,8 +43,9 @@ jobs:
         run: |
           short="${GITHUB_SHA::7}"
           channel="$GITHUB_REF_NAME"
-          base="$(sed -n 's/var BuildVersion = "\([0-9][0-9.]*[0-9]\).*/\1/p' internal/bbs/version.go)"
-          version="${base}.dev-$(date -u +%Y-%m-%d)-${short}"
+          base="$(sed -n 's/var BuildVersion = "\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' internal/bbs/version.go)"
+          revision="$(git rev-list --count HEAD)"
+          version="${base}-dev.${revision}+${short}"
           dir="ultimatepr-$channel-linux-${{ matrix.suffix }}"
           mkdir -p "dist/$dir"
           go build -trimpath -ldflags="-s -w -X github.com/packet-radio/ultimatepr/internal/bbs.BuildVersion=$version" -o "dist/$dir/ultimatepr" ./cmd/server
@@ -70,8 +71,9 @@ jobs:
           cd release
           tag="$GITHUB_REF_NAME-latest"
           short="${GITHUB_SHA::7}"
-          base="$(sed -n 's/var BuildVersion = "\([0-9][0-9.]*[0-9]\).*/\1/p' ../internal/bbs/version.go)"
-          title="${base}.dev-$(date -u +%Y-%m-%d)-${short}"
+          base="$(sed -n 's/var BuildVersion = "\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' ../internal/bbs/version.go)"
+          revision="$(git rev-list --count HEAD)"
+          title="${base}-dev.${revision}+${short}"
           printf '%s\n' "$title" > VERSION.txt
           sha256sum *.tar.gz > SHA256SUMS.txt
           notes="Automatyczny pakiet aktualizacyjny z gałęzi $GITHUB_REF_NAME. Konfiguracja użytkownika nie jest częścią pakietu."

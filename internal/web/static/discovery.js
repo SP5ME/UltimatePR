@@ -20,6 +20,22 @@
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     const experimental = $("uprdirectExperimental");
     if (experimental?.parentElement?.lastChild) experimental.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
+    const uprdTab = $("configUPRDirectTab");
+    if (uprdTab) uprdTab.textContent = "UPRdirect";
+    const appearanceTab = $("configAppearanceTab");
+    if (appearanceTab) appearanceTab.textContent = uiLanguage === "en" ? "Appearance & sounds" : "Wygląd i dźwięki";
+    const cardDescription = $("uprdCardDescription");
+    if (cardDescription) cardDescription.textContent = uiLanguage === "en"
+      ? "UPRD sends a short report of local RF knowledge over standard AX.25 UI. It is independent of the classic beacon."
+      : "UPRD wysyła krótki raport lokalnej wiedzy RF nad standardowym AX.25 UI. Funkcja jest niezależna od klasycznego beaconu.";
+    const enabledLabel = $("uprdEnabledLabel");
+    if (enabledLabel) enabledLabel.textContent = uiLanguage === "en" ? "Enable UPRdirect features" : "Włącz funkcje UPRdirect";
+    const intervalLabel = $("uprdIntervalLabel");
+    if (intervalLabel) intervalLabel.textContent = uiLanguage === "en" ? "Interval (minutes)" : "Interwał (minuty)";
+    const limitLabel = $("uprdLimitLabel");
+    if (limitLabel) limitLabel.textContent = uiLanguage === "en" ? "MHEARD limit (max.)" : "Limit MHEARD (maks.)";
+    const helpButton = $("uprdHelpButton");
+    if (helpButton) helpButton.setAttribute("aria-label", uiLanguage === "en" ? "UPRD help" : "Pomoc UPRD");
     const info = $("uprdInfoText");
     if (info) info.textContent = uiLanguage === "en"
       ? "Beacon and UPRD cannot be enabled at the same time because that would unnecessarily occupy the radio channel. When enabled, UPRD serves as the beacon."
@@ -74,16 +90,20 @@
     const panel = $("uprDirectConfigPanel");
     if (!panel || $("uprdConfigCard")) return;
 
+    const beacon = $("beaconConfigCard");
+    const stationPanel = $("stationConfigPanel");
+    if (beacon && stationPanel) stationPanel.appendChild(beacon);
+
     const card = document.createElement("div");
     card.id = "uprdConfigCard";
     card.className = "settings-card";
     card.innerHTML = `
-      <div class="settings-card-heading"><h3>Beacon/UPRD</h3><button id="uprdHelpButton" class="help-button" type="button" aria-label="Pomoc UPRD">?</button></div>
-      <p>UPRD wysyła krótki raport lokalnej wiedzy RF nad standardowym AX.25 UI. Funkcja jest niezależna od klasycznego beaconu.</p>
-      <div class="field-grid">
-        <label class="check"><input id="uprdEnabled" type="checkbox"> UPRD aktywne</label>
-        <label>Interwał (minuty)<input id="uprdInterval" type="number" min="1" max="1440"></label>
-        <label>Limit MHEARD (maks.)<input id="uprdLimit" type="number" min="1" max="10"></label>
+      <div class="settings-card-heading"><h3 id="uprdCardTitle">UPRdirect</h3><button id="uprdHelpButton" class="help-button" type="button" aria-label="Pomoc UPRD">?</button></div>
+      <p id="uprdCardDescription">UPRD wysyła krótki raport lokalnej wiedzy RF nad standardowym AX.25 UI. Funkcja jest niezależna od klasycznego beaconu.</p>
+      <label class="check uprd-master-check"><input id="uprdEnabled" type="checkbox"><span id="uprdEnabledLabel">Włącz funkcje UPRdirect</span></label>
+      <div id="uprdSettingsFields" class="field-grid">
+        <label><span id="uprdIntervalLabel">Interwał (minuty)</span><input id="uprdInterval" type="number" min="1" max="1440"></label>
+        <label><span id="uprdLimitLabel">Limit MHEARD (maks.)</span><input id="uprdLimit" type="number" min="1" max="10"></label>
       </div>
       <div id="uprdHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="uprdHelpTitle">
         <div class="uprd-help-content"><div class="settings-card-heading"><h3 id="uprdHelpTitle">UPRD</h3><button id="uprdHelpClose" class="help-button" type="button" aria-label="Zamknij">×</button></div><p id="uprdHelpText"></p><button id="uprdHelpOk" class="secondary" type="button">OK</button></div>
@@ -91,8 +111,8 @@
     `;
 
     card.hidden = false;
-    panel.insertBefore(card, $("beaconConfigCard") || null);
-    $("configUPRDirectTab")?.toggleAttribute("hidden", !featureFlags.uprd);
+    panel.appendChild(card);
+    $("configUPRDirectTab")?.toggleAttribute("hidden", false);
 
     const syncBeaconMode = () => {
       const enabled = !!$("uprdEnabled")?.checked;
@@ -113,10 +133,11 @@
         $("uprdInterval").value = Math.max(1, Math.round((u.IntervalSeconds || 600) / 60));
         $("uprdLimit").value = u.MHeardLimit || 5;
         syncBeaconMode();
+        applyExperimentalVisibility();
       };
     }
 
-    $("uprdEnabled").onchange = syncBeaconMode;
+    $("uprdEnabled").onchange = () => { syncBeaconMode(); applyExperimentalVisibility(); };
     const helpText = () => $("uprdHelpText").textContent = uiLanguage === "en"
       ? "UPRD is a direct AX.25 status report for sharing the station locator and recently heard stations. It also reports whether the operator is present. The report is sent periodically and when the web panel opens or the last panel closes. UPRD is intended to replace the classic beacon while it is enabled."
       : "UPRD to bezpośredni raport AX.25 zawierający lokator stacji, ostatnio słyszane stacje oraz informację o obecności operatora. Raport jest wysyłany okresowo, a także przy otwarciu panelu WWW i po zamknięciu ostatniego panelu. Włączony UPRD zastępuje klasyczny beacon.";
@@ -145,8 +166,12 @@
   }
 
   function applyExperimentalVisibility() {
-    featureFlags.uprd = true;
-    featureFlags.mheardToggle = true;
+    const enabled = $("uprdEnabled")?.checked === true;
+    featureFlags.uprd = enabled;
+    featureFlags.mheardToggle = enabled;
+    const mapFeature = $("uprdirectExperimental");
+    if (!enabled && mapFeature) mapFeature.checked = false;
+    mapFeature?.parentElement?.toggleAttribute("hidden", !enabled);
 
     const mapButton = $("navMap");
     if (mapButton) {
@@ -154,8 +179,9 @@
       mapButton.disabled = !featureFlags.map;
       mapButton.onclick = featureFlags.map ? () => open("map") : null;
     }
-    $("configUPRDirectTab")?.toggleAttribute("hidden", !featureFlags.uprd);
-    $("uprdConfigCard")?.toggleAttribute("hidden", !featureFlags.uprd);
+    $("configUPRDirectTab")?.toggleAttribute("hidden", false);
+    $("uprdConfigCard")?.toggleAttribute("hidden", false);
+    $("uprdSettingsFields")?.toggleAttribute("hidden", !enabled);
     $("mheardPanelTabs")?.toggleAttribute("hidden", !featureFlags.mheardToggle);
     document.querySelector("#mheardView .segmented")?.toggleAttribute("hidden", !featureFlags.mheardToggle);
   }
@@ -173,7 +199,7 @@
     uprd.dataset.bound = "true";
 
     const apply = () => {
-      featureFlags.map = master.checked && uprd.checked;
+      featureFlags.map = master.checked && uprd.checked && $("uprdEnabled")?.checked === true;
       list.hidden = !master.checked;
       if (uprd.parentElement?.lastChild) uprd.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
       applyExperimentalVisibility();
@@ -590,9 +616,116 @@
     };
   }
 
+  function setupHistoryPanel() {
+    const panel = document.querySelector(".history-panel");
+    const head = panel?.querySelector(".side-head");
+    if (!panel || !head || $("historyPanelClose")) return;
+    const close = document.createElement("button");
+    close.id = "historyPanelClose";
+    close.className = "history-panel-close";
+    close.type = "button";
+    close.textContent = "×";
+    close.title = "Ukryj historię rozmów";
+    close.setAttribute("aria-label", close.title);
+    head.appendChild(close);
+    const setVisible = (visible) => {
+      document.body.classList.toggle("history-panel-hidden", !visible);
+      localStorage.setItem("historyPanelVisible", visible ? "on" : "off");
+    };
+    close.onclick = () => setVisible(false);
+    setVisible(localStorage.getItem("historyPanelVisible") !== "off");
+  }
+
+  async function connectFromHistory(callsign) {
+    const call = String(callsign || "").trim().toUpperCase();
+    if (!call) return;
+    try {
+      const list = await fetch("/api/mheard?mode=direct", { cache: "no-store" }).then((response) => response.json());
+      const heard = (Array.isArray(list) ? list : []).find((entry) => String(entry.callsign || "").trim().toUpperCase() === call && entry.port);
+      if (heard) {
+        setMode("tnc");
+        connectRadioStation(call, heard.port, heard.via || "");
+        return;
+      }
+    } catch {
+      // Fall through to manual connection when MHeard is unavailable.
+    }
+    setMode("tnc");
+    $("target").value = call;
+    const bar = document.querySelector(".connection-bar");
+    bar?.classList.remove("history-connection-attention");
+    void bar?.offsetWidth;
+    bar?.classList.add("history-connection-attention");
+    $("target").focus();
+  }
+
+  function setupHistoryConnection() {
+    const originalRefreshHistory = refreshHistory;
+    refreshHistory = async () => {
+      await originalRefreshHistory();
+      document.querySelectorAll(".history-row").forEach((row) => {
+        row.ondblclick = (event) => {
+          event.preventDefault();
+          connectFromHistory(row.dataset.station);
+        };
+      });
+    };
+    refreshHistory();
+  }
+
+  function removeHeaderPreferences() {
+    $("themeToggle")?.remove();
+    $("soundControl")?.remove();
+  }
+
+  function setupAppearanceConfig() {
+    const tabs = document.querySelector(".config-tabs");
+    const panels = document.querySelector(".config-panels");
+    if (!tabs || !panels || $("configAppearanceTab")) return;
+    const tab = document.createElement("button");
+    tab.id = "configAppearanceTab";
+    tab.textContent = uiLanguage === "en" ? "Appearance & sounds" : "Wygląd i dźwięki";
+    tabs.insertBefore(tab, $("configUPRDirectTab") || null);
+    const panel = document.createElement("div");
+    panel.id = "appearanceConfigPanel";
+    panel.className = "settings-panel";
+    panel.hidden = true;
+    panel.innerHTML = `<div class="settings-card"><h3>${uiLanguage === "en" ? "Appearance" : "Wygląd"}</h3><div class="field-grid"><label class="check"><input id="historyPanelEnabled" type="checkbox"> ${uiLanguage === "en" ? "Show conversation history" : "Pokaż historię rozmów"}</label><label>${uiLanguage === "en" ? "Theme" : "Motyw"}<select id="appearanceTheme"><option value="dark">${uiLanguage === "en" ? "Dark" : "Ciemny"}</option><option value="light">${uiLanguage === "en" ? "Light" : "Jasny"}</option></select></label></div></div><div class="settings-card"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpButton" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Sound notification help" : "Pomoc powiadomień dźwiękowych"}">?</button></div><p>${uiLanguage === "en" ? "One tone indicates a new message. Three tones indicate a new incoming connection." : "Jeden sygnał oznacza nową wiadomość. Trzy sygnały oznaczają nowe połączenie przychodzące."}</p><div class="field-grid"><label class="check"><input id="appearanceSoundEnabled" type="checkbox"> ${uiLanguage === "en" ? "Enable sound notifications" : "Włącz powiadomienia dźwiękowe"}</label><label>${uiLanguage === "en" ? "Notification volume" : "Głośność powiadomień"}<input id="appearanceSoundVolume" type="range" min="0" max="100" step="1"></label></div></div><div id="soundHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true"><div class="uprd-help-content"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpClose" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Close" : "Zamknij"}">×</button></div><p>${uiLanguage === "en" ? "A single tone is played for a new message. Three short tones are played for a new incoming connection. The volume slider applies to both notification types." : "Przy nowej wiadomości odtwarzany jest jeden sygnał. Przy nowym połączeniu przychodzącym odtwarzane są trzy krótkie sygnały. Suwak głośności dotyczy obu rodzajów powiadomień."}</p><button id="soundHelpOk" class="secondary" type="button">OK</button></div></div>`;
+    panels.appendChild(panel);
+    const oldShowConfigPart = showConfigPart;
+    showConfigPart = (part) => {
+      if (part === "appearance") {
+        document.querySelectorAll(".config-panels > .settings-panel").forEach((item) => { item.hidden = item !== panel; });
+        document.querySelectorAll(".config-tabs button").forEach((item) => item.classList.toggle("active", item === tab));
+        return;
+      }
+      oldShowConfigPart(part);
+    };
+    tab.onclick = () => showConfigPart("appearance");
+    $("historyPanelEnabled").checked = localStorage.getItem("historyPanelVisible") !== "off";
+    $("historyPanelEnabled").onchange = () => {
+      const visible = $("historyPanelEnabled").checked;
+      document.body.classList.toggle("history-panel-hidden", !visible);
+      localStorage.setItem("historyPanelVisible", visible ? "on" : "off");
+    };
+    $("appearanceTheme").value = document.documentElement.dataset.theme || "dark";
+    $("appearanceTheme").onchange = () => setTheme($("appearanceTheme").value);
+    $("appearanceSoundEnabled").checked = soundEnabled;
+    $("appearanceSoundEnabled").onchange = () => { soundEnabled = $("appearanceSoundEnabled").checked; localStorage.setItem("terminalSound", soundEnabled ? "on" : "off"); updateSoundButton(); };
+    $("appearanceSoundVolume").value = String(Math.round(soundVolume * 100));
+    $("appearanceSoundVolume").oninput = (event) => { soundVolume = Math.max(0, Math.min(1, Number(event.target.value) / 100)); localStorage.setItem("terminalVolume", String(soundVolume)); updateSoundButton(); };
+    $("appearanceSoundVolume").onchange = () => { if (soundEnabled) soundTone(660, 0, .1); };
+    $("soundHelpButton").onclick = () => { $("soundHelpModal").hidden = false; };
+    $("soundHelpClose").onclick = $("soundHelpOk").onclick = () => { $("soundHelpModal").hidden = true; };
+  }
+
   function setup() {
     addNav();
     addConfig();
+    setupHistoryPanel();
+    setupHistoryConnection();
+    setupAppearanceConfig();
+    removeHeaderPreferences();
     setupActiveStatusButton();
     document.documentElement.dataset.singleWebSession = "true";
     const monitorRenderer = () => {

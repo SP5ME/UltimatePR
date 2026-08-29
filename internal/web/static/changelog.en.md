@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## Unreleased
+
+### Added
+
+- Added a binary operator-status byte to UPRD frames and support for interpreting it in MHEARD.
+
+### Changed
+
+- UPRD is enabled by default and replaces the classic beacon while active; the header button sends whichever status is currently active.
+- Added status transmission when the first web session opens and the last one closes, without an extra frame when switching applications.
+- Limited the web panel to one active session; a new login automatically invalidates the previous application.
+
+### Fixed
+
+- The monitor now shows the actual UPRD frame content instead of only the status description.
+
 ## 2026-08-29 - mobile terminal and background station operation
 
 - Added a simplified terminal interface for phones and small screens, with a compact connection and session layout, touch-friendly message input, and a slide-out MHEARD panel.
