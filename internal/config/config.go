@@ -56,13 +56,16 @@ type UPRD struct {
 // Experimental controls whether optional subsystems exist at runtime. Service
 // configuration is intentionally kept in the service-specific sections below.
 type Experimental struct {
-	UPRD bool `yaml:"uprd"`
-	Map  bool `yaml:"map"`
-	Node bool `yaml:"node"`
-	BBS  bool `yaml:"bbs"`
-	AI   bool `yaml:"ai"`
+	UPRD     bool `yaml:"uprd"`
+	Map      bool `yaml:"map"`
+	Services bool `yaml:"services"`
+	// Legacy fields are retained so existing dev configurations migrate.
+	Node bool `yaml:"node,omitempty"`
+	BBS  bool `yaml:"bbs,omitempty"`
+	AI   bool `yaml:"ai,omitempty"`
 }
 type AI struct {
+	Enabled          bool   `yaml:"enabled"`
 	Callsign         string `yaml:"callsign"`
 	SSID             uint8  `yaml:"ssid"`
 	Provider         string `yaml:"provider"`
@@ -212,6 +215,12 @@ func Parse(b []byte) (Config, error) {
 func (c *Config) applyDefaults(hasExperimental bool) {
 	if !hasExperimental {
 		c.Experimental = Experimental{UPRD: c.UPRD.Enabled, Map: c.UPRD.Enabled, Node: c.Node.Enabled, BBS: c.BBS.Enabled}
+	}
+	if !c.Experimental.Services && (c.Experimental.Node || c.Experimental.BBS || c.Experimental.AI) {
+		c.Experimental.Services = true
+		if c.Experimental.AI {
+			c.AI.Enabled = true
+		}
 	}
 	if strings.TrimSpace(c.Application.Mode) == "" {
 		if c.Node.Enabled || c.BBS.Enabled {
@@ -417,7 +426,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("bbs.database is required")
 		}
 	}
-	if c.Experimental.AI {
+	if c.Experimental.Services && c.AI.Enabled {
 		if err := validStation(Station{Callsign: c.AI.Callsign, SSID: c.AI.SSID}); err != nil {
 			return fmt.Errorf("ai: %w", err)
 		}

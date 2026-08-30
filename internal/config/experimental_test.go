@@ -14,16 +14,18 @@ node: {enabled: true, alias: SP5ME, listen: "127.0.0.1:8010", language: pl}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.Experimental.Node || !c.Experimental.BBS || !c.Experimental.UPRD {
+	if !c.Experimental.Services || !c.Experimental.UPRD {
 		t.Fatalf("legacy flags not migrated: %+v", c.Experimental)
 	}
 }
 
-func TestExplicitExperimentalDisableIsPreserved(t *testing.T) {
+func TestServiceSwitchesAreIndependent(t *testing.T) {
 	c := New(ModeFull, "SP5ME", "KO02JD", "Warsaw", "pl", 0, 2, 8)
-	c.Experimental.Node = false
-	c.Experimental.BBS = false
-	if c.Experimental.Node || c.Experimental.BBS {
-		t.Fatal("disabled services were enabled")
+	c.Experimental.Services = true
+	c.Node.Enabled = false
+	c.BBS.Enabled = false
+	c.AI.Enabled = true
+	if c.Node.Enabled || c.BBS.Enabled || !c.AI.Enabled {
+		t.Fatal("independent service switches were not preserved")
 	}
 }

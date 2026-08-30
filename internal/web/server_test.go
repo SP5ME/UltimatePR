@@ -37,6 +37,19 @@ func TestConfigRestartRequired(t *testing.T) {
 	}
 }
 
+func TestStatusReportsDirectAIService(t *testing.T) {
+	s := New(Config{AICallsign: "SP5ME", AISSID: 12, AIEnabled: true}, nil)
+	recorder := httptest.NewRecorder()
+	s.status(recorder, httptest.NewRequest("GET", "/api/status", nil))
+	var status map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status["ai"] != "SP5ME-12" || status["ai_enabled"] != true {
+		t.Fatalf("AI status=%v", status)
+	}
+}
+
 func TestBeaconEndpointAlwaysSendsClassicBeacon(t *testing.T) {
 	beaconCalls, uprdCalls := 0, 0
 	s := &Server{cfg: Config{

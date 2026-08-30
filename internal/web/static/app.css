@@ -20,4 +20,7 @@
 .config-head>.config-head-actions{display:grid;grid-template-columns:minmax(280px,1fr) auto auto;align-items:center;gap:10px;flex:1;margin-left:32px}.config-head-actions>#configNotice{margin:0;padding:10px 13px;min-width:0}.config-head-actions>button{white-space:nowrap}.config-unified>.config-restart-note{margin:24px 0 0}@media(max-width:1100px){.config-head{align-items:stretch}.config-head>.config-head-actions{grid-template-columns:1fr auto auto;margin:14px 0 0}}@media(max-width:700px){.config-head>.config-head-actions{display:grid;grid-template-columns:1fr 1fr}.config-head-actions>#configNotice{grid-column:1/-1}.config-head-actions>button{width:100%}}
 .config-head>.config-head-actions{display:grid!important}
 .nav-icon .mdi-icon{width:20px;height:20px;display:block;fill:currentColor}
+#aiSystemPrompt{background:#09151b;color:#e7f0ef;border-color:#4b6873;caret-color:#e7f0ef}
+[data-theme="light"] #aiSystemPrompt{background:#fbfdfb;color:#17251b;border-color:#8fa493;caret-color:#17251b}
+#aiSystemPrompt:focus{border-color:var(--cyan);box-shadow:0 0 0 2px #4bcbd233}
 .operator-icon.present{fill:currentColor;stroke:none}

@@ -1,6 +1,6 @@
 # Services, SSIDs and AI
 
-Optional services are enabled under **Configuration → Application → Experimental features** and configured independently under **Configuration → Services**. Disabling NODE, BBS or AI prevents its listener, RF endpoint and NODE registration from being created. Re-enabling it uses the preserved service configuration after restart.
+The service layer is exposed by the single **Configuration → Application → Experimental features → Services** gate. NODE, BBS and AI are then enabled independently under **Configuration → Services**. Disabling a service prevents its listener, RF endpoint and NODE registration from being created. Re-enabling it uses the preserved service configuration after restart.
 
 Default addresses are `CALL` (terminal, SSID 0), `CALL-2` (NODE), `CALL-7` (reserved CHAT/Convers), `CALL-8` (BBS), and `CALL-12` (AI). These are UltimatePR defaults, not a claimed AX.25 standard, and every implemented service SSID is configurable.
 
@@ -28,10 +28,11 @@ AI Service -> HTTP -> Ollama API -> Model
 Example configuration:
 
 ```yaml
-experimental: {node: true, bbs: true, ai: true, uprd: true, map: true}
+experimental: {services: true, uprd: true, map: true}
 server: {callsign: SP5ME, ssid: 2}
 bbs: {enabled: true, callsign: SP5ME, ssid: 8}
 ai:
+  enabled: true
   callsign: SP5ME
   ssid: 12
   provider: ollama

@@ -57,9 +57,9 @@ func main() {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
-	nodeEnabled := cfg.Experimental.Node && cfg.Node.Enabled
-	bbsEnabled := cfg.Experimental.BBS && cfg.BBS.Enabled
-	aiEnabled := cfg.Experimental.AI
+	nodeEnabled := cfg.Experimental.Services && cfg.Node.Enabled
+	bbsEnabled := cfg.Experimental.Services && cfg.BBS.Enabled
+	aiEnabled := cfg.Experimental.Services && cfg.AI.Enabled
 	uprdEnabled := cfg.Experimental.UPRD && cfg.UPRD.Enabled
 	stationBeaconVia, err := ax25.ParseDigipeaters(cfg.Beacon.Via)
 	if err != nil {
@@ -75,11 +75,17 @@ func main() {
 	if bbsEnabled {
 		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID})
 	}
+	if aiEnabled {
+		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID})
+	}
 	ownCalls := map[string]struct{}{
 		ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(): {},
 	}
 	if bbsEnabled {
 		ownCalls[ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String()] = struct{}{}
+	}
+	if aiEnabled {
+		ownCalls[ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()] = struct{}{}
 	}
 	isOwnCallsign := func(call string) bool {
 		_, ok := ownCalls[strings.ToUpper(strings.TrimSpace(call))]
@@ -333,6 +339,9 @@ func main() {
 		NodeSSID:           cfg.Server.SSID,
 		BBSCallsign:        cfg.BBS.Callsign,
 		BSSSID:             cfg.BBS.SSID,
+		AICallsign:         cfg.AI.Callsign,
+		AISSID:             cfg.AI.SSID,
+		AIEnabled:          aiEnabled,
 		TerminalCallsign:   cfg.Terminal.Callsign,
 		TerminalSSID:       cfg.Terminal.SSID,
 		OperatorName:       cfg.Application.OperatorName,

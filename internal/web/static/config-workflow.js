@@ -94,6 +94,7 @@
     c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
     c.Server.SSID = number('nodeSSID');
 	if (byId('servicesNodeCallsign')) { c.Server.Callsign = byId('servicesNodeCallsign').value.trim().toUpperCase(); c.Server.SSID = number('servicesNodeSSID', 2); }
+	c.Node.Enabled = byId('nodeServiceEnabled')?.checked === true;
     c.Node.Alias = byId('nodeAlias')?.value.trim().toUpperCase() || '';
     c.Node.Listen = byId('nodeListen')?.value.trim() || '';
     c.Node.Language = byId('nodeLanguage')?.value || c.Node.Language;
@@ -101,6 +102,7 @@
     c.BBS.Callsign = byId('bbsCallsign')?.value.trim().toUpperCase() || '';
     c.BBS.SSID = number('bbsSSID');
 	if (byId('servicesBBSCallsign')) { c.BBS.Callsign = byId('servicesBBSCallsign').value.trim().toUpperCase(); c.BBS.SSID = number('servicesBSSID', 8); }
+	c.BBS.Enabled = byId('bbsServiceEnabled')?.checked === true;
     c.BBS.Title = byId('bbsTitle')?.value.trim() || '';
     c.BBS.Address = byId('bbsAddress')?.value.trim().toUpperCase() || '';
     c.BBS.Listen = byId('bbsListen')?.value.trim() || '';
@@ -144,8 +146,8 @@
         MHeardLimit: Math.min(10, Math.max(1, number('uprdLimit', 5))),
       };
     }
-	c.Experimental = {UPRD:byId('uprdirectExperimental')?.checked===true,Map:byId('mapExperimental')?.checked===true,Node:byId('nodeExperimental')?.checked===true,BBS:byId('bbsExperimental')?.checked===true,AI:byId('aiExperimental')?.checked===true};
-	c.AI = {...(c.AI||{}),Callsign:byId('aiCallsign')?.value.trim().toUpperCase()||'',SSID:number('aiSSID',12),Provider:'ollama',URL:byId('aiURL')?.value.trim()||'',Model:byId('aiModel')?.value.trim()||'',TimeoutSeconds:number('aiTimeout',120),MaxResponseChars:number('aiMaxResponse',2000),MaxContext:number('aiMaxContext',20),SystemPrompt:byId('aiSystemPrompt')?.value||'',QueueSize:number('aiQueueSize',8),Concurrency:number('aiConcurrency',1)};
+	c.Experimental = {UPRD:byId('uprdirectExperimental')?.checked===true,Map:byId('mapExperimental')?.checked===true,Services:byId('servicesExperimental')?.checked===true,Node:false,BBS:false,AI:false};
+	c.AI = {...(c.AI||{}),Enabled:byId('aiServiceEnabled')?.checked===true,Callsign:byId('aiCallsign')?.value.trim().toUpperCase()||'',SSID:number('aiSSID',12),Provider:'ollama',URL:byId('aiURL')?.value.trim()||'',Model:byId('aiModel')?.value.trim()||'',TimeoutSeconds:number('aiTimeout',120),MaxResponseChars:number('aiMaxResponse',2000),MaxContext:number('aiMaxContext',20),SystemPrompt:byId('aiSystemPrompt')?.value||'',QueueSize:number('aiQueueSize',8),Concurrency:number('aiConcurrency',1)};
     return c;
   }
 

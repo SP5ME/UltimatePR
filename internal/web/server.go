@@ -44,6 +44,9 @@ type Config struct {
 	NodeSSID           uint8
 	BBSCallsign        string
 	BSSSID             uint8
+	AICallsign         string
+	AISSID             uint8
+	AIEnabled          bool
 	TerminalCallsign   string
 	TerminalSSID       uint8
 	OperatorName       string
@@ -817,9 +820,9 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"version": s.cfg.Version, "node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
+		"version": s.cfg.Version, "node": callsign(s.cfg.NodeCallsign, s.cfg.NodeSSID), "bbs": callsign(s.cfg.BBSCallsign, s.cfg.BSSSID), "ai": callsign(s.cfg.AICallsign, s.cfg.AISSID), "terminal": callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID),
 		"ports": s.cfg.Ports, "uptime_seconds": int(time.Since(s.started).Seconds()), "terminal_clients": s.wsClients.Load(),
-		"bbs_enabled": s.cfg.BBSListen != "", "node_enabled": s.cfg.NodeEnabled, "port_status": ports,
+		"bbs_enabled": s.cfg.BBSListen != "", "node_enabled": s.cfg.NodeEnabled, "ai_enabled": s.cfg.AIEnabled, "port_status": ports,
 		"operator_present": s.HasActiveBrowser(),
 	})
 }
