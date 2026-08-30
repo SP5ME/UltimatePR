@@ -65,20 +65,21 @@ type Experimental struct {
 	AI   bool `yaml:"ai,omitempty"`
 }
 type AI struct {
-	Enabled          bool   `yaml:"enabled"`
-	Callsign         string `yaml:"callsign"`
-	SSID             uint8  `yaml:"ssid"`
-	Provider         string `yaml:"provider"`
-	URL              string `yaml:"url"`
-	Model            string `yaml:"model"`
-	TimeoutSeconds   int    `yaml:"timeout_seconds"`
-	MaxResponseChars int    `yaml:"max_response_chars"`
-	MaxContext       int    `yaml:"max_context"`
-	SystemPrompt     string `yaml:"system_prompt"`
-	QueueSize        int    `yaml:"queue_size"`
-	Concurrency      int    `yaml:"concurrency"`
-	WelcomeMessage   string `yaml:"welcome_message"`
-	GoodbyeMessage   string `yaml:"goodbye_message"`
+	Enabled           bool   `yaml:"enabled"`
+	Callsign          string `yaml:"callsign"`
+	SSID              uint8  `yaml:"ssid"`
+	Provider          string `yaml:"provider"`
+	URL               string `yaml:"url"`
+	Model             string `yaml:"model"`
+	TimeoutSeconds    int    `yaml:"timeout_seconds"`
+	MaxResponseChars  int    `yaml:"max_response_chars"`
+	MaxContext        int    `yaml:"max_context"`
+	SystemPrompt      string `yaml:"system_prompt"`
+	QueueSize         int    `yaml:"queue_size"`
+	Concurrency       int    `yaml:"concurrency"`
+	WelcomeMessage    string `yaml:"welcome_message"`
+	ProcessingMessage string `yaml:"processing_message"`
+	GoodbyeMessage    string `yaml:"goodbye_message"`
 }
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
@@ -336,6 +337,9 @@ func (c *Config) applyDefaults(hasExperimental bool) {
 	}
 	if strings.TrimSpace(c.AI.WelcomeMessage) == "" {
 		c.AI.WelcomeMessage = "Witaj {REMOTE} w usludze IA {CALL}.\r\nWpisz pytanie, a otrzymasz krotka odpowiedz. Q konczy rozmowe."
+	}
+	if strings.TrimSpace(c.AI.ProcessingMessage) == "" {
+		c.AI.ProcessingMessage = "Dziekuje za wiadomosc. Rozpoczynam jej przetwarzanie. Prosze o cierpliwosc — odpowiedz moze zajac do kilku minut."
 	}
 	if strings.TrimSpace(c.AI.GoodbyeMessage) == "" {
 		c.AI.GoodbyeMessage = "73 {REMOTE}, IA {CALL}."

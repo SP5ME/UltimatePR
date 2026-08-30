@@ -445,7 +445,7 @@ func main() {
 	var aiServer *aiservice.Service
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
-		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
+		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, ProcessingMessage: cfg.AI.ProcessingMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
 		inbound.Register(ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, func(call string, r io.Reader, w io.Writer) {
 			scanner := bufio.NewScanner(r)
 			aiServer.ServeSession(call, cfg.Application.Language, scanner, w)

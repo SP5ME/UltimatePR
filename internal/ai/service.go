@@ -13,11 +13,11 @@ import (
 var ErrQueueFull = errors.New("AI queue is full; try again later")
 
 type Config struct {
-	Timeout                                   time.Duration
-	MaxContext, MaxResponseChars              int
-	SystemPrompt                              string
-	WelcomeMessage, GoodbyeMessage, LocalCall string
-	PageChars, QueueSize                      int
+	Timeout                                                      time.Duration
+	MaxContext, MaxResponseChars                                 int
+	SystemPrompt                                                 string
+	WelcomeMessage, ProcessingMessage, GoodbyeMessage, LocalCall string
+	PageChars, QueueSize                                         int
 }
 type Service struct {
 	Provider      Provider
@@ -90,6 +90,9 @@ func (s *Service) ServeSession(call, lang string, in *bufio.Scanner, w io.Writer
 			fmt.Fprint(w, "AI> ")
 			continue
 		}
+		if strings.TrimSpace(s.Config.ProcessingMessage) != "" {
+			fmt.Fprint(w, expandSessionMessage(s.Config.ProcessingMessage, s.Config.LocalCall, call), "\r\n")
+		}
 		next, pages, err := s.Ask(context.Background(), history, line)
 		if err != nil {
 			fmt.Fprintf(w, "AI error: %v\r\nAI> ", err)
@@ -110,7 +113,9 @@ func (s *Service) ServeSession(call, lang string, in *bufio.Scanner, w io.Writer
 }
 
 func expandSessionMessage(message, local, remote string) string {
-	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
+	message = strings.ReplaceAll(strings.ReplaceAll(message, "\r\n", "\n"), "\r", "\n")
+	message = strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
+	return strings.ReplaceAll(message, "\n", "\r\n")
 }
 
 func Format(v string, max int) string {
