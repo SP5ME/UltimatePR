@@ -13,11 +13,11 @@ import (
 var ErrQueueFull = errors.New("AI queue is full; try again later")
 
 type Config struct {
-	Timeout                      time.Duration
-	MaxContext, MaxResponseChars int
-	SystemPrompt                 string
+	Timeout                                   time.Duration
+	MaxContext, MaxResponseChars              int
+	SystemPrompt                              string
 	WelcomeMessage, GoodbyeMessage, LocalCall string
-	PageChars, QueueSize         int
+	PageChars, QueueSize                      int
 }
 type Service struct {
 	Provider      Provider

@@ -18,7 +18,7 @@ import (
 
 type Server struct {
 	Listen, Title, Node, Address, Language string
-	WelcomeMessage, GoodbyeMessage        string
+	WelcomeMessage, GoodbyeMessage         string
 	Store                                  *Store
 	Log                                    *slog.Logger
 	OnMessage                              func()

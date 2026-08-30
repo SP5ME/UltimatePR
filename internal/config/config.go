@@ -90,17 +90,17 @@ type History struct {
 	RetentionDays         int    `yaml:"retention_days"`
 }
 type BBS struct {
-	Enabled       bool          `yaml:"enabled"`
-	Listen        string        `yaml:"listen"`
-	ForwardListen string        `yaml:"forward_listen"`
-	Database      string        `yaml:"database"`
-	Title         string        `yaml:"title"`
-	Callsign      string        `yaml:"callsign"`
-	SSID          uint8         `yaml:"ssid"`
-	Address       string        `yaml:"hierarchical_address"`
-	Language      string        `yaml:"language"`
-	BeaconVia     string        `yaml:"beacon_via,omitempty"`
-	Forwarding    BBSForwarding `yaml:"forwarding"`
+	Enabled        bool          `yaml:"enabled"`
+	Listen         string        `yaml:"listen"`
+	ForwardListen  string        `yaml:"forward_listen"`
+	Database       string        `yaml:"database"`
+	Title          string        `yaml:"title"`
+	Callsign       string        `yaml:"callsign"`
+	SSID           uint8         `yaml:"ssid"`
+	Address        string        `yaml:"hierarchical_address"`
+	Language       string        `yaml:"language"`
+	BeaconVia      string        `yaml:"beacon_via,omitempty"`
+	Forwarding     BBSForwarding `yaml:"forwarding"`
 	WelcomeMessage string        `yaml:"welcome_message"`
 	GoodbyeMessage string        `yaml:"goodbye_message"`
 }
@@ -126,15 +126,15 @@ type BBSPeer struct {
 	BulletinScopes []string `yaml:"bulletin_scopes"`
 }
 type Node struct {
-	Enabled   bool           `yaml:"enabled"`
-	Alias     string         `yaml:"alias"`
-	Listen    string         `yaml:"listen"`
-	Language  string         `yaml:"language"`
-	Neighbors []NodeNeighbor `yaml:"neighbors"`
-	Routes    []NodeRoute    `yaml:"routes"`
-	Services  []NodeService  `yaml:"services"`
-	WelcomeMessage string     `yaml:"welcome_message"`
-	GoodbyeMessage string     `yaml:"goodbye_message"`
+	Enabled        bool           `yaml:"enabled"`
+	Alias          string         `yaml:"alias"`
+	Listen         string         `yaml:"listen"`
+	Language       string         `yaml:"language"`
+	Neighbors      []NodeNeighbor `yaml:"neighbors"`
+	Routes         []NodeRoute    `yaml:"routes"`
+	Services       []NodeService  `yaml:"services"`
+	WelcomeMessage string         `yaml:"welcome_message"`
+	GoodbyeMessage string         `yaml:"goodbye_message"`
 }
 type NodeNeighbor struct {
 	ID       string `yaml:"id"`
