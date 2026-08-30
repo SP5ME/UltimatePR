@@ -2,12 +2,10 @@
   const featureFlags = {
     uprd: false,
     map: false,
-    mheardToggle: false,
   };
 
   const state = {
     page: "terminal",
-    mheardMode: "direct",
     ports: [],
     positions: new Map(),
     rings: new Map(),
@@ -16,6 +14,7 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  const helpIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18h2v-2h-2v2m1-16A10 10 0 1 0 12 22 10 10 0 0 0 12 2m0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16m0-14a4 4 0 0 0-4 4h2a2 2 0 1 1 2.35 1.97C10.5 12.28 11 14 11 14h2c0-1.5 3-1.75 3-4a4 4 0 0 0-4-4Z"/></svg>';
   const applyDynamicLanguage = () => {
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     const experimental = $("uprdirectExperimental");
@@ -42,6 +41,14 @@
     if (info) info.textContent = uiLanguage === "en"
       ? "Beacon and UPRD are independent and can be enabled at the same time."
       : "Beacon i UPRD są niezależne i mogą działać jednocześnie.";
+    document.querySelectorAll("[data-mheard-help]").forEach((button) => {
+      button.setAttribute("aria-label", uiLanguage === "en" ? "MHEARD help" : "Pomoc MHEARD");
+    });
+    if ($("mheardHelpText")) $("mheardHelpText").textContent = uiLanguage === "en"
+      ? "MHEARD shows all stations heard locally and learned from UPRD status reports. Double-click a row to start a connection."
+      : "MHEARD pokazuje wszystkie stacje usłyszane lokalnie oraz poznane ze statusów UPRD. Dwuklik w wiersz rozpoczyna połączenie.";
+    if ($("mheardHelpUprdLabel")) $("mheardHelpUprdLabel").textContent = uiLanguage === "en" ? "green frame — station transmitting UPRD status" : "zielona ramka — stacja nadająca status UPRD";
+    if ($("mheardHelpReportedLabel")) $("mheardHelpReportedLabel").textContent = uiLanguage === "en" ? "blue frame — station heard and listed in another station's UPRD status" : "niebieska ramka — stacja usłyszana i podana w statusie UPRD innej stacji";
   };
   const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;",
@@ -100,7 +107,7 @@
     card.id = "uprdConfigCard";
     card.className = "settings-card";
     card.innerHTML = `
-      <div class="settings-card-heading"><h3 id="uprdCardTitle">UPRdirect</h3><button id="uprdHelpButton" class="help-button" type="button" aria-label="Pomoc UPRD">?</button></div>
+      <div class="settings-card-heading"><h3 id="uprdCardTitle">UPRdirect</h3><button id="uprdHelpButton" class="help-button" type="button" aria-label="Pomoc UPRD">${helpIcon}</button></div>
       <p id="uprdCardDescription">UPRD wysyła krótki raport lokalnej wiedzy RF nad standardowym AX.25 UI. Funkcja jest niezależna od klasycznego beaconu.</p>
       <label class="check uprd-master-check"><input id="uprdEnabled" type="checkbox"><span id="uprdEnabledLabel">Włącz funkcje UPRdirect</span></label>
       <div id="uprdSettingsFields" class="field-grid">
@@ -158,7 +165,6 @@
   function applyExperimentalVisibility() {
     const enabled = $("uprdEnabled")?.checked === true;
     featureFlags.uprd = enabled;
-    featureFlags.mheardToggle = enabled;
     const mapFeature = $("uprdirectExperimental");
     if (!enabled && mapFeature) mapFeature.checked = false;
     mapFeature?.parentElement?.toggleAttribute("hidden", !enabled);
@@ -172,8 +178,6 @@
     $("configUPRDirectTab")?.toggleAttribute("hidden", false);
     $("uprdConfigCard")?.toggleAttribute("hidden", false);
     $("uprdSettingsFields")?.toggleAttribute("hidden", !enabled);
-    $("mheardPanelTabs")?.toggleAttribute("hidden", !featureFlags.mheardToggle);
-    document.querySelector("#mheardView .segmented")?.toggleAttribute("hidden", !featureFlags.mheardToggle);
   }
 
   function setupExperimentalControls() {
@@ -268,9 +272,9 @@
 
     el.innerHTML = list.length
       ? list.slice(0, 200).map((e) => `
-        <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}">
+        <div class="heard-row${e.source_type === "reported" ? " uprd-reported" : (e.operator_present !== undefined ? " uprd-sender" : "")}" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}">
           <strong>${e.operator_present !== undefined && typeof operatorPresenceIcon === "function" ? operatorPresenceIcon(e.operator_present) : ""}${esc(e.callsign)}</strong>
-          <span class="mheard-via">${e.via ? "via " + esc(e.via) : esc(e.port)}</span>
+          <span class="mheard-via">${e.via ? "via" : esc(e.port)}</span>
           <time>${age(e.last_seen)}</time>
         </div>
       `).join("")
@@ -289,7 +293,7 @@
 
   async function refreshMHeard() {
     try {
-      const list = await fetch(`/api/mheard?mode=${state.mheardMode}`, { cache: "no-store" }).then((r) => r.json());
+      const list = await fetch("/api/mheard", { cache: "no-store" }).then((r) => r.json());
       renderList(list, "mheardFullList");
     } catch {
       // no-op
@@ -298,37 +302,40 @@
 
   function setupPanelMHeard() {
     const head = document.querySelector(".mheard-panel .side-head");
-    if (!head || $("mheardPanelTabs")) return;
+    if (!head || head.querySelector("[data-mheard-help]")) return;
 
     window.discoveryMHeardOwner = true;
     const small = head.querySelector("small");
     if (small) small.remove();
 
-    const tabs = document.createElement("div");
-    tabs.id = "mheardPanelTabs";
-    tabs.className = "segmented compact";
-    tabs.innerHTML = '<button id="mheardPanelDirect" class="active" type="button">Direct</button><button id="mheardPanelUprd" type="button">UPRD</button>';
-
-    if (!featureFlags.mheardToggle) tabs.hidden = true;
-    head.appendChild(tabs);
-
-    state.mheardMode = "direct";
+    const help = document.createElement("button");
+    help.className = "help-button mheard-help-button";
+    help.type = "button";
+    help.dataset.mheardHelp = "";
+    help.setAttribute("aria-label", uiLanguage === "en" ? "MHEARD help" : "Pomoc MHEARD");
+    help.innerHTML = helpIcon;
+    head.appendChild(help);
     refreshPanelMHeard();
+  }
 
-    const load = (mode) => {
-      state.mheardMode = mode;
-      $("mheardPanelDirect").classList.toggle("active", mode === "direct");
-      $("mheardPanelUprd").classList.toggle("active", mode === "uprd");
-      refreshPanelMHeard();
-    };
-
-    $("mheardPanelDirect").onclick = () => load("direct");
-    $("mheardPanelUprd").onclick = () => load("uprd");
+  function setupMHeardHelp() {
+    const modal = $("mheardHelpModal");
+    if (!modal || modal.dataset.bound) return;
+    modal.dataset.bound = "true";
+    document.querySelectorAll("[data-mheard-help]").forEach((button) => {
+      button.innerHTML = helpIcon;
+      button.onclick = () => { applyDynamicLanguage(); modal.hidden = false; };
+    });
+    const hide = () => { modal.hidden = true; };
+    $("mheardHelpClose").onclick = hide;
+    $("mheardHelpOk").onclick = hide;
+    modal.onclick = (event) => { if (event.target === modal) hide(); };
+    applyDynamicLanguage();
   }
 
   async function refreshPanelMHeard() {
     try {
-      const list = await fetch(`/api/mheard?mode=${state.mheardMode}`, { cache: "no-store" }).then((r) => r.json());
+      const list = await fetch("/api/mheard", { cache: "no-store" }).then((r) => r.json());
       list.forEach((e) => {
         if (typeof rememberActivity === "function") rememberActivity(e.callsign, e.last_seen);
       });
@@ -338,9 +345,9 @@
 
       el.innerHTML = list.length
         ? list.slice(0, 60).map((e) => `
-          <div class="heard-row" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}" title="${uiLanguage === "en" ? "Double-click to connect" : "Dwuklik: połącz"}">
-            <strong>${typeof activityLED === "function" ? activityLED(e.callsign, e.last_seen) : ""}${e.indirect ? "*" : ""}${e.operator_present !== undefined && typeof operatorPresenceIcon === "function" ? operatorPresenceIcon(e.operator_present) : ""}${esc(e.callsign)}</strong>
-            <span class="mheard-via">${e.via ? "via " + esc(e.via) : ""}</span>
+          <div class="heard-row${e.source_type === "reported" ? " uprd-reported" : (e.operator_present !== undefined ? " uprd-sender" : "")}" data-call="${esc(e.callsign)}" data-port="${esc(e.port)}" data-via="${esc(e.via || "")}" title="${uiLanguage === "en" ? "Double-click to connect" : "Dwuklik: połącz"}">
+            <strong>${typeof activityLED === "function" ? activityLED(e.callsign, e.last_seen) : ""}${e.operator_present !== undefined && typeof operatorPresenceIcon === "function" ? operatorPresenceIcon(e.operator_present) : ""}${esc(e.callsign)}</strong>
+            <span class="mheard-via">${e.via ? "via" : ""}</span>
             <time>${age(e.last_seen)}</time>
           </div>
         `).join("")
@@ -664,7 +671,7 @@
     panel.id = "appearanceConfigPanel";
     panel.className = "settings-panel";
     panel.hidden = true;
-    panel.innerHTML = `<div class="settings-card appearance-settings-card"><h3>${uiLanguage === "en" ? "Appearance and sounds" : "Wygląd i dźwięki"}</h3><div class="appearance-settings-list"><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Show conversation history" : "Pokaż historię rozmów"}</span><input id="historyPanelEnabled" type="checkbox"></label><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Theme" : "Motyw"}</span><select id="appearanceTheme"><option value="dark">${uiLanguage === "en" ? "Dark" : "Ciemny"}</option><option value="light">${uiLanguage === "en" ? "Light" : "Jasny"}</option></select></label><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Enable sound notifications" : "Włącz powiadomienia dźwiękowe"}</span><input id="appearanceSoundEnabled" type="checkbox"></label><label class="appearance-setting-row appearance-volume-row"><span><b>${uiLanguage === "en" ? "Notification volume" : "Głośność powiadomień"}</b><small>${uiLanguage === "en" ? "One tone indicates a message; three tones indicate an incoming connection." : "Jeden sygnał oznacza wiadomość, trzy sygnały — połączenie przychodzące."}</small></span><span class="appearance-volume-control"><input id="appearanceSoundVolume" type="range" min="0" max="100" step="1"><button id="soundHelpButton" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Sound notification help" : "Pomoc powiadomień dźwiękowych"}">?</button></span></label></div></div><div id="soundHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true"><div class="uprd-help-content"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpClose" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Close" : "Zamknij"}">×</button></div><p>${uiLanguage === "en" ? "A single tone is played for a new message. Three short tones are played for a new incoming connection. The volume slider applies to both notification types." : "Przy nowej wiadomości odtwarzany jest jeden sygnał. Przy nowym połączeniu przychodzącym odtwarzane są trzy krótkie sygnały. Suwak głośności dotyczy obu rodzajów powiadomień."}</p><button id="soundHelpOk" class="secondary" type="button">OK</button></div></div>`;
+    panel.innerHTML = `<div class="settings-card appearance-settings-card"><h3>${uiLanguage === "en" ? "Appearance and sounds" : "Wygląd i dźwięki"}</h3><div class="appearance-settings-list"><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Show conversation history" : "Pokaż historię rozmów"}</span><input id="historyPanelEnabled" type="checkbox"></label><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Theme" : "Motyw"}</span><select id="appearanceTheme"><option value="dark">${uiLanguage === "en" ? "Dark" : "Ciemny"}</option><option value="light">${uiLanguage === "en" ? "Light" : "Jasny"}</option></select></label><label class="appearance-setting-row"><span>${uiLanguage === "en" ? "Enable sound notifications" : "Włącz powiadomienia dźwiękowe"}</span><input id="appearanceSoundEnabled" type="checkbox"></label><label class="appearance-setting-row appearance-volume-row"><span><b>${uiLanguage === "en" ? "Notification volume" : "Głośność powiadomień"}</b><small>${uiLanguage === "en" ? "One tone indicates a message; three tones indicate an incoming connection." : "Jeden sygnał oznacza wiadomość, trzy sygnały — połączenie przychodzące."}</small></span><span class="appearance-volume-control"><input id="appearanceSoundVolume" type="range" min="0" max="100" step="1"><button id="soundHelpButton" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Sound notification help" : "Pomoc powiadomień dźwiękowych"}">${helpIcon}</button></span></label></div></div><div id="soundHelpModal" class="uprd-help-modal" hidden role="dialog" aria-modal="true"><div class="uprd-help-content"><div class="settings-card-heading"><h3>${uiLanguage === "en" ? "Sound notifications" : "Powiadomienia dźwiękowe"}</h3><button id="soundHelpClose" class="help-button" type="button" aria-label="${uiLanguage === "en" ? "Close" : "Zamknij"}">×</button></div><p>${uiLanguage === "en" ? "A single tone is played for a new message. Three short tones are played for a new incoming connection. The volume slider applies to both notification types." : "Przy nowej wiadomości odtwarzany jest jeden sygnał. Przy nowym połączeniu przychodzącym odtwarzane są trzy krótkie sygnały. Suwak głośności dotyczy obu rodzajów powiadomień."}</p><button id="soundHelpOk" class="secondary" type="button">OK</button></div></div>`;
     panels.appendChild(panel);
     tab.onclick = () => showConfigPart("appearance");
     $("historyPanelEnabled").checked = localStorage.getItem("historyPanelVisible") !== "off";
@@ -714,6 +721,7 @@
     setupExperimentalControls();
     if (typeof applyUILanguage === "function") applyUILanguage(uiLanguage);
     setupPanelMHeard();
+    setupMHeardHelp();
     if (featureFlags.map) {
       setupMapHover();
     }

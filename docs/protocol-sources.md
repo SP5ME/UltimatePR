@@ -66,13 +66,11 @@ emits the portable KISS link-parameter commands TXDELAY, PERSISTENCE, SLOTTIME,
 TXTAIL and FULLDUPLEX after each TCP connection is established. Device-specific
 SET HARDWARE and RETURN are not emitted.
 
-The optional KISS TCP proxy parses and forwards complete KISS frames rather
-than arbitrary TCP read fragments. It establishes and maintains its upstream
-connection independently of client traffic. Frames received from the upstream
-TNC are distributed to clients; frames transmitted by one client are not
-echoed to the other clients. Client DATA and portable link-parameter commands
-are accepted, while device-specific SET HARDWARE and RETURN are blocked so a
-client cannot take a shared TNC out of KISS mode.
+The optional KISS TCP proxy transparently forwards the TCP byte stream without
+parsing or filtering KISS frames and commands. It establishes and maintains its
+upstream connection independently of client traffic. Data received from the
+upstream TNC is distributed to all clients; data transmitted by one client is
+sent to the TNC and the other clients without being echoed to its sender.
 
 ## AXIP
 

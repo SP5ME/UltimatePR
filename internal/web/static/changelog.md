@@ -6,6 +6,12 @@
 
 - Dodano binarny bajt statusu operatora do ramek UPRD oraz obsługę jego interpretacji w MHEARD.
 - Dodano zdalną komendę `/V`, zwracającą wersję aplikacji UltimatePR.
+- Dodano eksperymentalną usługę IA korzystającą z Ollamy, dostępną jako osobna usługa NODE i bezpośredni znak AX.25, z ograniczeniem czasu, długości odpowiedzi, współbieżności oraz kolejki.
+- Dodano wykrywanie modeli Ollamy z panelu konfiguracji oraz wybór modelu bez ręcznego przepisywania jego nazwy.
+- Dodano edytowalne komunikaty powitania, przetwarzania i pożegnania dla usługi IA oraz osobne komunikaty sesji dla BBS i NODE.
+- Dodano sekcję `Usługi`, wspólną obsługę eksperymentalnych przełączników usług oraz widoczny status IA w panelu WWW.
+- Dodano okno pomocy MHEARD z opisem oznaczeń stacji oraz ikoną `help-circle-outline`.
+- Dodano lokalne połączenie z usługą IA bez wysyłania ramek radiowych, gdy terminal łączy się ze skonfigurowanym znakiem IA tej samej instancji UltimatePR.
 
 ### Changed
 
@@ -15,11 +21,26 @@
 - UPRD jest domyślnie włączone i działa niezależnie od klasycznego beaconu; przycisk nagłówka wysyła wyłącznie klasyczny beacon.
 - Dodano wysyłanie statusu przy otwarciu pierwszej i zamknięciu ostatniej sesji WWW, bez dodatkowej ramki przy przełączeniu aplikacji.
 - Ograniczono panel WWW do jednej aktywnej sesji; nowe logowanie automatycznie unieważnia poprzednią aplikację.
+- Karty konfiguracji usług można zwijać i rozwijać, a włączenie każdej usługi jest niezależne od otwarcia jej ustawień.
+- Ujednolicono ikony panelu, wskaźnik obecności operatora oraz przyciski pomocy, zastępując tekstowe znaki odpowiadającymi ikonami MDI.
+- Uproszczono mobilne otwieranie nowego połączenia i poprawiono responsywny układ pól połączenia, terminala oraz panelu MHEARD.
+- MHEARD pokazuje teraz jedną wspólną listę bez przełącznika `Direct` / `UPRD`: nadawcy statusów UPRD są oznaczeni zieloną ramką, a stacje zgłoszone przez cudzy status UPRD — niebieską.
+- Dla stacji pośrednich MHEARD pokazuje tylko krótkie oznaczenie `via`; pełna ścieżka digipeaterów pozostaje zachowana i jest używana podczas zestawiania połączenia.
+- Pole `SESJE` zmieniono na `TERMINALE`; osiem kart terminali skaluje się do dostępnej szerokości, a na małych ekranach przewija poziomo.
+- Tekstowy przycisk zamknięcia terminala zastąpiono wyrównaną do prawej ikoną `close-box-outline`.
+- Po rozpoczęciu nowego połączenia pola znaku i `VIA / DIGI` są automatycznie czyszczone.
+- Zmiana nazwy użytkownika panelu nie wymaga już jednoczesnej zmiany hasła.
+- Pytania do IA mogą obejmować wiele wierszy i są kończone poleceniem `/EX`; pojedyncze `Q` kończy sesję tylko poza rozpoczętym pytaniem.
 
 ### Fixed
 
 - Monitor ponownie pokazuje rzeczywistą zawartość ramek UPRD zamiast samego opisu statusu.
 - Naprawiono automatyczne powitanie połączenia przychodzącego AX.25: payload jest kończony pojedynczym `CRLF` (`0x0D 0x0A`).
+- MHEARD jest zachowywane podczas planowanego restartu aplikacji i przywracane wyłącznie dla nadal skonfigurowanych portów oraz nieprzeterminowanych wpisów.
+- Poprawiono wykrywanie niezapisanych zmian konfiguracji po responsywnym przerysowaniu formularza oraz po wczytaniu wartości znormalizowanych przez serwer.
+- Komunikat zapisu konfiguracji prawidłowo rozróżnia sprawdzanie ustawień, zapis i konieczność restartu.
+- Przywrócono zgodne odbieranie standardowego kanału KISS oraz filtrowanie ramek właściwych dla skonfigurowanego portu.
+- Ujednolicono odczyt poleceń BBS, NODE i IA dla zakończeń wiersza `CR`, `LF` oraz `CRLF`, używanych przez różne terminale Packet Radio.
 
 ## 2026-08-29 - terminal mobilny i praca stacji w tle
 

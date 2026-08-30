@@ -31,6 +31,16 @@ html,body{height:100%;overflow:hidden}#terminalView{height:calc(100vh - 179px);o
 .monitor-view{display:flex;flex-direction:column;overflow:hidden}.monitor-head{flex:none}.monitor-list{flex:1;min-height:0;overflow:auto}.monitor-frame-legend{font-family:"Segoe UI",system-ui,sans-serif;font-size:13px;line-height:1.45}.monitor-frame-legend span{white-space:normal}.app-modal{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:20px;background:rgba(3,8,10,.55);backdrop-filter:blur(2px)}.app-modal[hidden]{display:none}.app-modal-card{width:min(560px,100%);padding:24px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(145deg,#fff,#f2f7f3);color:#13231a;box-shadow:0 18px 45px #0005}.app-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}.app-modal-head h3{margin:0;font-size:20px}.app-modal-close{width:34px;height:34px;border:0;border-radius:5px;background:transparent;color:#466052;font-size:25px;line-height:1}.app-modal-close:hover{background:#dfeae2;color:#173d2d}.monitor-export-form{display:grid;gap:15px}.monitor-export-form label{color:#46594c}.monitor-export-form select,.monitor-export-form input{background:#f7fbf8;color:#13231a;border-color:#bcd1c1}.monitor-custom-range{display:grid;grid-template-columns:1fr 1fr;gap:14px}.monitor-custom-range[hidden]{display:none}.app-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.app-modal-actions button{width:auto;min-width:120px;padding:0 18px}.app-modal-actions .secondary{color:#173d2d;border-color:#9db9a4}@media(max-width:650px){.monitor-custom-range{grid-template-columns:1fr}.app-modal-card{padding:18px}}
 .monitor-view:not([hidden]){display:flex!important}.monitor-title>#monitorExportFormat{display:none}
 .monitor-title h2{visibility:hidden}.app-modal-actions{align-items:center}.app-modal-actions button{height:42px;margin-top:0}
+
+/* Prominent page headings and simplified secondary navigation. */
+.config-head,.info-head{align-items:center;min-height:52px}
+.config-head>h2,.info-head>h2{margin:0;font-size:28px;line-height:1.15;letter-spacing:.01em}
+.info-tabs{justify-content:center;margin:10px 0 22px;padding:0;border:0;background:transparent}
+.info-tabs button{min-width:142px;height:48px;font-size:16px}
+.changelog-head[hidden]{display:none}
+.monitor-title>.eyebrow{font-size:22px;line-height:1.2;letter-spacing:.08em}
+.monitor-row{font-size:15px;line-height:1.35;padding-top:12px;padding-bottom:12px}
+.monitor-via{font-size:12px}
 .field-grid label small{display:block;min-height:42px;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.35}.field-grid select{margin-top:7px}
 
 .terminal-panel{grid-template-rows:57px minmax(0,1fr) 62px}#sendForm{align-items:stretch}#sendForm>span{align-self:center}#sendForm #command{min-height:46px;max-height:46px;margin:0;padding:4px 10px;resize:none;overflow-x:hidden;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere;line-height:18px}#sendForm button{align-self:stretch}.message-bubble,.message-row.tx .message-bubble{min-width:0;max-width:min(100%,80ch);white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}.message-row.tx .message-bubble{text-align:left}

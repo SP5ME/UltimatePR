@@ -44,8 +44,8 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	want := kissFrame(t, kiss.Frame{Port: 0, Command: kiss.CommandData, Data: []byte("client-frame")})
-	// Split a KISS frame across TCP writes. The upstream still receives one
-	// complete, normalized KISS frame.
+	// Split a KISS frame across TCP writes. The proxy preserves the byte stream
+	// and does not require writes to align with KISS frame boundaries.
 	if _, err := client1.Write(want[:3]); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestProxySharesUpstreamWithMultipleClients(t *testing.T) {
 	}
 }
 
-func TestProxyBlocksCommandsThatCanTakeOverSharedTNC(t *testing.T) {
+func TestProxyTransparentlyForwardsKISSCommands(t *testing.T) {
 	upListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -100,12 +100,64 @@ func TestProxyBlocksCommandsThatCanTakeOverSharedTNC(t *testing.T) {
 	defer client.Close()
 
 	for _, command := range []uint8{kiss.CommandSetHardware, kiss.CommandReturn} {
-		if _, err := client.Write(kissFrame(t, kiss.Frame{Command: command})); err != nil {
+		want := kissFrame(t, kiss.Frame{Command: command})
+		if _, err := client.Write(want); err != nil {
 			t.Fatal(err)
 		}
+		if got := readKISSFrame(t, upstream); !bytes.Equal(got, want) {
+			t.Fatalf("upstream command = %x, want %x", got, want)
+		}
 	}
-	if got := readOptional(upstream, 150*time.Millisecond); len(got) != 0 {
-		t.Fatalf("unsafe KISS command reached upstream: %x", got)
+	raw := []byte{0x01, 0x02, kiss.FESC, 0x03}
+	if _, err := client.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if got := readWithDeadline(t, upstream); !bytes.Equal(got, raw) {
+		t.Fatalf("raw upstream data = %x, want %x", got, raw)
+	}
+}
+
+func TestBroadcastDoesNotBlockOnSlowClient(t *testing.T) {
+	slowProxy, slowPeer := net.Pipe()
+	defer slowPeer.Close()
+	healthyProxy, healthyPeer := net.Pipe()
+	defer healthyPeer.Close()
+
+	slow := &client{conn: slowProxy, tx: make(chan []byte, 1)}
+	healthy := &client{conn: healthyProxy, tx: make(chan []byte, 1)}
+	slow.tx <- []byte("already queued")
+	p := &Proxy{log: slog.Default(), clients: map[net.Conn]*client{
+		slowProxy: slow, healthyProxy: healthy,
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		p.broadcast([]byte("frame"))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("broadcast blocked on a slow client")
+	}
+	if got := <-healthy.tx; !bytes.Equal(got, []byte("frame")) {
+		t.Fatalf("healthy client received %q", got)
+	}
+	p.mu.Lock()
+	_, slowStillConnected := p.clients[slowProxy]
+	p.mu.Unlock()
+	if slowStillConnected {
+		t.Fatal("slow client was not disconnected")
+	}
+}
+
+func TestFramesAreNotQueuedWithoutUpstream(t *testing.T) {
+	p := &Proxy{tx: make(chan upstreamItem, 1)}
+	if p.enqueueUpstream([]byte("frame"), nil) {
+		t.Fatal("frame accepted without an upstream connection")
+	}
+	if len(p.tx) != 0 {
+		t.Fatal("frame was retained for a later reconnect")
 	}
 }
 
@@ -186,7 +238,7 @@ func kissFrame(t *testing.T, frame kiss.Frame) []byte {
 
 func readKISSFrame(t *testing.T, conn net.Conn) []byte {
 	t.Helper()
-	decoder := kiss.NewDecoder(maxKISSFrame)
+	decoder := kiss.NewDecoder(65535)
 	var wire []byte
 	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 	buffer := make([]byte, 64)

@@ -6,6 +6,12 @@
 
 - Added a binary operator-status byte to UPRD frames and support for interpreting it in MHEARD.
 - Added the remote `/V` command, which returns the UltimatePR application version.
+- Added an experimental Ollama-backed AI service, available as a separate NODE service and direct AX.25 callsign, with timeout, response-length, concurrency, and queue limits.
+- Added Ollama model discovery from the configuration panel and model selection without manually entering its name.
+- Added editable welcome, processing, and goodbye messages for the AI service, plus separate session messages for BBS and NODE.
+- Added a `Services` section, unified experimental service gating, and visible AI status in the web panel.
+- Added a MHEARD help dialog explaining station markings, opened with a `help-circle-outline` icon.
+- Added a local connection to the AI service without transmitting radio frames when the terminal connects to the AI callsign configured on the same UltimatePR instance.
 
 ### Changed
 
@@ -15,11 +21,26 @@
 - UPRD is enabled by default and operates independently of the classic beacon; the header button sends only the classic beacon.
 - Added status transmission when the first web session opens and the last one closes, without an extra frame when switching applications.
 - Limited the web panel to one active session; a new login automatically invalidates the previous application.
+- Service configuration cards can now be expanded and collapsed, while enabling a service remains independent of opening its settings.
+- Standardized panel icons, the operator-presence indicator, and help buttons by replacing textual symbols with matching MDI icons.
+- Simplified the mobile new-connection flow and improved the responsive layout of connection fields, terminals, and the MHEARD panel.
+- MHEARD now shows one combined list without a `Direct` / `UPRD` switch: UPRD status senders have a green frame, while stations reported by another station's UPRD status have a blue frame.
+- Indirect MHEARD entries now display only the compact `via` marker; the complete digipeater path remains stored and is used when establishing a connection.
+- Renamed the `SESSIONS` area to `TERMINALS`; its eight terminal cards scale to the available width and scroll horizontally on small screens.
+- Replaced the textual terminal close button with a right-aligned `close-box-outline` icon.
+- The callsign and `VIA / DIGI` fields are cleared automatically after starting a new connection.
+- Changing the web-panel username no longer requires changing the password at the same time.
+- AI questions can span multiple lines and are completed with `/EX`; a standalone `Q` ends the session only when no question is being composed.
 
 ### Fixed
 
 - The monitor now shows the actual UPRD frame content instead of only the status description.
 - Fixed the incoming AX.25 welcome message so its payload ends with one `CRLF` (`0x0D 0x0A`).
+- MHEARD is preserved across a planned application restart and restored only for configured ports and entries that have not expired.
+- Fixed unsaved-configuration detection after responsive form rerendering and after loading values normalized by the server.
+- Configuration save feedback now correctly distinguishes validation, saving, and restart-required states.
+- Restored compatible reception of the standard KISS channel and filtering for frames belonging to the configured port.
+- Unified BBS, NODE, and AI command input for the `CR`, `LF`, and `CRLF` line endings used by different Packet Radio terminals.
 
 ## 2026-08-29 - mobile terminal and background station operation
 

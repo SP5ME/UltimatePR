@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/netallow"
-	"github.com/packet-radio/ultimatepr/internal/transport/kiss"
 )
 
 const (
-	maxKISSFrame  = 65535
 	upstreamQueue = 256
+	clientQueue   = 64
+	writeTimeout  = 5 * time.Second
 )
 
 // Proxy shares one upstream KISS TCP connection with multiple clients.
-// It proxies complete KISS frames, not arbitrary TCP read fragments.
+// It is deliberately transparent: KISS framing and commands belong to clients
+// and the upstream TNC, while the proxy only distributes the TCP byte stream.
 type Proxy struct {
 	listen   string
 	upstream string
@@ -27,14 +28,19 @@ type Proxy struct {
 	log      *slog.Logger
 	mu       sync.Mutex
 	clients  map[net.Conn]*client
-	tx       chan []byte
+	tx       chan upstreamItem
 	upMu     sync.Mutex
 	up       net.Conn
 }
 
 type client struct {
 	conn net.Conn
-	mu   sync.Mutex
+	tx   chan []byte
+}
+
+type upstreamItem struct {
+	data   []byte
+	source *client
 }
 
 func Start(ctx context.Context, listen, upstream string, allowed []string, log *slog.Logger) error {
@@ -44,7 +50,7 @@ func Start(ctx context.Context, listen, upstream string, allowed []string, log *
 	}
 	p := &Proxy{
 		listen: listen, upstream: upstream, allowed: append([]string(nil), allowed...),
-		log: log, clients: make(map[net.Conn]*client), tx: make(chan []byte, upstreamQueue),
+		log: log, clients: make(map[net.Conn]*client), tx: make(chan upstreamItem, upstreamQueue),
 	}
 	log.Info("TNC proxy started", "listen", listen, "upstream", upstream)
 	go p.run(ctx, l)
@@ -73,11 +79,12 @@ func (p *Proxy) run(ctx context.Context, listener net.Listener) {
 			_ = conn.Close()
 			continue
 		}
-		c := &client{conn: conn}
+		c := &client{conn: conn, tx: make(chan []byte, clientQueue)}
 		p.mu.Lock()
 		p.clients[conn] = c
 		p.mu.Unlock()
 		p.log.Info("TNC proxy client connected", "remote", conn.RemoteAddr())
+		go p.clientWriter(ctx, c)
 		go p.clientLoop(ctx, c)
 	}
 }
@@ -92,33 +99,15 @@ func addressAllowed(address net.Addr, allowed []string) bool {
 
 func (p *Proxy) clientLoop(ctx context.Context, c *client) {
 	defer p.removeClient(c)
-	decoder := kiss.NewDecoder(maxKISSFrame)
 	b := make([]byte, 4096)
 	for {
 		n, err := c.conn.Read(b)
 		if n > 0 {
-			frames, decodeErrs := decoder.Feed(b[:n])
-			for _, decodeErr := range decodeErrs {
-				p.log.Warn("TNC proxy rejected malformed client KISS data", "remote", c.conn.RemoteAddr(), "error", decodeErr)
-			}
-			for _, frame := range frames {
-				if !clientCommandAllowed(frame.Command) {
-					p.log.Warn("TNC proxy blocked client KISS command", "remote", c.conn.RemoteAddr(), "command", frame.Command)
-					continue
-				}
-				wire, encodeErr := kiss.Encode(frame)
-				if encodeErr != nil {
-					continue
-				}
-				// Match the SQ5T proxy semantics: traffic produced by one client
-				// is visible to every other client as well as to the upstream TNC.
-				// Do not echo it back to its sender.
-				p.broadcastExcept(wire, c)
-				select {
-				case p.tx <- wire:
-				case <-ctx.Done():
-					return
-				}
+			data := append([]byte(nil), b[:n]...)
+			// Queue untouched bytes for the live upstream connection. The
+			// upstream writer publishes them to peers after a successful write.
+			if !p.enqueueUpstream(data, c) {
+				p.log.Warn("TNC proxy dropped client data", "remote", c.conn.RemoteAddr(), "reason", "upstream unavailable or busy")
 			}
 		}
 		if err != nil {
@@ -127,10 +116,34 @@ func (p *Proxy) clientLoop(ctx context.Context, c *client) {
 	}
 }
 
-func clientCommandAllowed(command uint8) bool {
-	// DATA and the portable KISS link parameters are safe to forward.
-	// SET HARDWARE is device-specific and RETURN would terminate KISS for every client.
-	return command <= kiss.CommandFullDuplex
+func (p *Proxy) clientWriter(ctx context.Context, c *client) {
+	for {
+		select {
+		case data := <-c.tx:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if _, err := writeAll(c.conn, data); err != nil {
+				p.removeClient(c)
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Proxy) enqueueUpstream(data []byte, source *client) bool {
+	p.upMu.Lock()
+	connected := p.up != nil
+	p.upMu.Unlock()
+	if !connected {
+		return false
+	}
+	select {
+	case p.tx <- upstreamItem{data: data, source: source}:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Proxy) upstreamManager(ctx context.Context) {
@@ -148,6 +161,7 @@ func (p *Proxy) upstreamManager(ctx context.Context) {
 		err = p.serveUpstream(ctx, conn)
 		p.clearUpstream(conn)
 		_ = conn.Close()
+		p.discardQueuedUpstream()
 		if ctx.Err() == nil {
 			p.log.Warn("TNC proxy upstream disconnected", "address", p.upstream, "error", err)
 			if !waitFor(ctx, time.Second) {
@@ -157,15 +171,27 @@ func (p *Proxy) upstreamManager(ctx context.Context) {
 	}
 }
 
+func (p *Proxy) discardQueuedUpstream() {
+	for {
+		select {
+		case <-p.tx:
+		default:
+			return
+		}
+	}
+}
+
 func (p *Proxy) serveUpstream(ctx context.Context, conn net.Conn) error {
 	readErr := make(chan error, 1)
 	go p.readUpstream(ctx, conn, readErr)
 	for {
 		select {
-		case wire := <-p.tx:
-			if _, err := writeAll(conn, wire); err != nil {
+		case item := <-p.tx:
+			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if _, err := writeAll(conn, item.data); err != nil {
 				return err
 			}
+			p.broadcastExcept(item.data, item.source)
 		case err := <-readErr:
 			return err
 		case <-ctx.Done():
@@ -175,21 +201,11 @@ func (p *Proxy) serveUpstream(ctx context.Context, conn net.Conn) error {
 }
 
 func (p *Proxy) readUpstream(ctx context.Context, conn net.Conn, errch chan<- error) {
-	decoder := kiss.NewDecoder(maxKISSFrame)
 	b := make([]byte, 4096)
 	for {
 		n, err := conn.Read(b)
 		if n > 0 {
-			frames, decodeErrs := decoder.Feed(b[:n])
-			for _, decodeErr := range decodeErrs {
-				p.log.Warn("TNC proxy rejected malformed upstream KISS data", "error", decodeErr)
-			}
-			for _, frame := range frames {
-				wire, encodeErr := kiss.Encode(frame)
-				if encodeErr == nil {
-					p.broadcast(wire)
-				}
-			}
+			p.broadcast(b[:n])
 		}
 		if err != nil {
 			select {
@@ -216,10 +232,11 @@ func (p *Proxy) broadcastExcept(data []byte, excluded *client) {
 	}
 	p.mu.Unlock()
 	for _, c := range clients {
-		c.mu.Lock()
-		_, err := writeAll(c.conn, data)
-		c.mu.Unlock()
-		if err != nil {
+		frame := append([]byte(nil), data...)
+		select {
+		case c.tx <- frame:
+		default:
+			p.log.Warn("TNC proxy disconnected slow client", "remote", c.conn.RemoteAddr())
 			p.removeClient(c)
 		}
 	}

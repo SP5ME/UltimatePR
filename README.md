@@ -84,16 +84,16 @@ YAML. Nowa konfiguracja nie zawiera znaku ani danych autora projektu.
 
 UltimatePR komunikuje się z TNC przez KISS TCP lub AXUDP; bezpośrednie TNC
 szeregowe RS-232 nie jest obecnie przewidziane. Opcjonalne TNC Proxy udostępnia
-jeden port KISS TCP aplikacji i zewnętrznym klientom, rozdzielając pełne ramki
-KISS i chroniąc wspólne TNC przed komendami zmieniającymi jego stan.
+jeden port KISS TCP aplikacji i zewnętrznym klientom, rozdzielając przezroczysty
+strumień TCP pomiędzy wspólne TNC i wszystkie aplikacje.
 
 Proxy utrzymuje jedno połączenie z TNC i udostępnia osobny port klientom.
 Ramka odebrana z TNC trafia do wszystkich klientów. Ramka wysłana przez jednego
 klienta trafia do TNC i pozostałych klientów, ale nie wraca do nadawcy. Dzięki
 temu monitor widzi transmisje innych aplikacji — zgodnie z efektem proxy SQ5T
-opisanym przez SQ9MDD. Proxy przekazuje kompletne ramki KISS, automatycznie
-odnawia połączenie oraz blokuje `SET HARDWARE` i `RETURN`. Dostęp klientów
-kontroluje `web.allowed_addresses`.
+opisanym przez SQ9MDD. Proxy nie interpretuje ani nie filtruje komend KISS,
+automatycznie odnawia połączenie, a dostęp klientów kontroluje
+`web.allowed_addresses`.
 
 ```yaml
 ports:
@@ -215,9 +215,9 @@ TNC communication uses network transports: KISS TCP or AXUDP. Direct RS-232
 TNC support is not currently planned. The optional TNC Proxy safely shares one
 KISS TCP endpoint between UltimatePR and external clients. It distributes TNC
 frames to every client and sends a client's frame to the TNC and every other
-client without echoing it to the sender. Complete KISS frames are preserved
-across TCP reads, reconnect is automatic, and `SET HARDWARE` plus `RETURN`
-are blocked. Access is controlled by `web.allowed_addresses`.
+client without echoing it to the sender. The TCP byte stream, including every
+KISS command, is forwarded transparently. Reconnect is automatic and access is
+controlled by `web.allowed_addresses`.
 
 ```yaml
 ports:

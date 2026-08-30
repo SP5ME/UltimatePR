@@ -61,7 +61,7 @@ input::placeholder, textarea::placeholder { color: #91a3a5; opacity: 1; }
 .heard-row span, .heard-row small { font-size: 12px; font-weight: 600; }
 .terminal-head strong, .terminal-state strong { font-size: 13px; font-weight: 800; }
 .monitor-frame-legend { color: #afbec0; font-size: 12px; font-weight: 600; line-height: 1.5; }
-.monitor-row { font-size: 13px; }
+.monitor-row { font-size: 15px; }
 .monitor-row time, .monitor-row > span, .monitor-row em, .monitor-help-popup dd { color: #afbec0; font-weight: 600; }
 .monitor-via { font-size: 12px; font-weight: 700; }
 .monitor-help-popup { font-size: 14px; line-height: 1.45; }

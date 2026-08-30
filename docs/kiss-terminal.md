@@ -60,13 +60,11 @@ Połączenia proxy są ograniczane przez wspólną listę `web.allowed_addresses
 która kontroluje również dostęp do panelu WWW.
 
 Proxy utrzymuje połączenie z właściwym TNC niezależnie od ruchu klientów i
-przekazuje wyłącznie kompletne ramki KISS. Ramki odebrane z TNC są rozsyłane do
-wszystkich klientów. Ramka wysłana przez jednego klienta trafia do TNC oraz do
-wszystkich pozostałych klientów, ale nie jest odsyłana do nadawcy. Dzięki temu
-aplikacja monitorująca widzi również transmisje innych aplikacji, zgodnie z
-zachowaniem proxy SQ5T. Komendy `SET HARDWARE` i `RETURN` od klientów są
-blokowane, aby pojedyncza aplikacja nie mogła zmienić sprzętowego trybu pracy
-albo wyłączyć wspólnego interfejsu KISS.
+przekazuje strumień TCP bez interpretowania ramek lub komend KISS. Dane odebrane
+z TNC są rozsyłane do wszystkich klientów. Dane wysłane przez jednego klienta
+trafiają do TNC oraz do wszystkich pozostałych klientów, ale nie są odsyłane do
+nadawcy. Dzięki temu aplikacja monitorująca widzi również transmisje innych
+aplikacji. Dotyczy to wszystkich komend KISS, w tym `SET HARDWARE` i `RETURN`.
 
 ## Kodowanie tekstu
 
