@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Wiadomości terminala pokazują czas `GG:MM:SS`, a pierwsza wiadomość po ponownym połączeniu rozpoczyna nową pozycję zamiast zostać doklejoną do wcześniejszego odbioru.
 - Terminale nie tworzą już dwóch pozycji dla tego samego pełnego znaku wraz z SSID. Ponowne połączenie przychodzące przejmuje istniejący terminal i jest prawidłowo odbierane, zamiast zostać automatycznie rozłączone po 30 sekundach.
 - Monitor ponownie pokazuje rzeczywistą zawartość ramek UPRD zamiast samego opisu statusu.
 - Naprawiono automatyczne powitanie połączenia przychodzącego AX.25: payload jest kończony pojedynczym `CRLF` (`0x0D 0x0A`).

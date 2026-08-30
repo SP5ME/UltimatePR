@@ -10,6 +10,7 @@
 .sound-control>input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--green)}
 .operator-presence{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;color:var(--muted)}
 .operator-icon{width:18px;height:18px;display:inline-block;vertical-align:-4px;margin-right:5px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.operator-icon.account{fill:currentColor;stroke:none}
 .operator-icon.present{color:var(--green);fill:currentColor;stroke:currentColor}
 .operator-presence:not([data-present="true"]){position:relative}
 .operator-presence:not([data-present="true"])::after{content:"";position:absolute;width:24px;height:2px;background:var(--red);transform:rotate(-45deg)}
