@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -47,6 +48,34 @@ func TestStatusReportsDirectAIService(t *testing.T) {
 	}
 	if status["ai"] != "SP5ME-12" || status["ai_enabled"] != true {
 		t.Fatalf("AI status=%v", status)
+	}
+}
+
+func TestAIModelsConnectsAndReturnsOllamaTags(t *testing.T) {
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3:8b"},{"name":"gemma3:4b"}]}`)
+	}))
+	defer ollama.Close()
+
+	s := &Server{}
+	w := httptest.NewRecorder()
+	s.aiModels(w, httptest.NewRequest(http.MethodPost, "/api/ai/models", strings.NewReader(`{"url":"`+ollama.URL+`"}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Connected bool     `json:"connected"`
+		Models    []string `json:"models"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Connected || len(response.Models) != 2 || response.Models[0] != "qwen3:8b" {
+		t.Fatalf("response=%+v", response)
 	}
 }
 

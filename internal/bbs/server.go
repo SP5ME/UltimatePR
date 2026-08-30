@@ -18,6 +18,7 @@ import (
 
 type Server struct {
 	Listen, Title, Node, Address, Language string
+	WelcomeMessage, GoodbyeMessage        string
 	Store                                  *Store
 	Log                                    *slog.Logger
 	OnMessage                              func()
@@ -112,7 +113,11 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 	}
 	profile.LastSeen = time.Now().UTC()
 	_ = s.Store.SaveProfile(profile)
-	fmt.Fprintf(w, language.T(lang, "hello_bbs"), call)
+	if strings.TrimSpace(s.WelcomeMessage) == "" {
+		fmt.Fprintf(w, language.T(lang, "hello_bbs"), call)
+	} else {
+		fmt.Fprint(w, expandSessionMessage(s.WelcomeMessage, s.Node, call), "\r\n")
+	}
 	line := func(prompt string) (string, bool) {
 		fmt.Fprint(w, prompt)
 		if !in.Scan() {
@@ -291,12 +296,20 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 			}
 			s.compose(in, w, call, "B", to, lang)
 		case "B", "BYE", "Q", "QUIT":
-			fmt.Fprint(w, "73!\r\n")
+			if strings.TrimSpace(s.GoodbyeMessage) == "" {
+				fmt.Fprint(w, "73!\r\n")
+			} else {
+				fmt.Fprint(w, expandSessionMessage(s.GoodbyeMessage, s.Node, call), "\r\n")
+			}
 			return
 		default:
 			fmt.Fprint(w, language.T(lang, "unknown"))
 		}
 	}
+}
+
+func expandSessionMessage(message, local, remote string) string {
+	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
 }
 
 func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Scanner, w io.Writer) UserProfile {

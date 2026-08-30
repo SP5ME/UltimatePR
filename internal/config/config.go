@@ -77,6 +77,8 @@ type AI struct {
 	SystemPrompt     string `yaml:"system_prompt"`
 	QueueSize        int    `yaml:"queue_size"`
 	Concurrency      int    `yaml:"concurrency"`
+	WelcomeMessage   string `yaml:"welcome_message"`
+	GoodbyeMessage   string `yaml:"goodbye_message"`
 }
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
@@ -99,6 +101,8 @@ type BBS struct {
 	Language      string        `yaml:"language"`
 	BeaconVia     string        `yaml:"beacon_via,omitempty"`
 	Forwarding    BBSForwarding `yaml:"forwarding"`
+	WelcomeMessage string        `yaml:"welcome_message"`
+	GoodbyeMessage string        `yaml:"goodbye_message"`
 }
 type BBSForwarding struct {
 	Enabled               bool      `yaml:"enabled"`
@@ -129,6 +133,8 @@ type Node struct {
 	Neighbors []NodeNeighbor `yaml:"neighbors"`
 	Routes    []NodeRoute    `yaml:"routes"`
 	Services  []NodeService  `yaml:"services"`
+	WelcomeMessage string     `yaml:"welcome_message"`
+	GoodbyeMessage string     `yaml:"goodbye_message"`
 }
 type NodeNeighbor struct {
 	ID       string `yaml:"id"`
@@ -315,6 +321,24 @@ func (c *Config) applyDefaults(hasExperimental bool) {
 	}
 	if c.AI.Concurrency == 0 {
 		c.AI.Concurrency = 1
+	}
+	if strings.TrimSpace(c.Node.WelcomeMessage) == "" {
+		c.Node.WelcomeMessage = "Witaj {REMOTE} w NODE {CALL}.\r\nDostepne funkcje: NODES, ROUTES, PORTS, SERVICES, BBS, AI, CONNECT i HELP."
+	}
+	if strings.TrimSpace(c.Node.GoodbyeMessage) == "" {
+		c.Node.GoodbyeMessage = "73 {REMOTE}, NODE {CALL}."
+	}
+	if strings.TrimSpace(c.BBS.WelcomeMessage) == "" {
+		c.BBS.WelcomeMessage = "Witaj {REMOTE} w BBS {CALL}.\r\nTutaj mozesz czytac, wysylac i przekazywac wiadomosci packet radio. Wpisz H, aby zobaczyc pomoc."
+	}
+	if strings.TrimSpace(c.BBS.GoodbyeMessage) == "" {
+		c.BBS.GoodbyeMessage = "73 {REMOTE}, BBS {CALL}."
+	}
+	if strings.TrimSpace(c.AI.WelcomeMessage) == "" {
+		c.AI.WelcomeMessage = "Witaj {REMOTE} w usludze IA {CALL}.\r\nWpisz pytanie, a otrzymasz krotka odpowiedz. Q konczy rozmowe."
+	}
+	if strings.TrimSpace(c.AI.GoodbyeMessage) == "" {
+		c.AI.GoodbyeMessage = "73 {REMOTE}, IA {CALL}."
 	}
 }
 

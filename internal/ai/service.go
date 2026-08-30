@@ -16,6 +16,7 @@ type Config struct {
 	Timeout                      time.Duration
 	MaxContext, MaxResponseChars int
 	SystemPrompt                 string
+	WelcomeMessage, GoodbyeMessage, LocalCall string
 	PageChars, QueueSize         int
 }
 type Service struct {
@@ -71,11 +72,18 @@ func (s *Service) Ask(ctx context.Context, history []Message, prompt string) ([]
 }
 
 func (s *Service) ServeSession(call, lang string, in *bufio.Scanner, w io.Writer) {
-	fmt.Fprintf(w, "\r\nAI service for %s. Enter a question, Q to return.\r\nAI> ", call)
+	if strings.TrimSpace(s.Config.WelcomeMessage) == "" {
+		fmt.Fprintf(w, "\r\nAI service for %s. Enter a question, Q to return.\r\nAI> ", call)
+	} else {
+		fmt.Fprint(w, "\r\n", expandSessionMessage(s.Config.WelcomeMessage, s.Config.LocalCall, call), "\r\nAI> ")
+	}
 	var history []Message
 	for in.Scan() {
 		line := strings.TrimSpace(in.Text())
 		if strings.EqualFold(line, "Q") || strings.EqualFold(line, "QUIT") {
+			if strings.TrimSpace(s.Config.GoodbyeMessage) != "" {
+				fmt.Fprint(w, expandSessionMessage(s.Config.GoodbyeMessage, s.Config.LocalCall, call), "\r\n")
+			}
 			return
 		}
 		if line == "" {
@@ -99,6 +107,10 @@ func (s *Service) ServeSession(call, lang string, in *bufio.Scanner, w io.Writer
 		}
 		fmt.Fprint(w, "AI> ")
 	}
+}
+
+func expandSessionMessage(message, local, remote string) string {
+	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
 }
 
 func Format(v string, max int) string {

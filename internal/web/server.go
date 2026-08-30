@@ -321,6 +321,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("POST /api/update/apply", s.updateApply)
 	mux.HandleFunc("GET /api/config/model", s.configModelGet)
 	mux.HandleFunc("PUT /api/config/model", s.configModelPut)
+	mux.HandleFunc("POST /api/ai/models", s.aiModels)
 	mux.HandleFunc("POST /api/ports/{id}/reconnect", s.portReconnect)
 
 	h := securityHeaders(s.allowAddresses(s.authenticate(mux)))
@@ -338,6 +339,56 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+func (s *Server) aiModels(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&input); err != nil {
+		http.Error(w, "Nieprawidłowy adres Ollamy.", http.StatusBadRequest)
+		return
+	}
+	base := strings.TrimRight(strings.TrimSpace(input.URL), "/")
+	if base == "" {
+		http.Error(w, "Podaj adres Ollamy.", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/tags", nil)
+	if err != nil || (req.URL.Scheme != "http" && req.URL.Scheme != "https") || req.URL.Host == "" {
+		http.Error(w, "Adres Ollamy musi mieć postać http://adres:port.", http.StatusBadRequest)
+		return
+	}
+	req.Header.Set("User-Agent", "UltimatePR-ai-setup")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Nie można połączyć się z Ollamą: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		http.Error(w, "Ollama zwróciła status "+resp.Status, http.StatusBadGateway)
+		return
+	}
+	var tags struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&tags); err != nil {
+		http.Error(w, "Ollama zwróciła nieprawidłową listę modeli.", http.StatusBadGateway)
+		return
+	}
+	models := make([]string, 0, len(tags.Models))
+	for _, model := range tags.Models {
+		if name := strings.TrimSpace(model.Name); name != "" {
+			models = append(models, name)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"connected": true, "models": models})
 }
 
 func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {

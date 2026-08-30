@@ -16,6 +16,7 @@ import (
 
 type Server struct {
 	Listen, Callsign, Alias, Language string
+	WelcomeMessage, GoodbyeMessage    string
 	Router                            *Router
 	BBS                               *bbs.Server
 	Handlers                          map[string]func(string, string, *bufio.Scanner, io.Writer)
@@ -77,7 +78,11 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 			lang = language.Normalize(saved)
 		}
 	}
-	fmt.Fprintf(w, language.T(lang, "hello_node"), call)
+	if strings.TrimSpace(s.WelcomeMessage) == "" {
+		fmt.Fprintf(w, language.T(lang, "hello_node"), call)
+	} else {
+		fmt.Fprint(w, expandSessionMessage(s.WelcomeMessage, s.Callsign, call), "\r\n")
+	}
 	for {
 		fmt.Fprintf(w, "%s> ", s.Alias)
 		if !in.Scan() {
@@ -134,12 +139,20 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 				fmt.Fprintf(w, language.T(lang, "route_found"), route.Destination, n.Callsign, n.Port, route.Quality)
 			}
 		case "B", "BYE", "Q", "QUIT":
-			fmt.Fprint(w, "73!\r\n")
+			if strings.TrimSpace(s.GoodbyeMessage) == "" {
+				fmt.Fprint(w, "73!\r\n")
+			} else {
+				fmt.Fprint(w, expandSessionMessage(s.GoodbyeMessage, s.Callsign, call), "\r\n")
+			}
 			return
 		default:
 			fmt.Fprint(w, language.T(lang, "unknown"))
 		}
 	}
+}
+
+func expandSessionMessage(message, local, remote string) string {
+	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
 }
 func (s *Server) runService(command, call, lang string, in *bufio.Scanner, w io.Writer) bool {
 	service, ok := s.Router.Service(command)

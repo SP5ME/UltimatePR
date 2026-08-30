@@ -53,6 +53,8 @@ bbs:
   hierarchical_address: ""
   language: en
   beacon_via: ""
+  welcome_message: "Welcome {REMOTE} to BBS {CALL}. Type H for help."
+  goodbye_message: "73 {REMOTE}, BBS {CALL}."
   forwarding:
     enabled: false
     interval_minutes: 15
@@ -66,6 +68,8 @@ node:
   alias: N0CALL
   listen: 127.0.0.1:8010
   language: en
+  welcome_message: "Welcome {REMOTE} to NODE {CALL}. Commands: NODES, ROUTES, PORTS, SERVICES, BBS, AI, CONNECT and HELP."
+  goodbye_message: "73 {REMOTE}, NODE {CALL}."
   neighbors: []
   routes: []
   services:
@@ -81,5 +85,7 @@ ai:
   max_response_chars: 2000
   max_context: 20
   system_prompt: "You are a concise packet-radio assistant."
+  welcome_message: "Welcome {REMOTE} to AI service {CALL}. Enter a question; Q ends the conversation."
+  goodbye_message: "73 {REMOTE}, AI {CALL}."
   queue_size: 8
   concurrency: 1

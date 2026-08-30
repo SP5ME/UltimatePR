@@ -413,7 +413,7 @@ func main() {
 			log.Error("BBS database failed", "error", err)
 			os.Exit(2)
 		}
-		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, Store: store, Log: log}
+		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, Store: store, Log: log}
 		if cfg.BBS.Forwarding.Enabled {
 			peers := make([]bbs.ForwardPeer, 0, len(cfg.BBS.Forwarding.Peers))
 			for _, p := range cfg.BBS.Forwarding.Peers {
@@ -445,7 +445,7 @@ func main() {
 	var aiServer *aiservice.Service
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
-		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize}, cfg.AI.Concurrency)
+		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
 		inbound.Register(ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, func(call string, r io.Reader, w io.Writer) {
 			scanner := bufio.NewScanner(r)
 			aiServer.ServeSession(call, cfg.Application.Language, scanner, w)
@@ -457,7 +457,7 @@ func main() {
 		if aiServer != nil {
 			handlers["AI"] = aiServer.ServeSession
 		}
-		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
+		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, WelcomeMessage: cfg.Node.WelcomeMessage, GoodbyeMessage: cfg.Node.GoodbyeMessage, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
 		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)
 		go func() {
 			if err := nodeServer.Run(ctx); err != nil && ctx.Err() == nil {
