@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -557,19 +558,34 @@ func (s *Server) configModelPut(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	restartRequired := configRestartRequired(current, c)
+	if reflect.DeepEqual(current, c) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"saved": true, "changed": false, "restart_required": false})
+		return
+	}
 	if err := appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	s.log.Info("configuration model saved", "path", s.cfg.ConfigPath)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"saved": true, "restart_required": true})
-	if s.cfg.RequestRestart != nil {
+	_ = json.NewEncoder(w).Encode(map[string]any{"saved": true, "changed": true, "restart_required": restartRequired})
+	if restartRequired && s.cfg.RequestRestart != nil {
 		go func() {
 			time.Sleep(250 * time.Millisecond)
 			s.cfg.RequestRestart()
 		}()
 	}
+}
+
+// configRestartRequired lists the fields that the running process can safely
+// ignore until its next normal start. Everything else currently participates
+// in live radio or service state and therefore requires an explicit restart.
+func configRestartRequired(current, candidate appconfig.Config) bool {
+	current.Application.Language = candidate.Application.Language
+	current.Application.UpdateChannel = candidate.Application.UpdateChannel
+	return !reflect.DeepEqual(current, candidate)
 }
 
 func (s *Server) configGet(w http.ResponseWriter, _ *http.Request) {

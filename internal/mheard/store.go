@@ -1,6 +1,8 @@
 package mheard
 
 import (
+	"encoding/json"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -57,6 +59,60 @@ func New(limit int) *Store {
 		limit = 100
 	}
 	return &Store{entries: make(map[string]Entry), beacons: make(map[string]beaconRecord), limit: limit, now: time.Now}
+}
+
+// SaveSnapshot persists the current MHEARD view across a planned process
+// restart. It is deliberately separate from normal MHEARD operation: an
+// unplanned start without a fresh snapshot still begins with an empty list.
+func (s *Store) SaveSnapshot(path string) error {
+	entries := s.List()
+	b, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err = os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	// Windows does not replace an existing destination with os.Rename. A stale
+	// snapshot is expendable because the freshly written temporary file is the
+	// authoritative state for this planned restart.
+	_ = os.Remove(path)
+	if err = os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// LoadSnapshot restores non-expired entries that still refer to configured
+// ports. The caller removes the one-shot file after a successful load.
+func (s *Store) LoadSnapshot(path string, ports map[string]bool) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var entries []Entry
+	if err = json.Unmarshal(b, &entries); err != nil {
+		return err
+	}
+	now := s.nowTime()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range entries {
+		if e.Callsign == "" || e.Port == "" || !ports[e.Port] || e.LastSeen.IsZero() || now.Sub(e.LastSeen) > entryTTL || e.LastSeen.After(now.Add(time.Minute)) {
+			continue
+		}
+		key := e.Port + "\x00" + e.Callsign
+		beacon := e.Beacon
+		e.Beacon = ""
+		s.entries[key] = e
+		if beacon != "" {
+			s.beacons[key] = beaconRecord{text: beacon, seen: e.LastSeen}
+		}
+	}
+	s.pruneLocked(now)
+	return nil
 }
 
 func (s *Store) Heard(call, port string) {

@@ -194,6 +194,17 @@ func main() {
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
+	mheardSnapshotPath := *path + ".mheard-snapshot.json"
+	configuredPorts := make(map[string]bool, len(portIDs))
+	for _, id := range portIDs {
+		configuredPorts[id] = true
+	}
+	if err := heard.LoadSnapshot(mheardSnapshotPath, configuredPorts); err == nil {
+		_ = os.Remove(mheardSnapshotPath)
+		log.Info("MHEARD restored after planned restart")
+	} else if !os.IsNotExist(err) {
+		log.Warn("MHEARD snapshot could not be restored", "error", err)
+	}
 	var web *webui.Server
 	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: cfg.UPRD.Enabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
 		return web != nil && web.HasActiveBrowser()
@@ -352,6 +363,9 @@ func main() {
 			return restartPort(id, runtimes)
 		},
 		RequestRestart: func() {
+			if err := heard.SaveSnapshot(mheardSnapshotPath); err != nil {
+				log.Warn("MHEARD snapshot failed", "error", err)
+			}
 			restartRequested.Store(true)
 			stop()
 		},

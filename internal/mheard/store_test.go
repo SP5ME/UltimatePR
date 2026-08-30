@@ -1,9 +1,29 @@
 package mheard
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestPlannedRestartSnapshotPreservesFreshConfiguredPorts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mheard.json")
+	before := New(10)
+	before.Heard("SP5ABC", "radio")
+	before.Beacon("SP5ABC", "radio", "hello")
+	before.Heard("SP5OLD", "removed-port")
+	if err := before.SaveSnapshot(path); err != nil {
+		t.Fatal(err)
+	}
+	after := New(10)
+	if err := after.LoadSnapshot(path, map[string]bool{"radio": true}); err != nil {
+		t.Fatal(err)
+	}
+	entries := after.List()
+	if len(entries) != 1 || entries[0].Callsign != "SP5ABC" || entries[0].Beacon != "hello" || entries[0].Frames != 1 {
+		t.Fatalf("restored entries = %+v", entries)
+	}
+}
 
 func TestBeaconKeepsFrameCountAndUpdatesText(t *testing.T) {
 	s := New(10)

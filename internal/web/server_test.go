@@ -10,11 +10,31 @@ import (
 	"testing"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	appconfig "github.com/packet-radio/ultimatepr/internal/config"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/session"
 	"github.com/packet-radio/ultimatepr/internal/terminalcodec"
 )
+
+func TestConfigRestartRequired(t *testing.T) {
+	current := appconfig.Config{}
+	languageOnly := current
+	languageOnly.Application.Language = "en"
+	if configRestartRequired(current, languageOnly) {
+		t.Fatal("language-only change requires restart")
+	}
+	channelOnly := current
+	channelOnly.Application.UpdateChannel = "dev"
+	if configRestartRequired(current, channelOnly) {
+		t.Fatal("update-channel-only change requires restart")
+	}
+	stationChange := current
+	stationChange.Terminal.Callsign = "SP5ME"
+	if !configRestartRequired(current, stationChange) {
+		t.Fatal("station change did not require restart")
+	}
+}
 
 func TestBeaconEndpointAlwaysSendsClassicBeacon(t *testing.T) {
 	beaconCalls, uprdCalls := 0, 0

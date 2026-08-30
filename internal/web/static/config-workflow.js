@@ -1,0 +1,245 @@
+(() => {
+  const byId = id => document.getElementById(id);
+  const clone = value => JSON.parse(JSON.stringify(value));
+  let baseline = null;
+  let dirty = false;
+  let saving = false;
+
+  function number(id, fallback = 0) {
+    const value = Number(byId(id)?.value);
+    return Number.isFinite(value) && value !== 0 ? value : fallback;
+  }
+
+  function csv(value) {
+    return String(value || '').split(',').map(part => part.trim()).filter(Boolean);
+  }
+
+  function collectSafePorts() {
+    const originals = baseline?.Ports || [];
+    return [...document.querySelectorAll('#tncPortRows .tnc-port-row')].map((row, index) => {
+      const get = key => row.querySelector(`[data-k="${key}"]`);
+      const id = get('ID')?.value.trim() || '';
+      const original = originals.find(port => port.ID === id) || originals[index];
+      if (original?.Type === 'axudp') return clone(original);
+      const optional = key => get(key)?.value === '' ? null : Number(get(key)?.value);
+      const fullDuplex = get('KISSFullDuplex')?.value || '';
+      return {
+        ...(original || {}),
+        ID: id,
+        enabled: get('Enabled')?.checked === true,
+        Type: 'kiss-tcp',
+        Host: get('Host')?.value.trim() || '',
+        Port: Number(get('Port')?.value) || 0,
+        MaxFrameBytes: Number(original?.MaxFrameBytes) || 4096,
+        ReconnectSeconds: Number(original?.ReconnectSeconds) || 5,
+        KISSPort: Number(get('KISSPort')?.value) || 0,
+        KISSTXDelay: optional('KISSTXDelay'),
+        KISSPersistence: optional('KISSPersistence'),
+        KISSSlotTime: optional('KISSSlotTime'),
+        KISSTXTail: optional('KISSTXTail'),
+        KISSFullDuplex: fullDuplex === '' ? null : fullDuplex === 'true',
+        tncproxy_enabled: get('TNCProxyEnabled')?.checked === true,
+        tncproxy_port: Number(get('TNCProxyPort')?.value) || 0,
+      };
+    });
+  }
+
+  function candidate() {
+    if (!baseline) return null;
+    const c = clone(baseline);
+    c.Application.OperatorName = byId('applicationOperatorName')?.value.trim() || '';
+    c.Application.Locator = byId('applicationLocator')?.value.trim() || '';
+    c.Application.QTH = byId('applicationQTH')?.value.trim() || '';
+    c.Application.WelcomeMessage = byId('stationMessageWelcomeTab')?.classList.contains('active') ? byId('stationMessageText')?.value || '' : configModel?.Application?.WelcomeMessage || c.Application.WelcomeMessage;
+    c.Application.AwayMessage = configModel?.Application?.AwayMessage || c.Application.AwayMessage;
+    c.Application.GoodbyeMessage = configModel?.Application?.GoodbyeMessage || c.Application.GoodbyeMessage;
+    c.Application.InfoMessage = configModel?.Application?.InfoMessage || c.Application.InfoMessage;
+    if (typeof stationMessageKey !== 'undefined' && byId('stationMessageText')) {
+      const fields = {welcome:'WelcomeMessage', away:'AwayMessage', goodbye:'GoodbyeMessage', info:'InfoMessage'};
+      c.Application[fields[stationMessageKey] || 'WelcomeMessage'] = byId('stationMessageText').value;
+    }
+    c.Application.TerminalEOL = byId('terminalEOL')?.value || c.Application.TerminalEOL;
+    c.Application.AX25T1Seconds = number('ax25T1', 10);
+    c.Application.AX25T3Seconds = number('ax25T3', 300);
+    c.Application.AX25N2 = number('ax25N2', 10);
+    c.Application.AX25N1 = number('ax25N1', 256);
+    c.Application.UpdateChannel = byId('updateChannel')?.value || c.Application.UpdateChannel;
+    c.Terminal.Callsign = byId('terminalCallsign')?.value.trim().toUpperCase() || '';
+    c.Terminal.SSID = number('terminalSSID');
+    c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
+    c.Server.SSID = number('nodeSSID');
+    c.Web.Listen = byId('webListen')?.value.trim() || '';
+    c.Web.Username = byId('webUsername')?.value.trim() || '';
+    c.Web.AllowedAddresses = csv(byId('webAllowedAddresses')?.value);
+    c.Ports = collectSafePorts();
+    c.Beacon = {
+      Enabled: byId('beaconEnabled')?.checked === true,
+      Destination: byId('beaconDestination')?.value.trim().toUpperCase() || '',
+      Via: byId('beaconVia')?.value.trim().toUpperCase() || '',
+      Text: byId('beaconText')?.value.trim() || '',
+      IntervalMinutes: number('beaconInterval', 10),
+    };
+    c.History = {
+      Enabled: byId('historyEnabled')?.checked === true,
+      Database: byId('historyDatabase')?.value.trim() || '',
+      MaxStations: number('historyMaxStations', 100),
+      MaxSessionsPerStation: number('historyMaxSessions', 10),
+      MaxLinesPerStation: number('historyMaxLines', 50),
+      MaxBytes: number('historyMaxMB', 5) * 1048576,
+      RetentionDays: number('historyRetention', 90),
+    };
+    if (byId('uprdEnabled')) {
+      c.UPRD = {
+        Enabled: byId('uprdEnabled').checked,
+        IntervalSeconds: number('uprdInterval', 10) * 60,
+        MHeardLimit: Math.min(10, Math.max(1, number('uprdLimit', 5))),
+      };
+    }
+    return c;
+  }
+
+  function restartProjection(value) {
+    const projected = clone(value);
+    if (projected.Application) {
+      delete projected.Application.Language;
+      delete projected.Application.UpdateChannel;
+    }
+    return projected;
+  }
+
+  function requiresRestart(next = candidate()) {
+    return !!next && JSON.stringify(restartProjection(next)) !== JSON.stringify(restartProjection(baseline));
+  }
+
+  function updateState() {
+    if (!baseline || saving) return;
+    const next = candidate();
+    dirty = !!next && JSON.stringify(next) !== JSON.stringify(baseline);
+    const restart = dirty && requiresRestart(next);
+    const save = byId('saveConfig');
+    const discard = byId('reloadConfig');
+    const notice = byId('configNotice');
+    if (save) {
+      save.disabled = !dirty;
+      save.textContent = restart ? 'Zapisz i uruchom ponownie' : 'Zapisz zmiany';
+    }
+    if (discard) {
+      discard.disabled = !dirty;
+      discard.textContent = 'Odrzuć zmiany';
+    }
+    if (notice) {
+      notice.className = 'config-notice' + (restart ? ' restart-warning' : '');
+      notice.textContent = !dirty ? 'Wszystkie zmiany zapisane.' : restart ? 'Masz niezapisane zmiany wymagające ponownego uruchomienia UltimatePR.' : 'Masz niezapisane zmiany.';
+    }
+    document.querySelectorAll('.config-restart-note').forEach(note => note.classList.toggle('changed', restart));
+  }
+
+  async function saveChanges(confirmRestart = true) {
+    const next = candidate();
+    if (!next || JSON.stringify(next) === JSON.stringify(baseline)) {
+      updateState();
+      return {saved: true, restart_required: false};
+    }
+    const restart = requiresRestart(next);
+    if (restart && confirmRestart) {
+      const active = typeof sessions === 'undefined' ? 0 : [...sessions.values()].filter(session => ['connected','sending','timer_recovery','awaiting_connection'].includes(session.state)).length;
+      const count = active ? ` Zostanie rozłączonych aktywnych sesji: ${active}.` : '';
+      if (!await showAppConfirm(`Niektóre zmiany nie mogą zostać zastosowane bez ponownego uruchomienia UltimatePR.${count} Wszystkie aktywne sesje zostaną rozłączone. Lista MHEARD zostanie zachowana.`)) return null;
+    }
+    saving = true;
+    const save = byId('saveConfig');
+    const notice = byId('configNotice');
+    if (save) save.disabled = true;
+    if (notice) { notice.className = 'config-notice'; notice.textContent = 'Sprawdzanie ustawień…'; }
+    try {
+      const response = await fetch('/api/config/model', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(next)});
+      const body = await response.text();
+      if (!response.ok) throw new Error(body);
+      const result = JSON.parse(body || '{}');
+      baseline = clone(next);
+      configModel = clone(next);
+      dirty = false;
+      if (result.restart_required) {
+        if (notice) notice.textContent = 'Ustawienia zapisane. UltimatePR uruchamia się ponownie, a MHEARD zostanie odtworzony…';
+        waitForRestart();
+      } else {
+        saving = false;
+        updateState();
+      }
+      return result;
+    } catch (error) {
+      saving = false;
+      if (notice) { notice.className = 'config-notice error'; notice.textContent = 'Nie zapisano: ' + friendlyConfigError(error.message); }
+      updateState();
+      return null;
+    }
+  }
+
+  function installRestartNotes() {
+    const panels = ['stationConfigPanel','terminalConfigPanel','tncConfigPanel','networkConfigPanel','applicationConfigPanel','beaconConfigPanel','uprDirectConfigPanel','databaseConfigPanel'];
+    panels.forEach(id => {
+      const panel = byId(id);
+      if (!panel || panel.querySelector('.config-restart-note')) return;
+      const note = document.createElement('p');
+      note.className = 'config-notice config-restart-note';
+      note.textContent = 'Zmiana niektórych ustawień w tej zakładce może wymagać ponownego uruchomienia UltimatePR. Aktywne sesje zostaną wtedy rozłączone, a lista MHEARD pozostanie zachowana.';
+      panel.prepend(note);
+    });
+  }
+
+  function leaveDialog(action) {
+    if (!dirty) { action(); return; }
+    const modal = document.createElement('div');
+    modal.className = 'app-confirm-backdrop';
+    const restart = requiresRestart();
+    modal.innerHTML = `<div class="app-confirm-modal" role="dialog" aria-modal="true"><h3>Niezapisane zmiany</h3><p>${restart ? 'Niektóre zmiany wymagają restartu i rozłączenia wszystkich sesji. MHEARD zostanie zachowany.' : 'Masz niezapisane zmiany konfiguracji.'}</p><div class="app-confirm-actions config-leave-actions"><button class="secondary stay">Pozostań</button><button class="secondary discard">Odrzuć zmiany i przejdź</button><button class="primary save">${restart ? 'Zapisz i uruchom ponownie' : 'Zapisz zmiany'}</button></div></div>`;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('.stay').onclick = close;
+    modal.querySelector('.discard').onclick = () => { dirty = false; close(); action(); };
+    modal.querySelector('.save').onclick = async () => { const result = await saveChanges(false); if (result && !result.restart_required) { close(); action(); } };
+  }
+
+  const originalFillConfig = window.fillConfig;
+  window.fillConfig = c => {
+    baseline = clone(c);
+    originalFillConfig(c);
+    setTimeout(() => { installRestartNotes(); updateState(); }, 0);
+  };
+
+  const config = byId('configView');
+  config?.addEventListener('input', () => setTimeout(updateState, 0));
+  config?.addEventListener('change', () => setTimeout(updateState, 0));
+  byId('saveConfig').onclick = () => saveChanges(true);
+  byId('reloadConfig').onclick = () => loadConfig();
+  const updateChannelButton = byId('saveUpdateChannel');
+  if (updateChannelButton) {
+    const saveUpdateChannel = updateChannelButton.onclick;
+    updateChannelButton.onclick = async event => {
+      await saveUpdateChannel?.call(updateChannelButton, event);
+      if (byId('updateState')?.textContent === 'Kanał zapisany.' && baseline) {
+        baseline.Application.UpdateChannel = byId('updateChannel').value;
+        if (configModel?.Application) configModel.Application.UpdateChannel = byId('updateChannel').value;
+        updateState();
+      }
+    };
+  }
+
+  ['navTerminal','navInfo','logout'].forEach(id => {
+    const element = byId(id);
+    if (!element) return;
+    const action = element.onclick;
+    element.addEventListener('click', event => {
+      if (byId('configView')?.hidden || !dirty) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      leaveDialog(() => action?.call(element, event));
+    }, true);
+  });
+
+  window.addEventListener('beforeunload', event => {
+    if (!dirty || saving) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+})();
