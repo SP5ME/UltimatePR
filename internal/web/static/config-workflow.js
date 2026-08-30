@@ -86,23 +86,46 @@
     c.Application.AX25T3Seconds = number('ax25T3', 300);
     c.Application.AX25N2 = number('ax25N2', 10);
     c.Application.AX25N1 = number('ax25N1', 256);
+    c.Application.Language = byId('applicationLanguage')?.value || c.Application.Language;
+    c.Application.Mode = byId('applicationMode')?.value || c.Application.Mode;
     c.Application.UpdateChannel = byId('updateChannel')?.value || c.Application.UpdateChannel;
     c.Terminal.Callsign = byId('terminalCallsign')?.value.trim().toUpperCase() || '';
     c.Terminal.SSID = number('terminalSSID');
     c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
     c.Server.SSID = number('nodeSSID');
+    c.Node.Alias = byId('nodeAlias')?.value.trim().toUpperCase() || '';
+    c.Node.Listen = byId('nodeListen')?.value.trim() || '';
+    c.Node.Language = byId('nodeLanguage')?.value || c.Node.Language;
+    if (typeof collectRows === 'function') c.Node.Neighbors = collectRows('neighborRows', 'neighbor');
+    c.BBS.Callsign = byId('bbsCallsign')?.value.trim().toUpperCase() || '';
+    c.BBS.SSID = number('bbsSSID');
+    c.BBS.Title = byId('bbsTitle')?.value.trim() || '';
+    c.BBS.Address = byId('bbsAddress')?.value.trim().toUpperCase() || '';
+    c.BBS.Listen = byId('bbsListen')?.value.trim() || '';
+    c.BBS.ForwardListen = byId('bbsForwardListen')?.value.trim() || '';
+    c.BBS.Database = byId('bbsDatabase')?.value.trim() || '';
+    c.BBS.Language = byId('bbsLanguage')?.value || c.BBS.Language;
+    c.BBS.BeaconVia = byId('bbsBeaconVia')?.value.trim().toUpperCase() || '';
+    c.BBS.Forwarding.Enabled = byId('fwdEnabled')?.checked === true;
+    c.BBS.Forwarding.IntervalMinutes = number('fwdInterval', 5);
+    c.BBS.Forwarding.MaxMessages = number('fwdMaxMessages');
+    c.BBS.Forwarding.MaxBodyBytes = number('fwdMaxBody');
+    if (typeof collectRows === 'function') c.BBS.Forwarding.Peers = collectRows('peerRows', 'peer');
     c.Web.Listen = byId('webListen')?.value.trim() || '';
     c.Web.Username = baseline.Web.Username;
     c.Web.AllowedAddresses = csv(byId('webAllowedAddresses')?.value);
     c.Ports = collectSafePorts();
     c.Beacon = {
+      ...c.Beacon,
       Enabled: byId('beaconEnabled')?.checked === true,
+      Port: byId('beaconPort')?.value || c.Beacon.Port,
       Destination: byId('beaconDestination')?.value.trim().toUpperCase() || '',
       Via: byId('beaconVia')?.value.trim().toUpperCase() || '',
       Text: byId('beaconText')?.value.trim() || '',
       IntervalMinutes: number('beaconInterval', 10),
     };
     c.History = {
+      ...c.History,
       Enabled: byId('historyEnabled')?.checked === true,
       Database: byId('historyDatabase')?.value.trim() || '',
       MaxStations: number('historyMaxStations', 100),
@@ -113,6 +136,7 @@
     };
     if (byId('uprdEnabled')) {
       c.UPRD = {
+        ...c.UPRD,
         Enabled: byId('uprdEnabled').checked,
         IntervalSeconds: number('uprdInterval', 10) * 60,
         MHeardLimit: Math.min(10, Math.max(1, number('uprdLimit', 5))),
@@ -152,7 +176,8 @@
     }
     if (notice) {
       notice.className = 'config-notice' + (restart ? ' restart-warning' : '');
-      notice.textContent = !dirty ? 'Wszystkie zmiany zapisane.' : restart ? 'Masz niezapisane zmiany wymagające ponownego uruchomienia UltimatePR.' : 'Masz niezapisane zmiany.';
+      notice.setAttribute('aria-live', 'polite');
+      notice.textContent = !dirty ? 'Konfiguracja jest aktualna — nie ma zmian do zapisania.' : restart ? 'Zmiany nie są jeszcze zapisane. Zapis spowoduje ponowne uruchomienie UltimatePR.' : 'Zmiany nie są jeszcze zapisane. Kliknij „Zapisz zmiany”.';
     }
     document.querySelectorAll('.config-restart-note').forEach(note => note.classList.toggle('changed', restart));
   }
@@ -278,6 +303,9 @@
   const config = byId('configView');
   config?.addEventListener('input', () => setTimeout(updateState, 0));
   config?.addEventListener('change', () => setTimeout(updateState, 0));
+  config?.addEventListener('click', event => {
+    if (event.target.closest('.remove-row, #addNeighbor, #addPeer, #addTNCPort, #beaconTextDefault, #resetTerminalDefaults')) setTimeout(updateState, 0);
+  });
   byId('saveConfig').onclick = () => saveChanges(true);
   byId('reloadConfig').onclick = () => loadConfig();
   const updateChannelButton = byId('saveUpdateChannel');
