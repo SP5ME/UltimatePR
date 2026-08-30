@@ -241,6 +241,25 @@ func TestHasActiveBrowserTracksNotificationConnections(t *testing.T) {
 	}
 }
 
+func TestBrowserKickChannelClosesPreviousConnection(t *testing.T) {
+	s := New(Config{}, nil)
+	previous := make(chan struct{})
+	s.notify[1] = make(chan notification, 1)
+	s.notifyKick[1] = previous
+
+	s.notifyMu.Lock()
+	for _, kick := range s.notifyKick {
+		close(kick)
+	}
+	s.notifyMu.Unlock()
+
+	select {
+	case <-previous:
+	case <-time.After(time.Second):
+		t.Fatal("previous browser connection was not kicked")
+	}
+}
+
 func TestOperatorStationRunsInBackgroundWithoutBrowser(t *testing.T) {
 	s := New(Config{
 		TerminalCallsign: "SP5ME",

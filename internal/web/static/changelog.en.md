@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Changed `main` and `dev` package versioning to `MAJOR.MINOR.BUILD-CHANNEL+SHA`; the final numeric component increases with every pushed commit.
 - Separated the manual classic beacon button from automatic UPRD; both mechanisms can operate independently.
 - Moved beacon settings to a dedicated `Beacon` tab; closing History now expands the new-connection bar.
 - UPRD is enabled by default and operates independently of the classic beacon; the header button sends only the classic beacon.

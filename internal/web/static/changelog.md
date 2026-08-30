@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Zmieniono wersjonowanie pakietów `main` i `dev` na `MAJOR.MINOR.BUILD-KANAŁ+SHA`; ostatni liczbowy człon rośnie z każdym wypchniętym commitem.
 - Rozdzielono ręczny przycisk klasycznego beaconu od automatycznego UPRD; oba mechanizmy mogą działać niezależnie.
 - Przeniesiono ustawienia beaconu do osobnej zakładki `Beacon`, a zamknięcie Historii rozszerza pasek nowego połączenia.
 - UPRD jest domyślnie włączone i działa niezależnie od klasycznego beaconu; przycisk nagłówka wysyła wyłącznie klasyczny beacon.

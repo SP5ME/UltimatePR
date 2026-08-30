@@ -82,6 +82,7 @@ type Server struct {
 	notifyMu      sync.Mutex
 	notifySeq     uint64
 	notify        map[uint64]chan notification
+	notifyKick    map[uint64]chan struct{}
 	incomingSeq   atomic.Uint64
 	incomingMu    sync.Mutex
 	incoming      map[uint64]*operatorSession
@@ -133,7 +134,7 @@ func (s *operatorSession) close() {
 }
 
 func New(cfg Config, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), incoming: make(map[uint64]*operatorSession)}
+	return &Server{cfg: cfg, log: log, started: time.Now(), notify: make(map[uint64]chan notification), notifyKick: make(map[uint64]chan struct{}), incoming: make(map[uint64]*operatorSession)}
 }
 
 // HasActiveBrowser reports whether at least one authenticated application page
@@ -343,10 +344,22 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 	s.notifyMu.Lock()
+	if s.notify == nil {
+		s.notify = make(map[uint64]chan notification)
+	}
+	if s.notifyKick == nil {
+		s.notifyKick = make(map[uint64]chan struct{})
+	}
+	for previousID, previous := range s.notifyKick {
+		close(previous)
+		delete(s.notifyKick, previousID)
+	}
 	s.notifySeq++
 	id := s.notifySeq
 	ch := make(chan notification, 8)
+	kick := make(chan struct{})
 	s.notify[id] = ch
+	s.notifyKick[id] = kick
 	s.authMu.Lock()
 	switching := s.sessionSwitch
 	s.sessionSwitch = false
@@ -359,6 +372,7 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		s.notifyMu.Lock()
 		delete(s.notify, id)
+		delete(s.notifyKick, id)
 		becameInactive := len(s.notify) == 0
 		s.notifyMu.Unlock()
 		if becameInactive {
@@ -369,6 +383,9 @@ func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-kick:
+			_ = ws.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "session replaced"), time.Now().Add(time.Second))
+			return
 		case e := <-ch:
 			if err := ws.WriteJSON(e); err != nil {
 				return

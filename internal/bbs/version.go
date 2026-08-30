@@ -1,5 +1,6 @@
 package bbs
 
 // BuildVersion is replaced by the release workflow for packaged builds.
-// Local development builds use the same SemVer-compatible format as branch packages.
-var BuildVersion = "0.4.4-dev.0+local"
+// The first two components select the release series. Branch builds replace
+// the last component with the full Git commit count.
+var BuildVersion = "0.4.0-local"
