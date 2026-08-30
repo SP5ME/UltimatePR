@@ -415,7 +415,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("beacon.via: %w", err)
 	}
 	if c.Beacon.Enabled && (strings.TrimSpace(c.Beacon.Text) == "" || c.Beacon.IntervalMinutes < 1) {
-		return fmt.Errorf("beacon: text and interval >= 10 seconds are required")
+		return fmt.Errorf("beacon: text and interval >= 1 minute are required")
 	}
 	if c.UPRD.IntervalSeconds < 1 || c.UPRD.IntervalSeconds > 86400 {
 		return fmt.Errorf("uprd.interval_seconds must be 1..86400")

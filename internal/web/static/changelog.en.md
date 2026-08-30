@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Terminals no longer create two entries for the same full callsign and SSID. A repeated incoming connection reuses the existing terminal and is claimed correctly instead of being disconnected automatically after 30 seconds.
 - The monitor now shows the actual UPRD frame content instead of only the status description.
 - Fixed the incoming AX.25 welcome message so its payload ends with one `CRLF` (`0x0D 0x0A`).
 - MHEARD is preserved across a planned application restart and restored only for configured ports and entries that have not expired.
@@ -44,6 +45,8 @@
 - Restored compatible reception of the standard KISS channel and filtering for frames belonging to the configured port.
 - Unified BBS, NODE, and AI command input for the `CR`, `LF`, and `CRLF` line endings used by different Packet Radio terminals.
 - Manual and automatic UPRD transmission now follows the visible `Enable UPRdirect features` switch; the legacy experimental flag applies only to the optional map and no longer blocks status reports.
+- Fixed the experimental map switch, which could be saved as enabled while failing to expose the map because the UI referenced a nonexistent master control.
+- Disabled UPRD no longer attempts a status transmission when operator presence changes, and classic beacon validation now reports the correct minimum interval of one minute.
 
 ## 2026-08-29 - mobile terminal and background station operation
 

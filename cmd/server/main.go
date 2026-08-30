@@ -388,6 +388,9 @@ func main() {
 		SendBeacon: sendBeacon,
 		SendUPRD:   sendUPRD,
 		PresenceChanged: func() {
+			if !uprdEnabled {
+				return
+			}
 			uprdMgr.ResetSchedule()
 			go func() {
 				if err := sendUPRD(context.Background()); err != nil {

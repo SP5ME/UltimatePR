@@ -136,6 +136,13 @@
         applyExperimentalVisibility();
       };
     }
+    const oldFillServices = window.fillServices;
+    if (typeof oldFillServices === "function") {
+      window.fillServices = (c) => {
+        oldFillServices(c);
+        applyExperimentalVisibility();
+      };
+    }
 
     $("uprdEnabled").onchange = () => { applyExperimentalVisibility(); };
     $("sendUPRDStatus").onclick = async () => {
@@ -184,9 +191,8 @@
   function applyExperimentalVisibility() {
     const enabled = $("uprdEnabled")?.checked === true;
     featureFlags.uprd = enabled;
-    const mapFeature = $("uprdirectExperimental");
-    if (!enabled && mapFeature) mapFeature.checked = false;
-    mapFeature?.parentElement?.toggleAttribute("hidden", !enabled);
+    const mapFeature = $("mapExperimental");
+    featureFlags.map = enabled && mapFeature?.checked === true;
 
     const mapButton = $("navMap");
     if (mapButton) {
@@ -202,42 +208,19 @@
 
   function setupExperimentalControls() {
     const card = $("experimentalFeaturesCard");
-    const master = $("experimentalFeaturesToggle");
     const list = $("experimentalFeaturesList");
-    const uprd = $("uprdirectExperimental");
-    if (!card || !master || !list || !uprd) return;
+    const map = $("mapExperimental");
+    if (!card || !list || !map) return;
 
     card.hidden = false;
-    if (master.dataset.bound) return;
-    master.dataset.bound = "true";
-    uprd.dataset.bound = "true";
+    if (map.dataset.bound) return;
+    map.dataset.bound = "true";
 
     const apply = () => {
-      featureFlags.map = master.checked && uprd.checked && $("uprdEnabled")?.checked === true;
-      list.hidden = !master.checked;
-      if (uprd.parentElement?.lastChild) uprd.parentElement.lastChild.nodeValue = uiLanguage === "en" ? " UPRD - Map" : " UPRD - Mapa";
       applyExperimentalVisibility();
     };
 
-    master.onchange = async () => {
-      if (!master.checked) {
-        uprd.checked = false;
-        apply();
-        return;
-      }
-      const message = "Wchodzisz do opcji eksperymentalnych na własne ryzyko. Funkcje mogą nie działać, zostać zmienione albo ostatecznie nie zostać wprowadzone do projektu. Czy chcesz kontynuować?";
-      const confirmed = typeof showAppConfirm === "function"
-        ? await showAppConfirm(message)
-        : window.confirm(message);
-      if (!confirmed) {
-        master.checked = false;
-        return;
-      }
-      list.hidden = false;
-      uprd.checked = true;
-      apply();
-    };
-    uprd.onchange = apply;
+    map.onchange = apply;
     apply();
   }
 

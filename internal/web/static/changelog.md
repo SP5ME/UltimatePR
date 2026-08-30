@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- Terminale nie tworzą już dwóch pozycji dla tego samego pełnego znaku wraz z SSID. Ponowne połączenie przychodzące przejmuje istniejący terminal i jest prawidłowo odbierane, zamiast zostać automatycznie rozłączone po 30 sekundach.
 - Monitor ponownie pokazuje rzeczywistą zawartość ramek UPRD zamiast samego opisu statusu.
 - Naprawiono automatyczne powitanie połączenia przychodzącego AX.25: payload jest kończony pojedynczym `CRLF` (`0x0D 0x0A`).
 - MHEARD jest zachowywane podczas planowanego restartu aplikacji i przywracane wyłącznie dla nadal skonfigurowanych portów oraz nieprzeterminowanych wpisów.
@@ -44,6 +45,8 @@
 - Przywrócono zgodne odbieranie standardowego kanału KISS oraz filtrowanie ramek właściwych dla skonfigurowanego portu.
 - Ujednolicono odczyt poleceń BBS, NODE i IA dla zakończeń wiersza `CR`, `LF` oraz `CRLF`, używanych przez różne terminale Packet Radio.
 - Ręczne i automatyczne wysyłanie UPRD respektuje teraz widoczny przełącznik `Włącz funkcje UPRdirect`; stara flaga eksperymentalna dotyczy wyłącznie opcjonalnej mapy i nie blokuje już statusów.
+- Naprawiono eksperymentalny przełącznik mapy, który mógł być zapisany jako aktywny, ale nie udostępniał widoku z powodu odwołania do nieistniejącego nadrzędnego pola.
+- Wyłączone UPRD nie próbuje już nadawać statusu po zmianie obecności operatora, a komunikat walidacji klasycznego beaconu prawidłowo podaje minimalny interwał jednej minuty.
 
 ## 2026-08-29 - terminal mobilny i praca stacji w tle
 
