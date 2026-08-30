@@ -263,7 +263,16 @@
   window.fillConfig = c => {
     baseline = clone(c);
     originalFillConfig(c);
-    setTimeout(() => { installRestartNotes(); installUnifiedLayout(); if (typeof applyUILanguage === 'function') applyUILanguage(uiLanguage); updateState(); }, 0);
+    setTimeout(() => {
+      installRestartNotes();
+      installUnifiedLayout();
+      if (typeof applyUILanguage === 'function') applyUILanguage(uiLanguage);
+      // Some controls display normalized defaults instead of the raw JSON value.
+      // Compare later edits with the fully rendered form, not with its pre-render payload.
+      const rendered = candidate();
+      if (rendered) baseline = clone(rendered);
+      updateState();
+    }, 0);
   };
 
   const config = byId('configView');
