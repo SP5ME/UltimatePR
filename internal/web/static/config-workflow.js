@@ -144,7 +144,7 @@
     const notice = byId('configNotice');
     if (save) {
       save.disabled = !dirty;
-      save.textContent = restart ? 'Zapisz i uruchom ponownie' : 'Zapisz zmiany';
+      save.textContent = !dirty ? 'Brak zmian do zapisania' : restart ? 'Zapisz i uruchom ponownie' : 'Zapisz zmiany';
     }
     if (discard) {
       discard.disabled = !dirty;
@@ -182,11 +182,11 @@
       baseline = clone(next);
       configModel = clone(next);
       dirty = false;
+      saving = false;
       if (result.restart_required) {
         if (notice) notice.textContent = 'Ustawienia zapisane. UltimatePR uruchamia się ponownie, a MHEARD zostanie odtworzony…';
         waitForRestart();
       } else {
-        saving = false;
         updateState();
       }
       return result;
