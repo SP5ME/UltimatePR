@@ -1396,12 +1396,18 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 					cancelKeepAlive = nil
 				}
 				if radioSession.State() == session.Connected && strings.TrimSpace(goodbye) != "" {
-					wireData, encodeErr := terminalTXCodec.Encode(terminalResponseText(goodbye))
+					goodbyeText := terminalResponseText(goodbye)
+					goodbyeID := fmt.Sprintf("goodbye-%d", time.Now().UnixNano())
+					wireData, encodeErr := terminalTXCodec.Encode(goodbyeText)
 					if encodeErr == nil {
+						_ = out.write(serverMessage{Type: "tx_packet", ID: goodbyeID, Packet: 1, Total: 1, Data: goodbyeText, State: "sending"})
 						sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 						sendMu.Lock()
 						if err := radioSession.Send(sendCtx, wireData); err != nil {
+							_ = out.write(serverMessage{Type: "tx_packet", ID: goodbyeID, Packet: 1, Total: 1, Data: goodbyeText, State: "error", Error: err.Error()})
 							_ = out.write(serverMessage{Type: "error", Error: "Nie wyslano pozegnania: " + err.Error()})
+						} else {
+							_ = out.write(serverMessage{Type: "tx_packet", ID: goodbyeID, Packet: 1, Total: 1, Data: goodbyeText, State: "sent"})
 						}
 						sendMu.Unlock()
 						cancel()
