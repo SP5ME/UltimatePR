@@ -1,0 +1,9 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2126076457\b010\_pkg_.a
+packagefile internal/oserror=C:\Github\UltimatePR\.gotmp\go-build2126076457\b042\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile path=C:\Github\UltimatePR\.gocache2\8b\8b4400913a2db1dc529d8351a20ec513b2983d7c462803c35240e97c4cf0806c-d
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2126076457\b060\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2126076457\b035\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2126076457\b044\_pkg_.a

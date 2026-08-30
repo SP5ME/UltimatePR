@@ -1,0 +1,8 @@
+# import config
+packagefile crypto/cipher=C:\Github\UltimatePR\.gotmp\go-build2126076457\b089\_pkg_.a
+packagefile crypto/internal/fips140/alias=C:\Github\UltimatePR\.gotmp\go-build2126076457\b093\_pkg_.a
+packagefile crypto/internal/fips140only=C:\Github\UltimatePR\.gotmp\go-build2126076457\b109\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gotmp\go-build2126076457\b012\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2126076457\b059\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a

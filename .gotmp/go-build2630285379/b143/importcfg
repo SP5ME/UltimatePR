@@ -1,0 +1,13 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2630285379\b064\_pkg_.a
+packagefile crypto/internal/fips140=C:\Github\UltimatePR\.gotmp\go-build2630285379\b085\_pkg_.a
+packagefile crypto/internal/fips140/bigmod=C:\Github\UltimatePR\.gotmp\go-build2630285379\b144\_pkg_.a
+packagefile crypto/internal/fips140/check=C:\Github\UltimatePR\.gotmp\go-build2630285379\b088\_pkg_.a
+packagefile crypto/internal/fips140/drbg=C:\Github\UltimatePR\.gotmp\go-build2630285379\b098\_pkg_.a
+packagefile crypto/internal/fips140/hmac=C:\Github\UltimatePR\.gotmp\go-build2630285379\b089\_pkg_.a
+packagefile crypto/internal/fips140/nistec=C:\Github\UltimatePR\.gotmp\go-build2630285379\b137\_pkg_.a
+packagefile crypto/internal/fips140/sha512=C:\Github\UltimatePR\.gocache2\59\5992602dac08faf5d0120da14af9ebcd4c60da5b0b42a77df717aa086cd518ee-d
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile hash=C:\Github\UltimatePR\.gocache2\81\8151d37bc3c3e0fc470f7265639038546ee01c8ef3606b211541d60020f2801b-d
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a

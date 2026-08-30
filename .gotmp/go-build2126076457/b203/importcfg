@@ -1,0 +1,24 @@
+# import config
+packagefile bufio=C:\Github\UltimatePR\.gotmp\go-build2126076457\b075\_pkg_.a
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2126076457\b051\_pkg_.a
+packagefile cmp=C:\Github\UltimatePR\.gotmp\go-build2126076457\b056\_pkg_.a
+packagefile compress/gzip=C:\Github\UltimatePR\.gotmp\go-build2126076457\b079\_pkg_.a
+packagefile context=C:\Github\UltimatePR\.gotmp\go-build2126076457\b002\_pkg_.a
+packagefile encoding/binary=C:\Github\UltimatePR\.gotmp\go-build2126076457\b082\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2126076457\b054\_pkg_.a
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2126076457\b005\_pkg_.a
+packagefile internal/profilerecord=C:\Github\UltimatePR\.gotmp\go-build2126076457\b018\_pkg_.a
+packagefile internal/syscall/windows=C:\Github\UltimatePR\.gotmp\go-build2126076457\b063\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build2126076457\b058\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2126076457\b061\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2126076457\b009\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2126076457\b060\_pkg_.a
+packagefile sort=C:\Github\UltimatePR\.gotmp\go-build2126076457\b081\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2126076457\b059\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2126076457\b046\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build2126076457\b040\_pkg_.a
+packagefile text/tabwriter=C:\Github\UltimatePR\.gotmp\go-build2126076457\b204\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2126076457\b035\_pkg_.a

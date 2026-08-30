@@ -1,0 +1,8 @@
+# import config
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2126076457\b005\_pkg_.a
+packagefile internal/asan=C:\Github\UltimatePR\.gotmp\go-build2126076457\b023\_pkg_.a
+packagefile internal/goarch=C:\Github\UltimatePR\.gotmp\go-build2126076457\b006\_pkg_.a
+packagefile internal/msan=C:\Github\UltimatePR\.gotmp\go-build2126076457\b024\_pkg_.a
+packagefile internal/race=C:\Github\UltimatePR\.gotmp\go-build2126076457\b025\_pkg_.a
+packagefile internal/runtime/math=C:\Github\UltimatePR\.gotmp\go-build2126076457\b026\_pkg_.a
+packagefile internal/runtime/sys=C:\Github\UltimatePR\.gotmp\go-build2126076457\b027\_pkg_.a

@@ -1,0 +1,21 @@
+# import config
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2630285379\b006\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2630285379\b011\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gotmp\go-build2630285379\b013\_pkg_.a
+packagefile internal/chacha8rand=C:\Github\UltimatePR\.gotmp\go-build2630285379\b014\_pkg_.a
+packagefile internal/coverage/rtcov=C:\Github\UltimatePR\.gotmp\go-build2630285379\b015\_pkg_.a
+packagefile internal/cpu=C:\Github\UltimatePR\.gotmp\go-build2630285379\b012\_pkg_.a
+packagefile internal/goarch=C:\Github\UltimatePR\.gotmp\go-build2630285379\b007\_pkg_.a
+packagefile internal/godebugs=C:\Github\UltimatePR\.gotmp\go-build2630285379\b016\_pkg_.a
+packagefile internal/goexperiment=C:\Github\UltimatePR\.gotmp\go-build2630285379\b017\_pkg_.a
+packagefile internal/goos=C:\Github\UltimatePR\.gotmp\go-build2630285379\b018\_pkg_.a
+packagefile internal/profilerecord=C:\Github\UltimatePR\.gotmp\go-build2630285379\b019\_pkg_.a
+packagefile internal/runtime/atomic=C:\Github\UltimatePR\.gotmp\go-build2630285379\b020\_pkg_.a
+packagefile internal/runtime/exithook=C:\Github\UltimatePR\.gotmp\go-build2630285379\b021\_pkg_.a
+packagefile internal/runtime/gc=C:\Github\UltimatePR\.gotmp\go-build2630285379\b022\_pkg_.a
+packagefile internal/runtime/maps=C:\Github\UltimatePR\.gotmp\go-build2630285379\b023\_pkg_.a
+packagefile internal/runtime/math=C:\Github\UltimatePR\.gotmp\go-build2630285379\b027\_pkg_.a
+packagefile internal/runtime/strconv=C:\Github\UltimatePR\.gocache2\de\de64993c99e13194ec76053fd6bc418f63dda27a434e1937ecac6b50bc7bd57a-d
+packagefile internal/runtime/sys=C:\Github\UltimatePR\.gotmp\go-build2630285379\b028\_pkg_.a
+packagefile internal/stringslite=C:\Github\UltimatePR\.gotmp\go-build2630285379\b030\_pkg_.a
+packagefile internal/trace/tracev2=C:\Github\UltimatePR\.gotmp\go-build2630285379\b031\_pkg_.a

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -50,6 +51,29 @@ type UPRD struct {
 	Enabled         bool `yaml:"enabled"`
 	IntervalSeconds int  `yaml:"interval_seconds"`
 	MHeardLimit     int  `yaml:"mheard_limit"`
+}
+
+// Experimental controls whether optional subsystems exist at runtime. Service
+// configuration is intentionally kept in the service-specific sections below.
+type Experimental struct {
+	UPRD bool `yaml:"uprd"`
+	Map  bool `yaml:"map"`
+	Node bool `yaml:"node"`
+	BBS  bool `yaml:"bbs"`
+	AI   bool `yaml:"ai"`
+}
+type AI struct {
+	Callsign         string `yaml:"callsign"`
+	SSID             uint8  `yaml:"ssid"`
+	Provider         string `yaml:"provider"`
+	URL              string `yaml:"url"`
+	Model            string `yaml:"model"`
+	TimeoutSeconds   int    `yaml:"timeout_seconds"`
+	MaxResponseChars int    `yaml:"max_response_chars"`
+	MaxContext       int    `yaml:"max_context"`
+	SystemPrompt     string `yaml:"system_prompt"`
+	QueueSize        int    `yaml:"queue_size"`
+	Concurrency      int    `yaml:"concurrency"`
 }
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
@@ -147,16 +171,18 @@ type Port struct {
 	AllowFrom        []string `yaml:"allow_from"`
 }
 type Config struct {
-	Application Application `yaml:"application"`
-	Server      Station     `yaml:"server"`
-	Web         Web         `yaml:"web"`
-	Ports       []Port      `yaml:"ports"`
-	Terminal    Station     `yaml:"terminal"`
-	Beacon      Beacon      `yaml:"beacon"`
-	UPRD        UPRD        `yaml:"uprd"`
-	History     History     `yaml:"history"`
-	BBS         BBS         `yaml:"bbs"`
-	Node        Node        `yaml:"node"`
+	Application  Application  `yaml:"application"`
+	Server       Station      `yaml:"server"`
+	Web          Web          `yaml:"web"`
+	Ports        []Port       `yaml:"ports"`
+	Terminal     Station      `yaml:"terminal"`
+	Beacon       Beacon       `yaml:"beacon"`
+	UPRD         UPRD         `yaml:"uprd"`
+	Experimental Experimental `yaml:"experimental"`
+	History      History      `yaml:"history"`
+	BBS          BBS          `yaml:"bbs"`
+	Node         Node         `yaml:"node"`
+	AI           AI           `yaml:"ai"`
 }
 
 func Load(path string) (Config, error) {
@@ -172,14 +198,21 @@ func Parse(b []byte) (Config, error) {
 	if err := yaml.Unmarshal(b, &c); err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
-	c.applyDefaults()
+	var presence struct {
+		Experimental *yaml.Node `yaml:"experimental"`
+	}
+	_ = yaml.Unmarshal(b, &presence)
+	c.applyDefaults(presence.Experimental != nil)
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
 	return c, nil
 }
 
-func (c *Config) applyDefaults() {
+func (c *Config) applyDefaults(hasExperimental bool) {
+	if !hasExperimental {
+		c.Experimental = Experimental{UPRD: c.UPRD.Enabled, Map: c.UPRD.Enabled, Node: c.Node.Enabled, BBS: c.BBS.Enabled}
+	}
 	if strings.TrimSpace(c.Application.Mode) == "" {
 		if c.Node.Enabled || c.BBS.Enabled {
 			c.Application.Mode = "station-node-bbs"
@@ -244,6 +277,36 @@ func (c *Config) applyDefaults() {
 		}
 	}
 	c.applyTerminalMessageDefaults()
+	if strings.TrimSpace(c.AI.Callsign) == "" {
+		c.AI.Callsign = c.Terminal.Callsign
+	}
+	if c.AI.SSID == 0 {
+		c.AI.SSID = 12
+	}
+	if c.AI.Provider == "" {
+		c.AI.Provider = "ollama"
+	}
+	if c.AI.URL == "" {
+		c.AI.URL = "http://192.168.1.50:11434"
+	}
+	if c.AI.Model == "" {
+		c.AI.Model = "qwen3:8b"
+	}
+	if c.AI.TimeoutSeconds == 0 {
+		c.AI.TimeoutSeconds = 120
+	}
+	if c.AI.MaxResponseChars == 0 {
+		c.AI.MaxResponseChars = 2000
+	}
+	if c.AI.MaxContext == 0 {
+		c.AI.MaxContext = 20
+	}
+	if c.AI.QueueSize == 0 {
+		c.AI.QueueSize = 8
+	}
+	if c.AI.Concurrency == 0 {
+		c.AI.Concurrency = 1
+	}
 }
 
 func Save(path string, raw []byte) error {
@@ -276,12 +339,8 @@ func (c Config) Validate() error {
 	if c.Application.Mode != "station" && c.Application.Mode != "station-node-bbs" {
 		return fmt.Errorf("application.mode must be station or station-node-bbs")
 	}
-	if c.Application.Mode == "station" && (c.Node.Enabled || c.BBS.Enabled) {
-		return fmt.Errorf("station mode cannot enable NODE or BBS")
-	}
-	if c.Application.Mode == "station-node-bbs" && (!c.Node.Enabled || !c.BBS.Enabled) {
-		return fmt.Errorf("station-node-bbs mode requires NODE and BBS together")
-	}
+	// Legacy application.mode remains accepted, but optional services are now
+	// independently gated by experimental.*.
 	if c.Application.UpdateChannel != "main" && c.Application.UpdateChannel != "dev" {
 		return fmt.Errorf("application.update_channel must be main or dev")
 	}
@@ -356,6 +415,24 @@ func (c Config) Validate() error {
 		}
 		if strings.TrimSpace(c.BBS.Database) == "" {
 			return fmt.Errorf("bbs.database is required")
+		}
+	}
+	if c.Experimental.AI {
+		if err := validStation(Station{Callsign: c.AI.Callsign, SSID: c.AI.SSID}); err != nil {
+			return fmt.Errorf("ai: %w", err)
+		}
+		if c.AI.Provider != "ollama" {
+			return fmt.Errorf("ai.provider: only ollama is currently supported")
+		}
+		u, err := neturl.Parse(c.AI.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("ai.url: valid HTTP(S) URL is required")
+		}
+		if strings.TrimSpace(c.AI.Model) == "" {
+			return fmt.Errorf("ai.model is required")
+		}
+		if c.AI.TimeoutSeconds < 1 || c.AI.MaxResponseChars < 1 || c.AI.MaxContext < 1 || c.AI.QueueSize < 1 || c.AI.Concurrency < 1 {
+			return fmt.Errorf("ai: timeout and limits must be positive")
 		}
 	}
 	seen := map[string]bool{}

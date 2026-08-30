@@ -1,0 +1,13 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2630285379\b064\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2630285379\b068\_pkg_.a
+packagefile go/ast=C:\Github\UltimatePR\.gotmp\go-build2630285379\b109\_pkg_.a
+packagefile go/build/constraint=C:\Github\UltimatePR\.gotmp\go-build2630285379\b114\_pkg_.a
+packagefile go/scanner=C:\Github\UltimatePR\.gocache2\40\40862fcec2bb5be1e1bf01b9d432e01588f71c0e2a2105ff414933e23e834949-d
+packagefile go/token=C:\Github\UltimatePR\.gotmp\go-build2630285379\b111\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a
+packagefile io/fs=C:\Github\UltimatePR\.gotmp\go-build2630285379\b045\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2630285379\b003\_pkg_.a
+packagefile path/filepath=C:\Github\UltimatePR\.gocache2\f3\f3a9d7e930623f6132ec38801dcd5f24b94292f3053f31eed690f3ed3e510613-d
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2630285379\b070\_pkg_.a

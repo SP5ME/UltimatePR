@@ -1,0 +1,27 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2630285379\b064\_pkg_.a
+packagefile context=C:\Github\UltimatePR\.gotmp\go-build2630285379\b065\_pkg_.a
+packagefile crypto/sha256=C:\Github\UltimatePR\.gotmp\go-build2630285379\b079\_pkg_.a
+packagefile encoding/binary=C:\Github\UltimatePR\.gotmp\go-build2630285379\b106\_pkg_.a
+packagefile encoding/json=C:\Github\UltimatePR\.gotmp\go-build2630285379\b107\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2630285379\b068\_pkg_.a
+packagefile go/ast=C:\Github\UltimatePR\.gotmp\go-build2630285379\b109\_pkg_.a
+packagefile go/parser=C:\Github\UltimatePR\.gotmp\go-build2630285379\b113\_pkg_.a
+packagefile go/token=C:\Github\UltimatePR\.gotmp\go-build2630285379\b111\_pkg_.a
+packagefile internal/godebug=C:\Github\UltimatePR\.gotmp\go-build2630285379\b053\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build2630285379\b060\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2630285379\b051\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2630285379\b003\_pkg_.a
+packagefile os/exec=C:\Github\UltimatePR\.gotmp\go-build2630285379\b115\_pkg_.a
+packagefile path/filepath=C:\Github\UltimatePR\.gocache2\f3\f3a9d7e930623f6132ec38801dcd5f24b94292f3053f31eed690f3ed3e510613-d
+packagefile reflect=C:\Github\UltimatePR\.gotmp\go-build2630285379\b059\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2630285379\b010\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2630285379\b061\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2630285379\b070\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2630285379\b038\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build2630285379\b040\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2630285379\b052\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2630285379\b044\_pkg_.a

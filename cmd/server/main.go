@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -15,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	aiservice "github.com/packet-radio/ultimatepr/internal/ai"
 	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/config"
@@ -53,6 +57,10 @@ func main() {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
+	nodeEnabled := cfg.Experimental.Node && cfg.Node.Enabled
+	bbsEnabled := cfg.Experimental.BBS && cfg.BBS.Enabled
+	aiEnabled := cfg.Experimental.AI
+	uprdEnabled := cfg.Experimental.UPRD && cfg.UPRD.Enabled
 	stationBeaconVia, err := ax25.ParseDigipeaters(cfg.Beacon.Via)
 	if err != nil {
 		log.Error("station beacon path failed", "error", err)
@@ -64,13 +72,13 @@ func main() {
 		os.Exit(2)
 	}
 	digiAliases := []ax25.Address{{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}}
-	if cfg.BBS.Enabled {
+	if bbsEnabled {
 		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID})
 	}
 	ownCalls := map[string]struct{}{
 		ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(): {},
 	}
-	if cfg.BBS.Enabled {
+	if bbsEnabled {
 		ownCalls[ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String()] = struct{}{}
 	}
 	isOwnCallsign := func(call string) bool {
@@ -169,7 +177,7 @@ func main() {
 		}
 	}
 	var nodeRouter *nodecore.Router
-	if cfg.Node.Enabled {
+	if nodeEnabled {
 		neighbors := make([]nodecore.Neighbor, 0, len(cfg.Node.Neighbors))
 		for _, n := range cfg.Node.Neighbors {
 			if !n.Enabled {
@@ -184,9 +192,15 @@ func main() {
 			}
 			routes = append(routes, nodecore.Route{Destination: r.Destination, Via: r.Via, Quality: r.Quality})
 		}
-		services := make([]nodecore.Service, 0, len(cfg.Node.Services))
+		services := make([]nodecore.Service, 0, len(cfg.Node.Services)+2)
 		for _, s := range cfg.Node.Services {
 			services = append(services, nodecore.Service{Name: s.Name, Callsign: s.Callsign, Command: s.Command, Enabled: s.Enabled})
+		}
+		if bbsEnabled {
+			services = append(services, nodecore.Service{Name: "BBS", Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Command: "BBS", Enabled: true})
+		}
+		if aiEnabled {
+			services = append(services, nodecore.Service{Name: "AI Assistant", Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String(), Command: "AI", Enabled: true})
 		}
 		nodeRouter = nodecore.New(neighbors, routes, services)
 		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(services))
@@ -206,7 +220,7 @@ func main() {
 		log.Warn("MHEARD snapshot could not be restored", "error", err)
 	}
 	var web *webui.Server
-	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: cfg.UPRD.Enabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
+	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: uprdEnabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
 		return web != nil && web.HasActiveBrowser()
 	}}, portIDs)
 	var historyStore *history.Store
@@ -306,6 +320,10 @@ func main() {
 	}
 	inbound := session.NewInboundMux(senders, log)
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
+	var webUPRD *uprd.Manager
+	if uprdEnabled {
+		webUPRD = uprdMgr
+	}
 	web = webui.New(webui.Config{
 		Listen:             cfg.Web.Listen,
 		Username:           cfg.Web.Username,
@@ -327,7 +345,7 @@ func main() {
 		TerminalEOL:        cfg.Application.TerminalEOL,
 		AX25T3:             time.Duration(cfg.Application.AX25T3Seconds) * time.Second,
 		Ports:              portIDs,
-		NodeEnabled:        cfg.Node.Enabled,
+		NodeEnabled:        nodeEnabled,
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {
@@ -341,7 +359,7 @@ func main() {
 		MHeard:     heard,
 		History:    historyStore,
 		Monitor:    mon,
-		UPRD:       uprdMgr,
+		UPRD:       webUPRD,
 		SendBeacon: sendBeacon,
 		SendUPRD:   sendUPRD,
 		PresenceChanged: func() {
@@ -353,7 +371,7 @@ func main() {
 			}()
 		},
 		BBSListen: func() string {
-			if cfg.BBS.Enabled {
+			if bbsEnabled {
 				return cfg.BBS.Listen
 			}
 			return ""
@@ -372,15 +390,15 @@ func main() {
 		Version: bbs.BuildVersion,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
-	go runBeaconSchedule(ctx, cfg.Beacon.Enabled, cfg.BBS.Enabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
-	if cfg.UPRD.Enabled {
+	go runBeaconSchedule(ctx, cfg.Beacon.Enabled, bbsEnabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
+	if uprdEnabled {
 		runUPRDSchedule(ctx, time.Duration(cfg.UPRD.IntervalSeconds)*time.Second, uprdMgr, portIDs, func(portID string) bool {
 			runtime := runtimes[portID]
 			return runtime != nil && runtime.enabled && runtime.port.Status().Connected
 		}, senders, log)
 	}
 	var bbsServer *bbs.Server
-	if cfg.BBS.Enabled {
+	if bbsEnabled {
 		store, err := bbs.Open(cfg.BBS.Database)
 		if err != nil {
 			log.Error("BBS database failed", "error", err)
@@ -413,13 +431,25 @@ func main() {
 			}
 		}()
 		log.Info("BBS service started", "listen", cfg.BBS.Listen, "database", cfg.BBS.Database)
+		inbound.Register(ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, bbsServer.ServeAX25)
 	}
-	if cfg.Node.Enabled {
-		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, Router: nodeRouter, BBS: bbsServer, Ports: portIDs, Log: log}
-		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)
-		if bbsServer != nil {
-			inbound.Register(ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, bbsServer.ServeAX25)
+	var aiServer *aiservice.Service
+	if aiEnabled {
+		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
+		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize}, cfg.AI.Concurrency)
+		inbound.Register(ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, func(call string, r io.Reader, w io.Writer) {
+			scanner := bufio.NewScanner(r)
+			aiServer.ServeSession(call, cfg.Application.Language, scanner, w)
+		})
+		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
+	}
+	if nodeEnabled {
+		handlers := map[string]func(string, string, *bufio.Scanner, io.Writer){}
+		if aiServer != nil {
+			handlers["AI"] = aiServer.ServeSession
 		}
+		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
+		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)
 		go func() {
 			if err := nodeServer.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Error("node server stopped", "error", err)

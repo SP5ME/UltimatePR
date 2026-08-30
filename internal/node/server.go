@@ -18,6 +18,7 @@ type Server struct {
 	Listen, Callsign, Alias, Language string
 	Router                            *Router
 	BBS                               *bbs.Server
+	Handlers                          map[string]func(string, string, *bufio.Scanner, io.Writer)
 	Ports                             []string
 	Log                               *slog.Logger
 }
@@ -114,21 +115,16 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 			}
 		case "S", "SERVICES":
 			s.services(w)
-		case "BBS":
-			if s.BBS == nil {
+		case "BBS", "AI":
+			if !s.runService(cmd, call, lang, in, w) {
 				fmt.Fprint(w, language.T(lang, "bbs_unavailable"))
-			} else {
-				s.BBS.ServeSessionLanguage(call, lang, in, w)
-				fmt.Fprint(w, language.T(lang, "returned"))
 			}
 		case "C", "CONNECT":
 			if len(f) < 2 {
 				fmt.Fprint(w, language.T(lang, "usage_connect"))
 				continue
 			}
-			if service, ok := s.Router.Service(f[1]); ok && strings.EqualFold(service.Command, "BBS") && s.BBS != nil {
-				s.BBS.ServeSessionLanguage(call, lang, in, w)
-				fmt.Fprint(w, language.T(lang, "returned"))
+			if service, ok := s.Router.Service(f[1]); ok && s.runService(service.Command, call, lang, in, w) {
 				continue
 			}
 			n, route, err := s.Router.Resolve(f[1])
@@ -144,6 +140,23 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 			fmt.Fprint(w, language.T(lang, "unknown"))
 		}
 	}
+}
+func (s *Server) runService(command, call, lang string, in *bufio.Scanner, w io.Writer) bool {
+	service, ok := s.Router.Service(command)
+	if !ok {
+		return false
+	}
+	if h := s.Handlers[strings.ToUpper(service.Command)]; h != nil {
+		h(call, lang, in, w)
+		fmt.Fprint(w, language.T(lang, "returned"))
+		return true
+	}
+	if strings.EqualFold(service.Command, "BBS") && s.BBS != nil {
+		s.BBS.ServeSessionLanguage(call, lang, in, w)
+		fmt.Fprint(w, language.T(lang, "returned"))
+		return true
+	}
+	return false
 }
 func (s *Server) nodes(w io.Writer, lang string) {
 	ns := s.Router.Neighbors()

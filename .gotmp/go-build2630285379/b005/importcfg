@@ -1,0 +1,5 @@
+# import config
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2630285379\b006\_pkg_.a
+packagefile internal/goarch=C:\Github\UltimatePR\.gotmp\go-build2630285379\b007\_pkg_.a
+packagefile internal/unsafeheader=C:\Github\UltimatePR\.gotmp\go-build2630285379\b009\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2630285379\b010\_pkg_.a

@@ -1,0 +1,9 @@
+# import config
+packagefile bufio=C:\Github\UltimatePR\.gotmp\go-build2126076457\b075\_pkg_.a
+packagefile compress/flate=C:\Github\UltimatePR\.gocache2\b1\b1b1057731b46708ffabf493e58af636a426d5532eab65dca3933501f71b445d-d
+packagefile encoding/binary=C:\Github\UltimatePR\.gotmp\go-build2126076457\b082\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2126076457\b054\_pkg_.a
+packagefile hash/crc32=C:\Github\UltimatePR\.gotmp\go-build2126076457\b083\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2126076457\b035\_pkg_.a

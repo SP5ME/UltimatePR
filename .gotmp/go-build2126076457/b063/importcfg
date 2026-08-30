@@ -1,0 +1,7 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/syscall/windows/sysdll=C:\Github\UltimatePR\.gotmp\go-build2126076457\b039\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2126076457\b009\_pkg_.a
+packagefile structs=C:\Github\UltimatePR\.gotmp\go-build2126076457\b064\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build2126076457\b040\_pkg_.a

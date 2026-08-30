@@ -30,6 +30,12 @@ uprd:
   enabled: true
   interval_seconds: 600
   mheard_limit: 5
+experimental:
+  uprd: true
+  map: true
+  node: true
+  bbs: true
+  ai: false
 history:
   enabled: true
   database: data/history.json
@@ -66,3 +72,15 @@ node:
   routes: []
   services:
     - {name: BBS, callsign: N0CALL-8, command: BBS, enabled: true}
+ai:
+  callsign: N0CALL
+  ssid: 12
+  provider: ollama
+  url: http://192.168.1.50:11434
+  model: qwen3:8b
+  timeout_seconds: 120
+  max_response_chars: 2000
+  max_context: 20
+  system_prompt: "You are a concise packet-radio assistant."
+  queue_size: 8
+  concurrency: 1

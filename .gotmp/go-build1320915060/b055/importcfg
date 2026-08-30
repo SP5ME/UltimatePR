@@ -1,0 +1,6 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile internal/syscall/windows/sysdll=C:\Github\UltimatePR\.gocache2\64\646cb89e78689ea117964957ec2fe501541f4f4f72fdf25f5086824dfe7dce90-d
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build1320915060\b010\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build1320915060\b040\_pkg_.a
+packagefile unicode/utf16=C:\Github\UltimatePR\.gocache2\c9\c9c23de0741e295570c50c43927c0323876b378b3512f5956bb2f63bc6f68e6e-d

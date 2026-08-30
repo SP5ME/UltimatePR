@@ -1,0 +1,5 @@
+# import config
+packagefile internal/bisect=C:\Github\UltimatePR\.gotmp\go-build2126076457\b037\_pkg_.a
+packagefile internal/godebugs=C:\Github\UltimatePR\.gotmp\go-build2126076457\b015\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2126076457\b033\_pkg_.a

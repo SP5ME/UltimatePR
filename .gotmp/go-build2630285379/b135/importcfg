@@ -1,0 +1,11 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2630285379\b064\_pkg_.a
+packagefile crypto=C:\Github\UltimatePR\.gotmp\go-build2630285379\b080\_pkg_.a
+packagefile crypto/internal/boring=C:\Github\UltimatePR\.gotmp\go-build2630285379\b082\_pkg_.a
+packagefile crypto/internal/fips140/ecdh=C:\Github\UltimatePR\.gotmp\go-build2630285379\b136\_pkg_.a
+packagefile crypto/internal/fips140/edwards25519/field=C:\Github\UltimatePR\.gotmp\go-build2630285379\b139\_pkg_.a
+packagefile crypto/internal/fips140only=C:\Github\UltimatePR\.gocache2\c3\c35e60bfc3f684b36deed224102e2783308db83eb2e28706b1d8d464a4548b4b-d
+packagefile crypto/internal/randutil=C:\Github\UltimatePR\.gotmp\go-build2630285379\b101\_pkg_.a
+packagefile crypto/subtle=C:\Github\UltimatePR\.gotmp\go-build2630285379\b104\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a

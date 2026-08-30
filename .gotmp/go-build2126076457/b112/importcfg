@@ -1,0 +1,14 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build2126076457\b051\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2126076457\b054\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gotmp\go-build2126076457\b012\_pkg_.a
+packagefile internal/cpu=C:\Github\UltimatePR\.gotmp\go-build2126076457\b011\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build2126076457\b058\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2126076457\b045\_pkg_.a
+packagefile math/rand=C:\Github\UltimatePR\.gotmp\go-build2126076457\b071\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2126076457\b060\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2126076457\b059\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2126076457\b046\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a

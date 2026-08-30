@@ -1,0 +1,11 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2126076457\b010\_pkg_.a
+packagefile internal/filepathlite=C:\Github\UltimatePR\.gotmp\go-build2126076457\b062\_pkg_.a
+packagefile io/fs=C:\Github\UltimatePR\.gotmp\go-build2126076457\b065\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2126076457\b061\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2126076457\b009\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2126076457\b060\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2126076457\b046\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build2126076457\b040\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2126076457\b044\_pkg_.a

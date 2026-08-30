@@ -1,0 +1,10 @@
+# import config
+packagefile crypto/internal/boring=C:\Github\UltimatePR\.gotmp\go-build2126076457\b087\_pkg_.a
+packagefile crypto/internal/fips140=C:\Github\UltimatePR\.gotmp\go-build2126076457\b091\_pkg_.a
+packagefile crypto/internal/fips140/drbg=C:\Github\UltimatePR\.gocache2\12\12a376f0d352499d4ffcaeaa0a640bc6bd2a64dd18874a2970377d1ade387d91-d
+packagefile crypto/internal/fips140only=C:\Github\UltimatePR\.gotmp\go-build2126076457\b109\_pkg_.a
+packagefile crypto/internal/randutil=C:\Github\UltimatePR\.gocache2\e0\e0cb9b78dc450b6b18eaa8d380f4576fd160558056bf1fa8d5f5abad26e03759-d
+packagefile crypto/internal/sysrand=C:\Github\UltimatePR\.gotmp\go-build2126076457\b106\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile math/big=C:\Github\UltimatePR\.gotmp\go-build2126076457\b112\_pkg_.a

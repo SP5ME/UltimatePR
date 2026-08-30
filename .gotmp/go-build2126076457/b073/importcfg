@@ -1,0 +1,9 @@
+# import config
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2126076457\b054\_pkg_.a
+packagefile internal/poll=C:\Github\UltimatePR\.gotmp\go-build2126076457\b067\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2126076457\b061\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2126076457\b009\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2126076457\b060\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2126076457\b059\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2126076457\b046\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2126076457\b035\_pkg_.a

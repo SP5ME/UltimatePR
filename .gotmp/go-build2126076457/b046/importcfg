@@ -1,0 +1,11 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2126076457\b005\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2126076457\b010\_pkg_.a
+packagefile internal/stringslite=C:\Github\UltimatePR\.gotmp\go-build2126076457\b029\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a
+packagefile iter=C:\Github\UltimatePR\.gotmp\go-build2126076457\b048\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2126076457\b045\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile unicode=C:\Github\UltimatePR\.gotmp\go-build2126076457\b049\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2126076457\b044\_pkg_.a

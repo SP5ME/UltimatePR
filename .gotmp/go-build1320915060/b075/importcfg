@@ -1,0 +1,11 @@
+# import config
+packagefile context=C:\Github\UltimatePR\.gotmp\go-build1320915060\b065\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build1320915060\b068\_pkg_.a
+packagefile internal/trace/tracev2=C:\Github\UltimatePR\.gocache2\b3\b3ff13576c89811fb1ead3fb4e367b3b8526cdb842c6e1fdf904c0973bd4945e-d
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build1320915060\b046\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build1320915060\b010\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build1320915060\b048\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build1320915060\b036\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gocache2\7a\7a38c996fa5672d4f6b7a7ae3c070a9449f6c49ef2faba0f5a8c9b318bcf0c8a-d
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build1320915060\b052\_pkg_.a

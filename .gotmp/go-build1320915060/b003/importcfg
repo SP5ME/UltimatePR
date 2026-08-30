@@ -1,0 +1,19 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gocache2\49\4915f77d81944832c2fd274d3577464ec000149f1fc018885108aa399f8846a3-d
+packagefile internal/filepathlite=C:\Github\UltimatePR\.gotmp\go-build1320915060\b032\_pkg_.a
+packagefile internal/godebug=C:\Github\UltimatePR\.gotmp\go-build1320915060\b053\_pkg_.a
+packagefile internal/itoa=C:\Github\UltimatePR\.gocache2\62\62009a991c1e7e19ff8cd338b77d671badb352a31a0a671a94068b33548bfab3-d
+packagefile internal/poll=C:\Github\UltimatePR\.gotmp\go-build1320915060\b056\_pkg_.a
+packagefile internal/stringslite=C:\Github\UltimatePR\.gotmp\go-build1320915060\b030\_pkg_.a
+packagefile internal/syscall/execenv=C:\Github\UltimatePR\.gocache2\45\45a0b12fdc6782d43440d5f1e8522f9edaaa1fa11e4d0ba33a1a669ed2753a77-d
+packagefile internal/syscall/windows=C:\Github\UltimatePR\.gotmp\go-build1320915060\b033\_pkg_.a
+packagefile internal/testlog=C:\Github\UltimatePR\.gotmp\go-build1320915060\b058\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build1320915060\b046\_pkg_.a
+packagefile io/fs=C:\Github\UltimatePR\.gotmp\go-build1320915060\b045\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build1320915060\b010\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build1320915060\b048\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build1320915060\b036\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gocache2\7a\7a38c996fa5672d4f6b7a7ae3c070a9449f6c49ef2faba0f5a8c9b318bcf0c8a-d
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build1320915060\b040\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build1320915060\b052\_pkg_.a

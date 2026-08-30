@@ -1,0 +1,10 @@
+=== RUN   TestSessionsKeepSeparateHistory
+--- PASS: TestSessionsKeepSeparateHistory (0.00s)
+=== RUN   TestProviderTimeout
+--- PASS: TestProviderTimeout (0.01s)
+=== RUN   TestConnectionError
+--- PASS: TestConnectionError (0.00s)
+=== RUN   TestResponseLimitAndMarkdown
+--- PASS: TestResponseLimitAndMarkdown (0.00s)
+PASS
+ok  	github.com/packet-radio/ultimatepr/internal/ai	1.737s

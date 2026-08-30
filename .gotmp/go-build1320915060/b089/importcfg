@@ -1,0 +1,8 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build1320915060\b064\_pkg_.a
+packagefile crypto/internal/fips140=C:\Github\UltimatePR\.gotmp\go-build1320915060\b085\_pkg_.a
+packagefile crypto/internal/fips140/sha256=C:\Github\UltimatePR\.gotmp\go-build1320915060\b090\_pkg_.a
+packagefile crypto/internal/fips140/sha3=C:\Github\UltimatePR\.gotmp\go-build1320915060\b094\_pkg_.a
+packagefile crypto/internal/fips140/sha512=C:\Github\UltimatePR\.gocache2\59\5992602dac08faf5d0120da14af9ebcd4c60da5b0b42a77df717aa086cd518ee-d
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile hash=C:\Github\UltimatePR\.gotmp\go-build1320915060\b081\_pkg_.a

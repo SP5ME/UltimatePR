@@ -1,0 +1,4 @@
+# import config
+packagefile crypto/internal/fips140/subtle=C:\Github\UltimatePR\.gotmp\go-build2630285379\b095\_pkg_.a
+packagefile internal/runtime/sys=C:\Github\UltimatePR\.gotmp\go-build2630285379\b028\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2630285379\b010\_pkg_.a

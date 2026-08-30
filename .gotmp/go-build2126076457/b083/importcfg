@@ -1,0 +1,7 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile hash=C:\Github\UltimatePR\.gotmp\go-build2126076457\b084\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gotmp\go-build2126076457\b012\_pkg_.a
+packagefile internal/cpu=C:\Github\UltimatePR\.gotmp\go-build2126076457\b011\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2126076457\b033\_pkg_.a

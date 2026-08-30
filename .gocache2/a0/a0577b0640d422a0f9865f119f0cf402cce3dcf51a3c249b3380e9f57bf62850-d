@@ -1,0 +1,11 @@
+# test log
+open ../../configs/example.yaml
+open ../../configs/example.yaml
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile3696286331\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile3696286331\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile3696286331\001\config.yaml
+open C:\Users\mikol\AppData\Local\Temp
+open ../../configs/example.yaml
+open C:\Users\mikol\AppData\Local\Temp\TestSaveModelRoundTrip3828294002\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveModelRoundTrip3828294002\001\config.yaml
+open C:\Users\mikol\AppData\Local\Temp

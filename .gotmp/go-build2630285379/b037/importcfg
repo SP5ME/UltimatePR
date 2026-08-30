@@ -1,0 +1,5 @@
+# import config
+packagefile internal/abi=C:\Github\UltimatePR\.gotmp\go-build2630285379\b006\_pkg_.a
+packagefile internal/goarch=C:\Github\UltimatePR\.gotmp\go-build2630285379\b007\_pkg_.a
+packagefile internal/race=C:\Github\UltimatePR\.gotmp\go-build2630285379\b026\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2630285379\b038\_pkg_.a

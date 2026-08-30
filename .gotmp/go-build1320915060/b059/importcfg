@@ -1,0 +1,17 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile internal/abi=C:\Github\UltimatePR\.gocache2\ed\edb3dd32cd3ee5e6116585dc18cb03e9c841b7b6cce61b4ca5916a4961bb08d9-d
+packagefile internal/bytealg=C:\Github\UltimatePR\.gocache2\49\4915f77d81944832c2fd274d3577464ec000149f1fc018885108aa399f8846a3-d
+packagefile internal/goarch=C:\Github\UltimatePR\.gocache2\9e\9ee36872021e9d7b380f1c6273b8ddb02b846fef89c7b02d09fe9e756dc0380a-d
+packagefile internal/itoa=C:\Github\UltimatePR\.gocache2\62\62009a991c1e7e19ff8cd338b77d671badb352a31a0a671a94068b33548bfab3-d
+packagefile internal/race=C:\Github\UltimatePR\.gocache2\77\771c6c5a736bcd28eb593313966c1a3c7ec6bbb601043c64fb43307a3ce26084-d
+packagefile internal/runtime/maps=C:\Github\UltimatePR\.gocache2\cc\cc6911fcbe2f4d00701797c493817ade4ab7e24d51590467073c73d6a5e140dd-d
+packagefile internal/runtime/sys=C:\Github\UltimatePR\.gocache2\a3\a365ad241de92bbe4387fe53a94858eb90ab589389811a27e7d6782373dad19a-d
+packagefile internal/unsafeheader=C:\Github\UltimatePR\.gocache2\56\56d451f06fa229ebf6403c59711a417440be8afa71de9c155d096ea851dba61d-d
+packagefile iter=C:\Github\UltimatePR\.gotmp\go-build1320915060\b050\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build1320915060\b060\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build1320915060\b010\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build1320915060\b061\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build1320915060\b036\_pkg_.a
+packagefile unicode=C:\Github\UltimatePR\.gotmp\go-build1320915060\b062\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build1320915060\b044\_pkg_.a

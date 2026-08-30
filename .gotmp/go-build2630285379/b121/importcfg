@@ -1,0 +1,10 @@
+# import config
+packagefile bufio=C:\Github\UltimatePR\.gotmp\go-build2630285379\b077\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build2630285379\b068\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build2630285379\b060\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2630285379\b051\_pkg_.a
+packagefile sort=C:\Github\UltimatePR\.gotmp\go-build2630285379\b112\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2630285379\b061\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a

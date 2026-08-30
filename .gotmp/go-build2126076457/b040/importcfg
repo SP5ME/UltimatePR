@@ -1,0 +1,14 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2126076457\b003\_pkg_.a
+packagefile internal/asan=C:\Github\UltimatePR\.gotmp\go-build2126076457\b023\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2126076457\b010\_pkg_.a
+packagefile internal/itoa=C:\Github\UltimatePR\.gotmp\go-build2126076457\b041\_pkg_.a
+packagefile internal/msan=C:\Github\UltimatePR\.gotmp\go-build2126076457\b024\_pkg_.a
+packagefile internal/oserror=C:\Github\UltimatePR\.gotmp\go-build2126076457\b042\_pkg_.a
+packagefile internal/race=C:\Github\UltimatePR\.gotmp\go-build2126076457\b025\_pkg_.a
+packagefile internal/syscall/windows/sysdll=C:\Github\UltimatePR\.gotmp\go-build2126076457\b039\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2126076457\b009\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2126076457\b031\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2126076457\b033\_pkg_.a
+packagefile unicode/utf16=C:\Github\UltimatePR\.gotmp\go-build2126076457\b043\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2126076457\b044\_pkg_.a

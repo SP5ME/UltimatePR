@@ -257,8 +257,8 @@ func TestCleanFirstRunModes(t *testing.T) {
 		t.Fatal("full mode did not enable NODE and BBS")
 	}
 	full.BBS.Enabled = false
-	if err := full.Validate(); err == nil {
-		t.Fatal("split NODE/BBS mode was accepted")
+	if err := full.Validate(); err != nil {
+		t.Fatalf("independent NODE/BBS configuration was rejected: %v", err)
 	}
 }
 

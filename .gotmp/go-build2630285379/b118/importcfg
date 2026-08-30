@@ -1,0 +1,8 @@
+# import config
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build2630285379\b048\_pkg_.a
+packagefile sort=C:\Github\UltimatePR\.gotmp\go-build2630285379\b112\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build2630285379\b061\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2630285379\b070\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a
+packagefile unicode=C:\Github\UltimatePR\.gotmp\go-build2630285379\b062\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build2630285379\b044\_pkg_.a

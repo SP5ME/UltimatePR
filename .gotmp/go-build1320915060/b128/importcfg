@@ -1,0 +1,14 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build1320915060\b064\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build1320915060\b068\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gocache2\ce\cea84c42e2abb5c1e57b7825bc1f5b25ca5400a762bb4b3799892c0de16931d0-d
+packagefile internal/cpu=C:\Github\UltimatePR\.gocache2\6c\6cbae7ac097d765a7865f093075df22077c85b8b18cfbf95b84bc6495c33ddd0-d
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build1320915060\b046\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build1320915060\b060\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build1320915060\b051\_pkg_.a
+packagefile math/rand=C:\Github\UltimatePR\.gotmp\go-build1320915060\b072\_pkg_.a
+packagefile slices=C:\Github\UltimatePR\.gotmp\go-build1320915060\b048\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build1320915060\b061\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build1320915060\b070\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build1320915060\b036\_pkg_.a

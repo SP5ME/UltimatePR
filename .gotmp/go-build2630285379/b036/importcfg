@@ -1,0 +1,6 @@
+# import config
+packagefile internal/race=C:\Github\UltimatePR\.gotmp\go-build2630285379\b026\_pkg_.a
+packagefile internal/sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b037\_pkg_.a
+packagefile internal/synctest=C:\Github\UltimatePR\.gotmp\go-build2630285379\b039\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2630285379\b010\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gotmp\go-build2630285379\b038\_pkg_.a

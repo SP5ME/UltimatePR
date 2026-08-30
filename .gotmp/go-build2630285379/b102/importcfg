@@ -1,0 +1,6 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile internal/byteorder=C:\Github\UltimatePR\.gotmp\go-build2630285379\b013\_pkg_.a
+packagefile internal/chacha8rand=C:\Github\UltimatePR\.gotmp\go-build2630285379\b014\_pkg_.a
+packagefile math=C:\Github\UltimatePR\.gotmp\go-build2630285379\b060\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2630285379\b051\_pkg_.a

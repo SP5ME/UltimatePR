@@ -1,0 +1,10 @@
+# import config
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build2630285379\b004\_pkg_.a
+packagefile internal/bytealg=C:\Github\UltimatePR\.gotmp\go-build2630285379\b011\_pkg_.a
+packagefile internal/godebug=C:\Github\UltimatePR\.gotmp\go-build2630285379\b053\_pkg_.a
+packagefile internal/stringslite=C:\Github\UltimatePR\.gotmp\go-build2630285379\b030\_pkg_.a
+packagefile internal/syscall/windows/registry=C:\Github\UltimatePR\.gotmp\go-build2630285379\b055\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2630285379\b051\_pkg_.a
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build2630285379\b010\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a
+packagefile syscall=C:\Github\UltimatePR\.gotmp\go-build2630285379\b040\_pkg_.a

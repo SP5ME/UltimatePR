@@ -1,0 +1,14 @@
+# import config
+packagefile bufio=C:\Github\UltimatePR\.gotmp\go-build2630285379\b077\_pkg_.a
+packagefile context=C:\Github\UltimatePR\.gotmp\go-build2630285379\b065\_pkg_.a
+packagefile internal/fuzz=C:\Github\UltimatePR\.gotmp\go-build2630285379\b078\_pkg_.a
+packagefile internal/testlog=C:\Github\UltimatePR\.gotmp\go-build2630285379\b058\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2630285379\b046\_pkg_.a
+packagefile os=C:\Github\UltimatePR\.gotmp\go-build2630285379\b003\_pkg_.a
+packagefile os/signal=C:\Github\UltimatePR\.gocache2\f1\f1e0d02472bf18eb49ca0dc5f879ef4e1129b4d45a9b36e62507083e0ab6eb4e-d
+packagefile reflect=C:\Github\UltimatePR\.gotmp\go-build2630285379\b059\_pkg_.a
+packagefile regexp=C:\Github\UltimatePR\.gotmp\go-build2630285379\b117\_pkg_.a
+packagefile runtime/pprof=C:\Github\UltimatePR\.gotmp\go-build2630285379\b119\_pkg_.a
+packagefile strings=C:\Github\UltimatePR\.gotmp\go-build2630285379\b070\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build2630285379\b036\_pkg_.a
+packagefile time=C:\Github\UltimatePR\.gotmp\go-build2630285379\b052\_pkg_.a

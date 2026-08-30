@@ -1,0 +1,8 @@
+# import config
+packagefile crypto/internal/fips140/drbg=C:\Github\UltimatePR\.gocache2\12\12a376f0d352499d4ffcaeaa0a640bc6bd2a64dd18874a2970377d1ade387d91-d
+packagefile crypto/internal/fips140/sha256=C:\Github\UltimatePR\.gotmp\go-build2126076457\b096\_pkg_.a
+packagefile crypto/internal/fips140/sha3=C:\Github\UltimatePR\.gotmp\go-build2126076457\b100\_pkg_.a
+packagefile crypto/internal/fips140/sha512=C:\Github\UltimatePR\.gotmp\go-build2126076457\b102\_pkg_.a
+packagefile hash=C:\Github\UltimatePR\.gotmp\go-build2126076457\b084\_pkg_.a
+packagefile internal/godebug=C:\Github\UltimatePR\.gotmp\go-build2126076457\b036\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build2126076457\b047\_pkg_.a

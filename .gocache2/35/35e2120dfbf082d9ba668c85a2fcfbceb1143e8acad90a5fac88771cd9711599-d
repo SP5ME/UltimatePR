@@ -1,0 +1,9 @@
+# test log
+open C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001\bbs.json
+stat C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001
+open C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001\bbs.json.tmp
+stat C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001
+open C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001\bbs.json.tmp
+stat C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001
+open C:\Users\mikol\AppData\Local\Temp\TestNodeEntersBBSAndReturns4153021012\001\bbs.json.tmp
+open C:\Users\mikol\AppData\Local\Temp

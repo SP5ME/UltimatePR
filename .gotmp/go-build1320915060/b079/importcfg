@@ -1,0 +1,5 @@
+# import config
+packagefile crypto=C:\Github\UltimatePR\.gotmp\go-build1320915060\b080\_pkg_.a
+packagefile crypto/internal/boring=C:\Github\UltimatePR\.gotmp\go-build1320915060\b082\_pkg_.a
+packagefile crypto/internal/fips140/sha256=C:\Github\UltimatePR\.gotmp\go-build1320915060\b090\_pkg_.a
+packagefile hash=C:\Github\UltimatePR\.gotmp\go-build1320915060\b081\_pkg_.a

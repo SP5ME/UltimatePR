@@ -1,0 +1,5 @@
+# import config
+packagefile crypto/internal/fips140/check=C:\Github\UltimatePR\.gotmp\go-build1320915060\b088\_pkg_.a
+packagefile crypto/internal/fips140/subtle=C:\Github\UltimatePR\.gotmp\go-build1320915060\b095\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build1320915060\b051\_pkg_.a

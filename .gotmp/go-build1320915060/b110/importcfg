@@ -1,0 +1,10 @@
+# import config
+packagefile bytes=C:\Github\UltimatePR\.gotmp\go-build1320915060\b064\_pkg_.a
+packagefile fmt=C:\Github\UltimatePR\.gotmp\go-build1320915060\b068\_pkg_.a
+packagefile go/token=C:\Github\UltimatePR\.gotmp\go-build1320915060\b111\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build1320915060\b046\_pkg_.a
+packagefile path/filepath=C:\Github\UltimatePR\.gotmp\go-build1320915060\b073\_pkg_.a
+packagefile sort=C:\Github\UltimatePR\.gotmp\go-build1320915060\b112\_pkg_.a
+packagefile strconv=C:\Github\UltimatePR\.gotmp\go-build1320915060\b061\_pkg_.a
+packagefile unicode=C:\Github\UltimatePR\.gotmp\go-build1320915060\b062\_pkg_.a
+packagefile unicode/utf8=C:\Github\UltimatePR\.gotmp\go-build1320915060\b044\_pkg_.a

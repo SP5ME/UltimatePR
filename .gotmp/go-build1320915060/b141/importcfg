@@ -1,0 +1,7 @@
+# import config
+packagefile crypto/internal/fips140/check=C:\Github\UltimatePR\.gotmp\go-build1320915060\b088\_pkg_.a
+packagefile crypto/internal/fips140deps/byteorder=C:\Github\UltimatePR\.gocache2\f2\f217a3adc25eabead47344fb9eb286ab342d28812bfd623cb1881e2a9096e26b-d
+packagefile crypto/internal/fips140deps/cpu=C:\Github\UltimatePR\.gotmp\go-build1320915060\b092\_pkg_.a
+packagefile crypto/internal/impl=C:\Github\UltimatePR\.gotmp\go-build1320915060\b093\_pkg_.a
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build1320915060\b051\_pkg_.a

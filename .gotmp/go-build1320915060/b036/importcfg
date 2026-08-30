@@ -1,0 +1,6 @@
+# import config
+packagefile internal/race=C:\Github\UltimatePR\.gocache2\77\771c6c5a736bcd28eb593313966c1a3c7ec6bbb601043c64fb43307a3ce26084-d
+packagefile internal/sync=C:\Github\UltimatePR\.gocache2\f6\f6fba1037b6b28dd627c102e6987aac7a138e79e94ecffdc2a4a8aed1f437b7f-d
+packagefile internal/synctest=C:\Github\UltimatePR\.gocache2\ec\ec9ac15439d84664b133df8e0eeff71a8dbf98c14199ea9cfd308bdb59c026cd-d
+packagefile runtime=C:\Github\UltimatePR\.gotmp\go-build1320915060\b010\_pkg_.a
+packagefile sync/atomic=C:\Github\UltimatePR\.gocache2\7a\7a38c996fa5672d4f6b7a7ae3c070a9449f6c49ef2faba0f5a8c9b318bcf0c8a-d

@@ -1,0 +1,4 @@
+# import config
+packagefile crypto/internal/fips140/alias=C:\Github\UltimatePR\.gotmp\go-build2630285379\b087\_pkg_.a
+packagefile crypto/internal/fips140deps/byteorder=C:\Github\UltimatePR\.gotmp\go-build2630285379\b091\_pkg_.a
+packagefile math/bits=C:\Github\UltimatePR\.gotmp\go-build2630285379\b051\_pkg_.a

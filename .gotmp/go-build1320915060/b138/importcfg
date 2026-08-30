@@ -1,0 +1,6 @@
+# import config
+packagefile crypto/internal/fips140/nistec=C:\Github\UltimatePR\.gocache2\8d\8decb5e69a85235cf16406a8ee09c41b32880ed1e907de1511535f356d414a6f-d
+packagefile errors=C:\Github\UltimatePR\.gotmp\go-build1320915060\b004\_pkg_.a
+packagefile io=C:\Github\UltimatePR\.gotmp\go-build1320915060\b046\_pkg_.a
+packagefile math/big=C:\Github\UltimatePR\.gotmp\go-build1320915060\b128\_pkg_.a
+packagefile sync=C:\Github\UltimatePR\.gotmp\go-build1320915060\b036\_pkg_.a

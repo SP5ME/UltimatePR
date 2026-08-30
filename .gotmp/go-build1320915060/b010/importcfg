@@ -1,0 +1,21 @@
+# import config
+packagefile internal/abi=C:\Github\UltimatePR\.gocache2\ed\edb3dd32cd3ee5e6116585dc18cb03e9c841b7b6cce61b4ca5916a4961bb08d9-d
+packagefile internal/bytealg=C:\Github\UltimatePR\.gocache2\49\4915f77d81944832c2fd274d3577464ec000149f1fc018885108aa399f8846a3-d
+packagefile internal/byteorder=C:\Github\UltimatePR\.gocache2\ce\cea84c42e2abb5c1e57b7825bc1f5b25ca5400a762bb4b3799892c0de16931d0-d
+packagefile internal/chacha8rand=C:\Github\UltimatePR\.gocache2\e6\e6f1c525553a675efb1e2fc2cff010ee1af1d6c8d933522d00609081f0bdb9ca-d
+packagefile internal/coverage/rtcov=C:\Github\UltimatePR\.gocache2\d9\d9d6bf387160afc1828d1b37f004fdba3e5be1e2f9c00794b4b0143168a49fc3-d
+packagefile internal/cpu=C:\Github\UltimatePR\.gocache2\6c\6cbae7ac097d765a7865f093075df22077c85b8b18cfbf95b84bc6495c33ddd0-d
+packagefile internal/goarch=C:\Github\UltimatePR\.gocache2\9e\9ee36872021e9d7b380f1c6273b8ddb02b846fef89c7b02d09fe9e756dc0380a-d
+packagefile internal/godebugs=C:\Github\UltimatePR\.gocache2\3c\3c34bf9a41119798484b4aa0f07b225f788b418f374734e19d039e554c48499e-d
+packagefile internal/goexperiment=C:\Github\UltimatePR\.gocache2\ca\ca37afa83ff962fac82a5c0e9fb1566e0dafcf1e715ec1db424938d4ceaa39ea-d
+packagefile internal/goos=C:\Github\UltimatePR\.gocache2\1f\1f9947e5b97cce0baaab9409d79dd74166f67155eceac86bf495a9651f75b592-d
+packagefile internal/profilerecord=C:\Github\UltimatePR\.gocache2\42\42d2306f36632be02992cc3438bad3367a1e63dc6b28b0240010fe73bb1a483b-d
+packagefile internal/runtime/atomic=C:\Github\UltimatePR\.gocache2\35\35e20aab63681cbef8d780afbf2070a27c49c2c85e6e0e4d0ead9c4b5f5336cc-d
+packagefile internal/runtime/exithook=C:\Github\UltimatePR\.gocache2\d0\d03ab7654ac0377c35c440c955f8a6f963afe73d675b3486222f7c4c072283f9-d
+packagefile internal/runtime/gc=C:\Github\UltimatePR\.gocache2\4c\4c77da95f5a24ffe2b557bb214102a59001a155084dfd1d034e37abfd61eb000-d
+packagefile internal/runtime/maps=C:\Github\UltimatePR\.gocache2\cc\cc6911fcbe2f4d00701797c493817ade4ab7e24d51590467073c73d6a5e140dd-d
+packagefile internal/runtime/math=C:\Github\UltimatePR\.gocache2\18\18e60f1041f7d70bcd08df8bbe9e2a3e2505500682e367ffefec1382fe336e2e-d
+packagefile internal/runtime/strconv=C:\Github\UltimatePR\.gocache2\de\de64993c99e13194ec76053fd6bc418f63dda27a434e1937ecac6b50bc7bd57a-d
+packagefile internal/runtime/sys=C:\Github\UltimatePR\.gocache2\a3\a365ad241de92bbe4387fe53a94858eb90ab589389811a27e7d6782373dad19a-d
+packagefile internal/stringslite=C:\Github\UltimatePR\.gotmp\go-build1320915060\b030\_pkg_.a
+packagefile internal/trace/tracev2=C:\Github\UltimatePR\.gocache2\b3\b3ff13576c89811fb1ead3fb4e367b3b8526cdb842c6e1fdf904c0973bd4945e-d
