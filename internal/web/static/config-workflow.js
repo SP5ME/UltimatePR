@@ -242,39 +242,48 @@
   }
 
   function installUnifiedLayout() {
-    const messageCard = byId('stationMessageText')?.closest('.settings-card');
-    const terminalPanel = byId('terminalConfigPanel');
-    if (messageCard && terminalPanel && messageCard.parentElement !== terminalPanel) terminalPanel.prepend(messageCard);
-
-    const historyFields = byId('historyDatabase')?.parentElement;
-    const databasePanel = byId('databaseConfigPanel');
-    if (historyFields && databasePanel && !byId('historySettingsCard')) {
-      const card = document.createElement('div');
-      card.id = 'historySettingsCard';
-      card.className = 'settings-card';
-      card.innerHTML = '<h3>Ustawienia historii</h3><div class="field-grid"></div>';
-      const grid = card.querySelector('.field-grid');
-      const rows = [
-        ['historyEnabled','Historia aktywna'],
-        ['historyDatabase','Plik historii'],
-        ['historyMaxStations','Limit stacji'],
-        ['historyMaxSessions','Limit sesji na stację'],
-        ['historyMaxLines','Limit fragmentów rozmowy'],
-        ['historyMaxMB','Maksymalny rozmiar (MB)'],
-        ['historyRetention','Czas przechowywania (dni)'],
-      ];
-      rows.forEach(([id,labelText]) => {
-        const input = byId(id);
-        if (!input) return;
-        const label = document.createElement('label');
-        if (input.type === 'checkbox') label.className = 'check';
-        label.append(document.createTextNode(labelText), input);
-        grid.appendChild(label);
-      });
-      historyFields.remove();
-      databasePanel.prepend(card);
-    }
     document.querySelectorAll('.config-panels > .settings-panel').forEach(panel => panel.classList.add('config-unified'));
+    document.querySelectorAll('.config-panels > .settings-panel > .settings-card:not(.service-config-card):not(.config-section-card)').forEach((card, index) => {
+      const title = card.querySelector(':scope > h3, :scope > .card-head h3, :scope > .settings-card-heading h3');
+      if (!title) return;
+      const sectionId = card.id || `${card.parentElement.id}Section${index + 1}`;
+      if (!card.id) card.id = sectionId;
+      const bodyId = `${sectionId}Body`;
+      const header = document.createElement('div');
+      header.className = 'config-section-header';
+      header.dataset.controls = bodyId;
+      const heading = document.createElement('strong');
+      heading.textContent = title.textContent;
+      const actions = document.createElement('div');
+      actions.className = 'config-section-actions';
+      const headingContainer = title.closest('.card-head, .settings-card-heading');
+      headingContainer?.querySelectorAll(':scope > button').forEach(button => actions.appendChild(button));
+      const toggle = document.createElement('button');
+      toggle.className = 'config-section-toggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.setAttribute('aria-controls', bodyId);
+      toggle.title = `Rozwiń sekcję ${heading.textContent}`;
+      toggle.innerHTML = '<span aria-hidden="true"></span>';
+      header.append(heading);
+      if (actions.childElementCount) header.append(actions);
+      header.append(toggle);
+      title.remove();
+      const body = document.createElement('div');
+      body.id = bodyId;
+      body.className = 'config-section-body';
+      body.hidden = true;
+      while (card.firstChild) body.appendChild(card.firstChild);
+      card.classList.add('config-section-card');
+      card.append(header, body);
+      header.addEventListener('click', event => {
+        if (event.target.closest('button:not(.config-section-toggle), input, select, textarea, a')) return;
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        toggle.title = `${expanded ? 'Rozwiń' : 'Zwiń'} sekcję ${heading.textContent}`;
+        body.hidden = expanded;
+      });
+    });
   }
 
   function leaveDialog(action) {

@@ -101,10 +101,6 @@
     const panel = $("uprDirectConfigPanel");
     if (!panel || $("uprdConfigCard")) return;
 
-    const beacon = $("beaconConfigCard");
-    const beaconPanel = $("beaconConfigPanel");
-    if (beacon && beaconPanel) beaconPanel.appendChild(beacon);
-
     const card = document.createElement("div");
     card.id = "uprdConfigCard";
     card.className = "settings-card";

@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- The `Beacon` tab no longer briefly flashes the obsolete `Bikon` label while configuration opens.
 - Terminal messages now show `HH:MM:SS`, the automatic goodbye is also visible to its sender, and the first message after reconnecting starts a new entry instead of being appended to an earlier received message.
 - Terminals no longer create two entries for the same full callsign and SSID. A repeated incoming connection reuses the existing terminal and is claimed correctly instead of being disconnected automatically after 30 seconds.
 - The monitor now shows the actual UPRD frame content instead of only the status description.
