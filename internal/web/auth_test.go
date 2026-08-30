@@ -1,11 +1,16 @@
 package web
 
 import (
+	"bytes"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
+
+	appconfig "github.com/packet-radio/ultimatepr/internal/config"
 )
 
 func TestPasswordHash(t *testing.T) {
@@ -18,6 +23,36 @@ func TestPasswordHash(t *testing.T) {
 	}
 	if !verifyPassword("", "packet") || verifyPassword("", "other") {
 		t.Fatal("default password verification failed")
+	}
+}
+
+func TestLoginDetailsCanChangeUsernameWithoutChangingPassword(t *testing.T) {
+	hash, err := hashPassword("current-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := appconfig.Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080, username: admin}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Web.PasswordHash = hash
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err = appconfig.SaveModel(path, c); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{cfg: Config{Username: "admin", PasswordHash: hash, ConfigPath: path}}
+	body, _ := json.Marshal(passwordRequest{Username: "operator", Current: "current-password"})
+	w := httptest.NewRecorder()
+	s.changePassword(w, httptest.NewRequest(http.MethodPut, "/api/application/password", bytes.NewReader(body)))
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	saved, err := appconfig.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Web.Username != "operator" || saved.Web.PasswordHash != hash || s.cfg.Username != "operator" || s.cfg.PasswordHash != hash {
+		t.Fatalf("login details not updated safely: saved=%+v runtime=%+v", saved.Web, s.cfg)
 	}
 }
 

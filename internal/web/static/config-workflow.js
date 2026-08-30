@@ -1,6 +1,29 @@
 (() => {
   const byId = id => document.getElementById(id);
   const clone = value => JSON.parse(JSON.stringify(value));
+  const workflowTranslations = {
+    'Panel WWW':'Web panel',
+    'Adres, pod którym działa panel administracyjny UltimatePR.':'The address where the UltimatePR administration panel is available.',
+    'Adres i port panelu':'Panel address and port',
+    'Dostęp sieciowy':'Network access',
+    'Użytkownik panelu':'Panel user',
+    'Dane logowania są zapisywane oddzielnie i nie wymagają restartu UltimatePR. Po zapisaniu nastąpi wylogowanie.':'Login details are saved separately and do not require an UltimatePR restart. You will be logged out after saving.',
+    'Nazwa użytkownika':'Username',
+    'Pozostaw puste, jeśli nie chcesz zmieniać hasła.':'Leave empty if you do not want to change the password.',
+    'Zapisz dane logowania':'Save login details',
+    'Ustawienia historii':'History settings',
+    'Historia aktywna':'History enabled',
+    'Plik historii':'History file',
+    'Limit stacji':'Station limit',
+    'Limit sesji na stację':'Sessions per station',
+    'Limit fragmentów rozmowy':'Conversation fragment limit',
+    'Maksymalny rozmiar (MB)':'Maximum size (MB)',
+    'Czas przechowywania (dni)':'Retention period (days)',
+  };
+  if (typeof uiTranslations !== 'undefined' && typeof uiReverseTranslations !== 'undefined') {
+    Object.assign(uiTranslations, workflowTranslations);
+    Object.assign(uiReverseTranslations, Object.fromEntries(Object.entries(workflowTranslations).map(([pl,en]) => [en,pl])));
+  }
   let baseline = null;
   let dirty = false;
   let saving = false;
@@ -69,7 +92,7 @@
     c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
     c.Server.SSID = number('nodeSSID');
     c.Web.Listen = byId('webListen')?.value.trim() || '';
-    c.Web.Username = byId('webUsername')?.value.trim() || '';
+    c.Web.Username = baseline.Web.Username;
     c.Web.AllowedAddresses = csv(byId('webAllowedAddresses')?.value);
     c.Ports = collectSafePorts();
     c.Beacon = {
@@ -183,8 +206,44 @@
       const note = document.createElement('p');
       note.className = 'config-notice config-restart-note';
       note.textContent = 'Zmiana niektórych ustawień w tej zakładce może wymagać ponownego uruchomienia UltimatePR. Aktywne sesje zostaną wtedy rozłączone, a lista MHEARD pozostanie zachowana.';
-      panel.prepend(note);
+      panel.append(note);
     });
+  }
+
+  function installUnifiedLayout() {
+    const messageCard = byId('stationMessageText')?.closest('.settings-card');
+    const terminalPanel = byId('terminalConfigPanel');
+    if (messageCard && terminalPanel && messageCard.parentElement !== terminalPanel) terminalPanel.prepend(messageCard);
+
+    const historyFields = byId('historyDatabase')?.parentElement;
+    const databasePanel = byId('databaseConfigPanel');
+    if (historyFields && databasePanel && !byId('historySettingsCard')) {
+      const card = document.createElement('div');
+      card.id = 'historySettingsCard';
+      card.className = 'settings-card';
+      card.innerHTML = '<h3>Ustawienia historii</h3><div class="field-grid"></div>';
+      const grid = card.querySelector('.field-grid');
+      const rows = [
+        ['historyEnabled','Historia aktywna'],
+        ['historyDatabase','Plik historii'],
+        ['historyMaxStations','Limit stacji'],
+        ['historyMaxSessions','Limit sesji na stację'],
+        ['historyMaxLines','Limit fragmentów rozmowy'],
+        ['historyMaxMB','Maksymalny rozmiar (MB)'],
+        ['historyRetention','Czas przechowywania (dni)'],
+      ];
+      rows.forEach(([id,labelText]) => {
+        const input = byId(id);
+        if (!input) return;
+        const label = document.createElement('label');
+        if (input.type === 'checkbox') label.className = 'check';
+        label.append(document.createTextNode(labelText), input);
+        grid.appendChild(label);
+      });
+      historyFields.remove();
+      databasePanel.prepend(card);
+    }
+    document.querySelectorAll('.config-panels > .settings-panel').forEach(panel => panel.classList.add('config-unified'));
   }
 
   function leaveDialog(action) {
@@ -204,7 +263,7 @@
   window.fillConfig = c => {
     baseline = clone(c);
     originalFillConfig(c);
-    setTimeout(() => { installRestartNotes(); updateState(); }, 0);
+    setTimeout(() => { installRestartNotes(); installUnifiedLayout(); if (typeof applyUILanguage === 'function') applyUILanguage(uiLanguage); updateState(); }, 0);
   };
 
   const config = byId('configView');

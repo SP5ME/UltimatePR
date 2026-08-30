@@ -31,6 +31,7 @@ type loginRequest struct {
 }
 
 type passwordRequest struct {
+	Username string `json:"username"`
 	Current string `json:"current_password"`
 	New     string `json:"new_password"`
 	Confirm string `json:"confirm_password"`
@@ -174,11 +175,19 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+	q.Username = strings.TrimSpace(q.Username)
+	if q.Username == "" {
+		// Keep compatibility with an older cached panel which changed only the
+		// password and did not yet send the username field.
+		s.authMu.RLock()
+		q.Username = s.cfg.Username
+		s.authMu.RUnlock()
+	}
 	if q.New != q.Confirm {
 		http.Error(w, "Nowe hasła nie są identyczne", http.StatusBadRequest)
 		return
 	}
-	if len(q.New) < 4 || len(q.New) > 128 {
+	if q.New != "" && (len(q.New) < 4 || len(q.New) > 128) {
 		http.Error(w, "Hasło musi mieć od 4 do 128 znaków", http.StatusBadRequest)
 		return
 	}
@@ -189,22 +198,31 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Obecne hasło jest nieprawidłowe", http.StatusUnauthorized)
 		return
 	}
-	hash, err := hashPassword(q.New)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	hash := ""
+	var err error
+	if q.New != "" {
+		hash, err = hashPassword(q.New)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	c, err := appconfig.Load(s.cfg.ConfigPath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if hash == "" {
+		hash = c.Web.PasswordHash
+	}
+	c.Web.Username = q.Username
 	c.Web.PasswordHash = hash
 	if err = appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	s.authMu.Lock()
+	s.cfg.Username = q.Username
 	s.cfg.PasswordHash = hash
 	s.authMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
