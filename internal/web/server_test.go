@@ -93,6 +93,19 @@ func TestBeaconEndpointAlwaysSendsClassicBeacon(t *testing.T) {
 	}
 }
 
+func TestUPRDEndpointSendsOnlyUPRDStatus(t *testing.T) {
+	beaconCalls, uprdCalls := 0, 0
+	s := &Server{cfg: Config{
+		SendBeacon: func(context.Context) error { beaconCalls++; return nil },
+		SendUPRD:   func(context.Context) error { uprdCalls++; return nil },
+	}}
+	w := httptest.NewRecorder()
+	s.uprdSend(w, httptest.NewRequest(http.MethodPost, "/api/uprd", nil))
+	if w.Code != http.StatusNoContent || beaconCalls != 0 || uprdCalls != 1 {
+		t.Fatalf("UPRD endpoint calls = beacon:%d uprd:%d status:%d", beaconCalls, uprdCalls, w.Code)
+	}
+}
+
 func TestMHeardDirectExcludesUPRDReports(t *testing.T) {
 	store := mheard.New(10)
 	store.Heard("SP1AAA", "radio")

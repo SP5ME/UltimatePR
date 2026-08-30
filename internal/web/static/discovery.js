@@ -37,6 +37,8 @@
     if (limitLabel) limitLabel.textContent = uiLanguage === "en" ? "MHEARD limit (max.)" : "Limit MHEARD (maks.)";
     const helpButton = $("uprdHelpButton");
     if (helpButton) helpButton.setAttribute("aria-label", uiLanguage === "en" ? "UPRD help" : "Pomoc UPRD");
+    const sendStatus = $("sendUPRDStatus");
+    if (sendStatus && !sendStatus.dataset.sending) sendStatus.textContent = uiLanguage === "en" ? "Send status" : "Wyślij status";
     const info = $("uprdInfoText");
     if (info) info.textContent = uiLanguage === "en"
       ? "Beacon and UPRD are independent and can be enabled at the same time."
@@ -136,6 +138,23 @@
     }
 
     $("uprdEnabled").onchange = () => { applyExperimentalVisibility(); };
+    $("sendUPRDStatus").onclick = async () => {
+      const button = $("sendUPRDStatus");
+      button.disabled = true;
+      button.dataset.sending = "true";
+      button.textContent = uiLanguage === "en" ? "Sending…" : "Wysyłanie…";
+      try {
+        const response = await fetch("/api/uprd", { method: "POST" });
+        if (!response.ok) throw new Error((await response.text()).trim());
+        button.textContent = uiLanguage === "en" ? "Status sent" : "Status wysłany";
+        setTimeout(() => { delete button.dataset.sending; applyDynamicLanguage(); button.disabled = !$("uprdEnabled").checked; }, 1500);
+      } catch (error) {
+        delete button.dataset.sending;
+        button.textContent = uiLanguage === "en" ? "Send status" : "Wyślij status";
+        button.disabled = !$("uprdEnabled").checked;
+        alert(uiLanguage === "en" ? `Status was not sent: ${error.message}` : `Nie wysłano statusu: ${error.message}`);
+      }
+    };
     const helpText = () => $("uprdHelpText").textContent = uiLanguage === "en"
       ? "UPRD is a direct AX.25 status report for sharing the station locator and recently heard stations. It also reports whether the operator is present. The report is sent periodically and when the web panel opens or the last panel closes. UPRD and the classic beacon are independent."
       : "UPRD to bezpośredni raport AX.25 zawierający lokator stacji, ostatnio słyszane stacje oraz informację o obecności operatora. Raport jest wysyłany okresowo, a także przy otwarciu panelu WWW i po zamknięciu ostatniego panelu. UPRD i klasyczny beacon działają niezależnie.";
@@ -178,6 +197,7 @@
     $("configUPRDirectTab")?.toggleAttribute("hidden", false);
     $("uprdConfigCard")?.toggleAttribute("hidden", false);
     $("uprdSettingsFields")?.toggleAttribute("hidden", !enabled);
+    if ($("sendUPRDStatus") && !$("sendUPRDStatus").dataset.sending) $("sendUPRDStatus").disabled = !enabled;
   }
 
   function setupExperimentalControls() {

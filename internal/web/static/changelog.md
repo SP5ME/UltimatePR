@@ -12,6 +12,7 @@
 - Dodano sekcję `Usługi`, wspólną obsługę eksperymentalnych przełączników usług oraz widoczny status IA w panelu WWW.
 - Dodano okno pomocy MHEARD z opisem oznaczeń stacji oraz ikoną `help-circle-outline`.
 - Dodano lokalne połączenie z usługą IA bez wysyłania ramek radiowych, gdy terminal łączy się ze skonfigurowanym znakiem IA tej samej instancji UltimatePR.
+- Dodano przycisk `Wyślij status` w konfiguracji UPRdirect, pozwalający jednorazowo nadać bieżący status UPRD na żądanie.
 
 ### Changed
 
@@ -31,6 +32,7 @@
 - Po rozpoczęciu nowego połączenia pola znaku i `VIA / DIGI` są automatycznie czyszczone.
 - Zmiana nazwy użytkownika panelu nie wymaga już jednoczesnej zmiany hasła.
 - Pytania do IA mogą obejmować wiele wierszy i są kończone poleceniem `/EX`; pojedyncze `Q` kończy sesję tylko poza rozpoczętym pytaniem.
+- Ujednolicono typografię całego panelu przy użyciu czytelnego kroju proporcjonalnego; krój stałoodstępowy pozostaje wyłącznie w treści wiadomości terminala, aby zachować układ ASCII-artów.
 
 ### Fixed
 

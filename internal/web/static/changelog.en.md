@@ -12,6 +12,7 @@
 - Added a `Services` section, unified experimental service gating, and visible AI status in the web panel.
 - Added a MHEARD help dialog explaining station markings, opened with a `help-circle-outline` icon.
 - Added a local connection to the AI service without transmitting radio frames when the terminal connects to the AI callsign configured on the same UltimatePR instance.
+- Added a `Send status` button to UPRdirect configuration for transmitting the current UPRD status once on demand.
 
 ### Changed
 
@@ -31,6 +32,7 @@
 - The callsign and `VIA / DIGI` fields are cleared automatically after starting a new connection.
 - Changing the web-panel username no longer requires changing the password at the same time.
 - AI questions can span multiple lines and are completed with `/EX`; a standalone `Q` ends the session only when no question is being composed.
+- Standardized typography across the panel with a readable proportional typeface; monospaced text is retained only for terminal message content to preserve ASCII-art alignment.
 
 ### Fixed
 

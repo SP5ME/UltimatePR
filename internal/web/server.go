@@ -306,6 +306,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("DELETE /api/monitor", s.monitorClear)
 	mux.HandleFunc("POST /api/beacon", s.beacon)
 	mux.HandleFunc("GET /api/uprd", s.uprd)
+	mux.HandleFunc("POST /api/uprd", s.uprdSend)
 	mux.HandleFunc("GET /ws/terminal", s.terminal)
 	mux.HandleFunc("GET /ws/notifications", s.notifications)
 	mux.HandleFunc("GET /api/bbs/messages", s.bbsList)
@@ -525,6 +526,19 @@ func (s *Server) beacon(w http.ResponseWriter, r *http.Request) {
 	send := s.cfg.SendBeacon
 	if send == nil {
 		http.Error(w, "beacon unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := send(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) uprdSend(w http.ResponseWriter, r *http.Request) {
+	send := s.cfg.SendUPRD
+	if send == nil {
+		http.Error(w, "UPRD unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	if err := send(r.Context()); err != nil {
