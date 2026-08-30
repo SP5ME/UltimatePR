@@ -43,6 +43,7 @@
 - Komunikat zapisu konfiguracji prawidłowo rozróżnia sprawdzanie ustawień, zapis i konieczność restartu.
 - Przywrócono zgodne odbieranie standardowego kanału KISS oraz filtrowanie ramek właściwych dla skonfigurowanego portu.
 - Ujednolicono odczyt poleceń BBS, NODE i IA dla zakończeń wiersza `CR`, `LF` oraz `CRLF`, używanych przez różne terminale Packet Radio.
+- Ręczne i automatyczne wysyłanie UPRD respektuje teraz widoczny przełącznik `Włącz funkcje UPRdirect`; stara flaga eksperymentalna dotyczy wyłącznie opcjonalnej mapy i nie blokuje już statusów.
 
 ## 2026-08-29 - terminal mobilny i praca stacji w tle
 

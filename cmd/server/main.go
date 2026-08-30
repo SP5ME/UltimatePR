@@ -61,7 +61,9 @@ func main() {
 	nodeEnabled := cfg.Experimental.Services && cfg.Node.Enabled
 	bbsEnabled := cfg.Experimental.Services && cfg.BBS.Enabled
 	aiEnabled := cfg.Experimental.Services && cfg.AI.Enabled
-	uprdEnabled := cfg.Experimental.UPRD && cfg.UPRD.Enabled
+	// UPRD has its own visible configuration switch. The legacy experimental
+	// flag gates the optional map, not status generation or transmission.
+	uprdEnabled := cfg.UPRD.Enabled
 	stationBeaconVia, err := ax25.ParseDigipeaters(cfg.Beacon.Via)
 	if err != nil {
 		log.Error("station beacon path failed", "error", err)

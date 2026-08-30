@@ -43,6 +43,7 @@
 - Configuration save feedback now correctly distinguishes validation, saving, and restart-required states.
 - Restored compatible reception of the standard KISS channel and filtering for frames belonging to the configured port.
 - Unified BBS, NODE, and AI command input for the `CR`, `LF`, and `CRLF` line endings used by different Packet Radio terminals.
+- Manual and automatic UPRD transmission now follows the visible `Enable UPRdirect features` switch; the legacy experimental flag applies only to the optional map and no longer blocks status reports.
 
 ## 2026-08-29 - mobile terminal and background station operation
 
