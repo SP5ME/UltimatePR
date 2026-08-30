@@ -335,8 +335,9 @@ func (c *Config) applyDefaults(hasExperimental bool) {
 	if strings.TrimSpace(c.BBS.GoodbyeMessage) == "" {
 		c.BBS.GoodbyeMessage = "73 {REMOTE}, BBS {CALL}."
 	}
-	if strings.TrimSpace(c.AI.WelcomeMessage) == "" {
-		c.AI.WelcomeMessage = "Witaj {REMOTE} w usludze IA {CALL}.\r\nWpisz pytanie, a otrzymasz krotka odpowiedz. Q konczy rozmowe."
+	const legacyAIWelcome = "Witaj {REMOTE} w usludze IA {CALL}.\r\nWpisz pytanie, a otrzymasz krotka odpowiedz. Q konczy rozmowe."
+	if current := strings.TrimSpace(c.AI.WelcomeMessage); current == "" || current == legacyAIWelcome {
+		c.AI.WelcomeMessage = "Witaj {REMOTE} w usludze IA {CALL}.\r\nWpisz pytanie w jednej lub kilku liniach i zakoncz je komenda /EX. Mozesz tez dopisac /EX na koncu pytania. Q konczy rozmowe."
 	}
 	if strings.TrimSpace(c.AI.ProcessingMessage) == "" {
 		c.AI.ProcessingMessage = "Dziekuje za wiadomosc. Rozpoczynam jej przetwarzanie. Prosze o cierpliwosc — odpowiedz moze zajac do kilku minut."

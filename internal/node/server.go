@@ -12,6 +12,7 @@ import (
 
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/language"
+	"github.com/packet-radio/ultimatepr/internal/lineinput"
 )
 
 type Server struct {
@@ -47,7 +48,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 func (s *Server) Serve(r io.Reader, w io.Writer) {
 	lang := language.Normalize(s.Language)
-	in := bufio.NewScanner(r)
+	in := lineinput.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n%s", s.Alias, s.Callsign, bbs.BuildVersion, language.T(lang, "node_call"))
 	if !in.Scan() {
@@ -62,7 +63,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 // must not ask the operator to type it again.
 func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
 	lang := language.Normalize(s.Language)
-	in := bufio.NewScanner(r)
+	in := lineinput.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n", s.Alias, s.Callsign, bbs.BuildVersion)
 	s.serveCall(strings.ToUpper(strings.TrimSpace(call)), lang, in, w)

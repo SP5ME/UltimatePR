@@ -78,22 +78,36 @@ func (s *Service) ServeSession(call, lang string, in *bufio.Scanner, w io.Writer
 		fmt.Fprint(w, "\r\n", expandSessionMessage(s.Config.WelcomeMessage, s.Config.LocalCall, call), "\r\nAI> ")
 	}
 	var history []Message
+	var pending []string
 	for in.Scan() {
 		line := strings.TrimSpace(in.Text())
-		if strings.EqualFold(line, "Q") || strings.EqualFold(line, "QUIT") {
+		if len(pending) == 0 && (strings.EqualFold(line, "Q") || strings.EqualFold(line, "QUIT")) {
 			if strings.TrimSpace(s.Config.GoodbyeMessage) != "" {
 				fmt.Fprint(w, expandSessionMessage(s.Config.GoodbyeMessage, s.Config.LocalCall, call), "\r\n")
 			}
 			return
 		}
-		if line == "" {
+		end := strings.HasSuffix(strings.ToUpper(line), "/EX")
+		if end {
+			line = strings.TrimSpace(line[:len(line)-len("/EX")])
+		}
+		if line != "" {
+			pending = append(pending, line)
+		}
+		if !end {
+			fmt.Fprint(w, "...> ")
+			continue
+		}
+		prompt := strings.TrimSpace(strings.Join(pending, "\n"))
+		pending = pending[:0]
+		if prompt == "" {
 			fmt.Fprint(w, "AI> ")
 			continue
 		}
 		if strings.TrimSpace(s.Config.ProcessingMessage) != "" {
 			fmt.Fprint(w, expandSessionMessage(s.Config.ProcessingMessage, s.Config.LocalCall, call), "\r\n")
 		}
-		next, pages, err := s.Ask(context.Background(), history, line)
+		next, pages, err := s.Ask(context.Background(), history, prompt)
 		if err != nil {
 			fmt.Fprintf(w, "AI error: %v\r\nAI> ", err)
 			continue

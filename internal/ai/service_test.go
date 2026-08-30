@@ -1,11 +1,14 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/packet-radio/ultimatepr/internal/lineinput"
 )
 
 type providerFunc func(context.Context, []Message) (string, error)
@@ -42,5 +45,33 @@ func TestResponseLimitAndMarkdown(t *testing.T) {
 	_, pages, err := s.Ask(context.Background(), nil, "x")
 	if err != nil || strings.Join(pages, "") != "12345…" {
 		t.Fatalf("%q %v", pages, err)
+	}
+}
+
+func TestSessionWaitsForEXAndAcceptsCRLines(t *testing.T) {
+	var prompt string
+	service := New(providerFunc(func(_ context.Context, messages []Message) (string, error) {
+		prompt = messages[len(messages)-1].Content
+		return "gotowe", nil
+	}), Config{Timeout: time.Second, MaxContext: 2, MaxResponseChars: 100, ProcessingMessage: "Przetwarzam."}, 1)
+	var output bytes.Buffer
+	service.ServeSession("TEST-10", "pl", lineinput.NewScanner(strings.NewReader("pierwsza\rdruga\r/EX\rQ\r")), &output)
+	if prompt != "pierwsza\ndruga" {
+		t.Fatalf("prompt=%q", prompt)
+	}
+	if !strings.Contains(output.String(), "Przetwarzam.") || !strings.Contains(output.String(), "gotowe") {
+		t.Fatalf("output=%q", output.String())
+	}
+}
+
+func TestSessionAcceptsEXAtEndOfQuestion(t *testing.T) {
+	var prompt string
+	service := New(providerFunc(func(_ context.Context, messages []Message) (string, error) {
+		prompt = messages[len(messages)-1].Content
+		return "ok", nil
+	}), Config{Timeout: time.Second, MaxContext: 2, MaxResponseChars: 100}, 1)
+	service.ServeSession("TEST-10", "pl", lineinput.NewScanner(strings.NewReader("czym jest sosna? /ex\rQ\r")), &bytes.Buffer{})
+	if prompt != "czym jest sosna?" {
+		t.Fatalf("prompt=%q", prompt)
 	}
 }

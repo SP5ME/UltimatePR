@@ -47,6 +47,7 @@ type Config struct {
 	AICallsign         string
 	AISSID             uint8
 	AIEnabled          bool
+	AIConnect          func() (net.Conn, error)
 	TerminalCallsign   string
 	TerminalSSID       uint8
 	OperatorName       string
@@ -1074,15 +1075,15 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			sendMu.Unlock()
 		}()
 	}
-	remoteDone := make(chan struct{}, 1)
+	var remoteDone chan struct{}
 	closeRemote := func() {
 		if remote != nil {
 			_ = remote.Close()
 			remote = nil
 		}
-		select {
-		case remoteDone <- struct{}{}:
-		default:
+		if remoteDone != nil {
+			close(remoteDone)
+			remoteDone = nil
 		}
 	}
 	defer closeRemote()
@@ -1137,8 +1138,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			// Keep the operator workflow in TNC/Radio, but short-circuit a call
 			// addressed to this server's own BBS. No AX.25 frame reaches the TNC.
 			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)
+			localAI := callsign(s.cfg.AICallsign, s.cfg.AISSID)
 			if m.Mode == "tnc" && s.cfg.BBSListen != "" && strings.EqualFold(strings.TrimSpace(m.Target), localBBS) {
 				m.Mode = "bbs"
+			}
+			if m.Mode == "tnc" && s.cfg.AIEnabled && s.cfg.AIConnect != nil && strings.EqualFold(strings.TrimSpace(m.Target), localAI) {
+				m.Mode = "ai"
 			}
 			if m.Mode == "tnc" && strings.TrimSpace(m.Target) == "" {
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Podaj znak korespondenta."})
@@ -1244,6 +1249,23 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				}()
 				continue
 			}
+			if m.Mode == "ai" {
+				conn, err := s.cfg.AIConnect()
+				if err != nil {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalna IA nieudane: " + err.Error()})
+					continue
+				}
+				remote = conn
+				historyStation, historyPort, historyDigi, historyConnected = localAI, "local", "", true
+				if s.cfg.History != nil {
+					historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
+				}
+				remoteDone = make(chan struct{})
+				done := remoteDone
+				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localAI + "\r\n"})
+				go s.copyTelnetToWS(out, conn, done, "ai", historyStation, historyPort, historySession)
+				continue
+			}
 			if m.Mode != "bbs" {
 				_ = out.write(serverMessage{Type: "error", Error: "Nieznany tryb terminala."})
 				continue
@@ -1266,6 +1288,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			if s.cfg.History != nil {
 				historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
 			}
+			remoteDone = make(chan struct{})
 			done := remoteDone
 			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
 			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort, historySession)

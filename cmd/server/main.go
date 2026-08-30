@@ -24,6 +24,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/config"
 	"github.com/packet-radio/ultimatepr/internal/digipeater"
 	"github.com/packet-radio/ultimatepr/internal/history"
+	"github.com/packet-radio/ultimatepr/internal/lineinput"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
@@ -226,6 +227,7 @@ func main() {
 		log.Warn("MHEARD snapshot could not be restored", "error", err)
 	}
 	var web *webui.Server
+	var aiServer *aiservice.Service
 	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: uprdEnabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
 		return web != nil && web.HasActiveBrowser()
 	}}, portIDs)
@@ -331,17 +333,29 @@ func main() {
 		webUPRD = uprdMgr
 	}
 	web = webui.New(webui.Config{
-		Listen:             cfg.Web.Listen,
-		Username:           cfg.Web.Username,
-		PasswordHash:       cfg.Web.PasswordHash,
-		AllowedAddresses:   cfg.Web.AllowedAddresses,
-		NodeCallsign:       cfg.Server.Callsign,
-		NodeSSID:           cfg.Server.SSID,
-		BBSCallsign:        cfg.BBS.Callsign,
-		BSSSID:             cfg.BBS.SSID,
-		AICallsign:         cfg.AI.Callsign,
-		AISSID:             cfg.AI.SSID,
-		AIEnabled:          aiEnabled,
+		Listen:           cfg.Web.Listen,
+		Username:         cfg.Web.Username,
+		PasswordHash:     cfg.Web.PasswordHash,
+		AllowedAddresses: cfg.Web.AllowedAddresses,
+		NodeCallsign:     cfg.Server.Callsign,
+		NodeSSID:         cfg.Server.SSID,
+		BBSCallsign:      cfg.BBS.Callsign,
+		BSSSID:           cfg.BBS.SSID,
+		AICallsign:       cfg.AI.Callsign,
+		AISSID:           cfg.AI.SSID,
+		AIEnabled:        aiEnabled,
+		AIConnect: func() (net.Conn, error) {
+			if aiServer == nil {
+				return nil, fmt.Errorf("AI service is not running")
+			}
+			client, server := net.Pipe()
+			go func() {
+				defer server.Close()
+				scanner := lineinput.NewScanner(server)
+				aiServer.ServeSession(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), cfg.Application.Language, scanner, server)
+			}()
+			return client, nil
+		},
 		TerminalCallsign:   cfg.Terminal.Callsign,
 		TerminalSSID:       cfg.Terminal.SSID,
 		OperatorName:       cfg.Application.OperatorName,
@@ -442,12 +456,11 @@ func main() {
 		log.Info("BBS service started", "listen", cfg.BBS.Listen, "database", cfg.BBS.Database)
 		inbound.Register(ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, bbsServer.ServeAX25)
 	}
-	var aiServer *aiservice.Service
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
 		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, ProcessingMessage: cfg.AI.ProcessingMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
 		inbound.Register(ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, func(call string, r io.Reader, w io.Writer) {
-			scanner := bufio.NewScanner(r)
+			scanner := lineinput.NewScanner(r)
 			aiServer.ServeSession(call, cfg.Application.Language, scanner, w)
 		})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())

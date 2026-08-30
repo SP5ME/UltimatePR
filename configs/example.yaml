@@ -85,7 +85,7 @@ ai:
   max_response_chars: 2000
   max_context: 20
   system_prompt: "You are a concise packet-radio assistant."
-  welcome_message: "Welcome {REMOTE} to AI service {CALL}. Enter a question; Q ends the conversation."
+  welcome_message: "Welcome {REMOTE} to AI service {CALL}. End a single-line or multi-line question with /EX. Q ends the conversation."
   processing_message: "Thank you for your message. I am processing it now. Please be patient — the response may take up to a few minutes."
   goodbye_message: "73 {REMOTE}, AI {CALL}."
   queue_size: 8

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/language"
+	"github.com/packet-radio/ultimatepr/internal/lineinput"
 )
 
 type Server struct {
@@ -61,7 +62,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) Serve(r io.Reader, w io.Writer) {
-	in := bufio.NewScanner(r)
+	in := lineinput.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	lang := language.Normalize(s.Language)
 	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n%s", s.Title, s.Node, BuildVersion, language.T(lang, "callsign"))
@@ -83,7 +84,7 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 // ServeAX25 serves a station whose identity was obtained from the connected
 // AX.25 link. No additional text callsign prompt is used on radio links.
 func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
-	in := bufio.NewScanner(r)
+	in := lineinput.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	lang := language.Normalize(s.Language)
 	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n", s.Title, s.Node, BuildVersion)
