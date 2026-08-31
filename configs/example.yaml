@@ -18,6 +18,10 @@ web:
   listen: 0.0.0.0:8080
   username: admin
   allowed_addresses: [0.0.0.0, "::"]
+api:
+  enabled: false
+  # Generate with: printf '%s' 'TOKEN' | sha256sum
+  tokens: []
 ports: []
 terminal: {callsign: N0CALL, ssid: 0}
 beacon:

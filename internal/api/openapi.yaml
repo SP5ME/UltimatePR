@@ -1,0 +1,107 @@
+openapi: 3.1.0
+info:
+  title: UltimatePR API
+  version: 1.0.0
+  description: Stable read-only telemetry API for UltimatePR integrations.
+servers:
+  - url: /
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}}
+    Port:
+      type: object
+      required: [id, type, connected, enabled]
+      properties:
+        id: {type: string}
+        type: {type: string}
+        connected: {type: boolean}
+        enabled: {type: boolean}
+    MHeard:
+      type: object
+      required: [callsign, port, last_seen, frames]
+      properties:
+        callsign: {type: string}
+        port: {type: string}
+        last_seen: {type: string, format: date-time}
+        frames: {type: integer, format: int64}
+        via: {type: string}
+paths:
+  /api/v1/health:
+    get:
+      summary: Lightweight liveness and port readiness
+      responses: {'200': {description: Healthy or degraded}}
+  /api/v1/status:
+    get:
+      summary: Overall UltimatePR status
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Status}, '401': {description: Unauthorized}}
+  /api/v1/ports:
+    get:
+      summary: Logical ports
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Port list}}
+  /api/v1/ports/{id}:
+    get:
+      summary: Logical port
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: Port}, '404': {description: Not found}}
+  /api/v1/mheard:
+    get:
+      summary: Recently heard stations
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: MHEARD list}}
+  /api/v1/mheard/summary:
+    get:
+      summary: Home Assistant friendly MHEARD summary
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Summary}}
+  /api/v1/mheard/{callsign}:
+    get:
+      summary: Recently heard station
+      security: [{bearerAuth: []}]
+      parameters: [{name: callsign, in: path, required: true, schema: {type: string}}]
+      responses: {'200': {description: Entry}, '404': {description: Not found}}
+  /api/v1/sessions:
+    get:
+      summary: Active sessions
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Session list}}
+  /api/v1/monitor:
+    get:
+      summary: Bounded recent frame history
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+        - {name: direction, in: query, schema: {type: string, enum: [rx, tx]}}
+        - {name: port, in: query, schema: {type: string}}
+      responses: {'200': {description: Frame list}, '400': {description: Bad parameter}}
+  /api/v1/node/status:
+    get:
+      summary: NODE status
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: NODE status}}
+  /api/v1/bbs/status:
+    get:
+      summary: Privacy-safe BBS status
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: BBS status}}
+  /api/v1/digipeater/status:
+    get:
+      summary: Digipeater status
+      security: [{bearerAuth: []}]
+      responses: {'200': {description: Digipeater status}}
+  /api/v1/events:
+    get:
+      summary: WebSocket telemetry events
+      security: [{bearerAuth: []}]
+      responses: {'101': {description: WebSocket upgrade}}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	aiservice "github.com/packet-radio/ultimatepr/internal/ai"
+	publicapi "github.com/packet-radio/ultimatepr/internal/api"
 	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/config"
@@ -108,6 +109,9 @@ func main() {
 	portIDs := make([]string, 0, len(cfg.Ports))
 	senders := make(map[string]session.Sender, len(cfg.Ports))
 	mon := monitor.New(300)
+	events := publicapi.NewBroker()
+	var digipeated atomic.Uint64
+	var lastDigipeated atomic.Int64
 	ports := make([]transport.Port, 0, len(cfg.Ports))
 	type runningPort struct {
 		port    transport.Port
@@ -176,6 +180,7 @@ func main() {
 				}
 				if f, err := ax25.Decode(b); err == nil {
 					mon.Add("TX", port.ID(), f, len(b))
+					events.Publish("frame.tx", map[string]any{"port": port.ID(), "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
 				}
 				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: channel, Data: b})
 			}
@@ -230,6 +235,7 @@ func main() {
 	}
 	var web *webui.Server
 	var aiServer *aiservice.Service
+	var bbsStore *bbs.Store
 	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: uprdEnabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
 		return web != nil && web.HasActiveBrowser()
 	}}, portIDs)
@@ -334,6 +340,53 @@ func main() {
 	if uprdEnabled {
 		webUPRD = uprdMgr
 	}
+	apiTokens := make([]publicapi.Token, 0, len(cfg.API.Tokens))
+	for _, t := range cfg.API.Tokens {
+		apiTokens = append(apiTokens, publicapi.Token{Name: t.Name, Hash: t.Hash, Scopes: t.Scopes})
+	}
+	var apiHandler http.Handler
+	if cfg.API.Enabled {
+		apiServer := publicapi.New(publicapi.Config{
+			Callsign: ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), Mode: cfg.Application.Mode, Version: bbs.BuildVersion, Tokens: apiTokens,
+			Ports: func() []transport.Status {
+				result := make([]transport.Status, 0, len(ports))
+				for _, p := range ports {
+					st := p.Status()
+					st.Enabled = runtimes[p.ID()].enabled
+					result = append(result, st)
+				}
+				return result
+			},
+			MHeard: heard, Monitor: mon,
+			Sessions: func() []publicapi.SessionDTO {
+				snapshots := radio.Snapshot()
+				out := make([]publicapi.SessionDTO, 0, len(snapshots))
+				for _, x := range snapshots {
+					connected := x.Created
+					out = append(out, publicapi.SessionDTO{ID: x.ID, State: string(x.State), Direction: "outbound", ConnectedSince: &connected})
+				}
+				return out
+			},
+			Node: func() publicapi.NodeStatus {
+				if !nodeEnabled || nodeRouter == nil {
+					return publicapi.NodeStatus{Enabled: false}
+				}
+				return publicapi.NodeStatus{Enabled: true, Neighbors: len(nodeRouter.Neighbors()), Routes: len(nodeRouter.Routes()), Services: len(nodeRouter.Services())}
+			},
+			BBS: func() *bbs.Store { return bbsStore },
+			Digipeater: func() publicapi.DigipeaterStatus {
+				count := digipeated.Load()
+				out := publicapi.DigipeaterStatus{Enabled: len(digiAliases) > 0, Repeated: count}
+				if n := lastDigipeated.Load(); n > 0 {
+					t := time.Unix(0, n).UTC()
+					out.LastActivity = &t
+				}
+				return out
+			}, Broker: events,
+		}, log)
+		apiHandler = apiServer.Handler()
+		log.Info("public API enabled", "listener", cfg.Web.Listen, "prefix", "/api/v1")
+	}
 	web = webui.New(webui.Config{
 		Listen:           cfg.Web.Listen,
 		Username:         cfg.Web.Username,
@@ -415,7 +468,8 @@ func main() {
 			restartRequested.Store(true)
 			stop()
 		},
-		Version: bbs.BuildVersion,
+		Version:   bbs.BuildVersion,
+		PublicAPI: apiHandler,
 	}, log)
 	inbound.RegisterRouted(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, web.ServeOperatorAX25)
 	go runBeaconSchedule(ctx, cfg.Beacon.Enabled, bbsEnabled, time.Duration(cfg.Beacon.IntervalMinutes)*time.Minute, sendBeacon, sendBBSBeacon, log)
@@ -432,6 +486,7 @@ func main() {
 			log.Error("BBS database failed", "error", err)
 			os.Exit(2)
 		}
+		bbsStore = store
 		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, Store: store, Log: log}
 		if cfg.BBS.Forwarding.Enabled {
 			peers := make([]bbs.ForwardPeer, 0, len(cfg.BBS.Forwarding.Peers))
@@ -519,6 +574,7 @@ func main() {
 				heard.Reported(reported, f.Source.String(), pkt.PortID)
 			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
+			events.Publish("frame.rx", map[string]any{"port": pkt.PortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(pkt.Data)})
 			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
 				available := make([]string, 0, len(runtimes))
 				for id, runtime := range runtimes {
@@ -532,6 +588,9 @@ func main() {
 						if err := send(ctx, repeated); err != nil {
 							log.Warn("digipeater transmit failed", "input_port", pkt.PortID, "output_port", outputPort, "error", err)
 						} else {
+							digipeated.Add(1)
+							lastDigipeated.Store(time.Now().UnixNano())
+							events.Publish("digipeater.activity", map[string]any{"input_port": pkt.PortID, "output_port": outputPort, "source": f.Source.String(), "destination": f.Destination.String()})
 							log.Info("frame digipeated", "input_port", pkt.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
 						}
 					}

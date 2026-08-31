@@ -22,6 +22,7 @@ func New(mode, callsign, locator, qth, language string, stationSSID, nodeSSID, b
 		Server:       Station{Callsign: call, SSID: nodeSSID},
 		Terminal:     Station{Callsign: call, SSID: stationSSID},
 		Web:          Web{Listen: "0.0.0.0:8080", Username: "admin", AllowedAddresses: []string{"0.0.0.0", "::"}},
+		API:          API{Enabled: false},
 		Beacon:       Beacon{Enabled: false, Destination: "BEACON", Text: "{LOC}", IntervalMinutes: 30},
 		UPRD:         UPRD{Enabled: true, IntervalSeconds: 600, MHeardLimit: 5},
 		Experimental: Experimental{UPRD: true, Map: true, Services: full},

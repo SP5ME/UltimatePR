@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,14 +13,24 @@ type Hub struct {
 	mu       sync.RWMutex
 	local    ax25.Address
 	ports    map[string]Sender
-	sessions map[*Manager]struct{}
+	sessions map[*Manager]hubSession
+	next     uint64
 	t1       time.Duration
 	n2       int
 	n1       int
 }
+type hubSession struct {
+	id      string
+	created time.Time
+}
+type Snapshot struct {
+	ID      string
+	State   State
+	Created time.Time
+}
 
 func NewHub(local ax25.Address, ports map[string]Sender) *Hub {
-	return &Hub{local: local, ports: ports, sessions: make(map[*Manager]struct{}), t1: defaultT1, n2: 10, n1: defaultN1}
+	return &Hub{local: local, ports: ports, sessions: make(map[*Manager]hubSession), t1: defaultT1, n2: 10, n1: defaultN1}
 }
 
 func (h *Hub) Configure(t1 time.Duration, n2, n1 int) {
@@ -39,14 +50,37 @@ func (h *Hub) Configure(t1 time.Duration, n2, n1 int) {
 func (h *Hub) NewSession() (*Manager, func()) {
 	m := New(h.local, h.ports)
 	h.mu.Lock()
+	h.next++
 	m.Configure(h.t1, h.n2, h.n1)
-	h.sessions[m] = struct{}{}
+	h.sessions[m] = hubSession{id: fmt.Sprintf("session-%d", h.next), created: time.Now().UTC()}
 	h.mu.Unlock()
 	return m, func() {
 		h.mu.Lock()
 		delete(h.sessions, m)
 		h.mu.Unlock()
 	}
+}
+
+// Snapshot returns stable, intentionally small telemetry records for API/UI
+// consumers without exposing Manager internals.
+func (h *Hub) Snapshot() []Snapshot {
+	h.mu.RLock()
+	items := make([]struct {
+		m *Manager
+		s hubSession
+	}, 0, len(h.sessions))
+	for m, s := range h.sessions {
+		items = append(items, struct {
+			m *Manager
+			s hubSession
+		}{m, s})
+	}
+	h.mu.RUnlock()
+	out := make([]Snapshot, 0, len(items))
+	for _, item := range items {
+		out = append(out, Snapshot{ID: item.s.id, State: item.m.State(), Created: item.s.created})
+	}
+	return out
 }
 
 func (h *Hub) Handle(port string, f ax25.Frame) bool {

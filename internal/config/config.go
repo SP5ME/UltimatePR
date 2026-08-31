@@ -23,6 +23,15 @@ type Web struct {
 	PasswordHash     string   `yaml:"password_hash,omitempty" json:"-"`
 	AllowedAddresses []string `yaml:"allowed_addresses"`
 }
+type API struct {
+	Enabled bool       `yaml:"enabled"`
+	Tokens  []APIToken `yaml:"tokens,omitempty"`
+}
+type APIToken struct {
+	Name   string   `yaml:"name"`
+	Hash   string   `yaml:"hash" json:"-"`
+	Scopes []string `yaml:"scopes"`
+}
 type Application struct {
 	Mode           string `yaml:"mode"`
 	OperatorName   string `yaml:"operator_name"`
@@ -184,6 +193,7 @@ type Config struct {
 	Application  Application  `yaml:"application"`
 	Server       Station      `yaml:"server"`
 	Web          Web          `yaml:"web"`
+	API          API          `yaml:"api"`
 	Ports        []Port       `yaml:"ports"`
 	Terminal     Station      `yaml:"terminal"`
 	Beacon       Beacon       `yaml:"beacon"`
@@ -437,6 +447,21 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Web.Username) == "" {
 		return fmt.Errorf("web.username is required")
+	}
+	seenTokens := map[string]bool{}
+	for i, token := range c.API.Tokens {
+		name := strings.TrimSpace(token.Name)
+		hash := strings.ToLower(strings.TrimSpace(token.Hash))
+		if name == "" || seenTokens[name] {
+			return fmt.Errorf("api.tokens[%d]: name is empty or duplicated", i)
+		}
+		seenTokens[name] = true
+		if len(hash) != 64 {
+			return fmt.Errorf("api.tokens[%d].hash must be a SHA-256 hex digest", i)
+		}
+		if _, err := strconv.ParseUint(hash[:16], 16, 64); err != nil {
+			return fmt.Errorf("api.tokens[%d].hash must be hexadecimal", i)
+		}
 	}
 	for i, address := range c.Web.AllowedAddresses {
 		address = strings.TrimSpace(address)

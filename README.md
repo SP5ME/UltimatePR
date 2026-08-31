@@ -1,5 +1,7 @@
 # UltimatePR
 
+Public read-only integrations are documented in [docs/api.md](docs/api.md).
+
 **The Ultimate Packet Radio Station**
 
 UltimatePR jest linuksową stacją Packet Radio AX.25 z terminalem WWW, obsługą
