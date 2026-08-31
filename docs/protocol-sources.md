@@ -95,11 +95,19 @@ The authoritative source is the TAPR BBS SIG archive:
 - `BBS Hierarchical Addressing Protocol` / `hierarchical`
 
 The direct forwarding port implements the classical TAPR exchange. Both sides
-send a SID; UltimatePR advertises the required hierarchical-address and BID
-features as `H$`. A master submits `SP` or `SB`; the slave answers `OK` or `NO`.
-Accepted messages contain a subject, `R:` routing headers, a blank line, body,
-and Ctrl-Z end marker. `F>` ends the sending turn. A duplicate bulletin BID is
-answered with `NO` and is treated by the sender as already delivered.
+send a SID; UltimatePR advertises hierarchical addressing, the TAPR null
+identification command and BID support as `HI$` (the `$` feature is last as the
+specification requires). A master submits `SP`, `SB` or `ST`; the slave answers
+`OK` or `NO`. Accepted messages contain a subject, `R:` routing headers, a
+blank line, body, and Ctrl-Z end marker. A duplicate bulletin BID is answered
+with `NO` and is treated by the sender as already delivered.
+
+After the original master sends `F>`, reverse forwarding begins. The original
+slave may send proposals; the original master replies with `OK` or `NO` and
+then uses `F>` as the acknowledgement of each accepted or rejected message.
+On TCP, where AX.25 does not provide caller identity, the reverse queue is
+selected only after a TAPR `I` null identification line matches a configured
+peer callsign.
 
 The persistence model follows TAPR terminology: MID identifies a local message
 instance, while BID identifies bulletin content across BBS instances. TAPR

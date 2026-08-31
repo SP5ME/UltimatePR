@@ -57,6 +57,9 @@ func TestTAPRForwardingGoldenTranscriptAndDuplicateBID(t *testing.T) {
 	if err := writeTAPRLine(client, "F>"); err != nil {
 		t.Fatal(err)
 	}
+	if err := expectTAPRReverse(r); err != nil {
+		t.Fatal(err)
+	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}

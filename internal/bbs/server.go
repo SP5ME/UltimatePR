@@ -20,6 +20,8 @@ import (
 type Server struct {
 	Listen, Title, Node, Address, Language string
 	WelcomeMessage, GoodbyeMessage         string
+	ForwardPeers                           []ForwardPeer
+	MaxForwardMessages                     int
 	Store                                  *Store
 	Log                                    *slog.Logger
 	OnMessage                              func()

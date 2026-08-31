@@ -49,7 +49,7 @@ lokalnego adresu hierarchicznego TAPR.
 - gotowe: konfiguracja noda/BBS, statyczne rozwiązywanie tras, AXUDP z FCS i
   allowlistą, osobne MID/BID, parser x.3.4, designatory dystrybucji, wybór
   wiadomości oraz klasyczny forwarding TAPR;
-- następne: uwierzytelnianie partnerów, pełne reverse forwarding,
-  wielosesyjny node przychodzący, NET/ROM i panel konfiguracji;
+- następne: uwierzytelnianie partnerów, wielosesyjny node przychodzący,
+  NET/ROM i panel konfiguracji;
 - nieaktywne domyślnie: przykładowe łącze i partner SR5DDD. Wymagają prawdziwych
   parametrów uzgodnionych z jego operatorem.

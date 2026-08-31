@@ -11,7 +11,10 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/language"
 )
 
-func taprSID() string { return "[UltimatePR-" + BuildVersion + "-H$]" }
+// TAPR requires $ (BID support) to be the final advertised feature. I carries
+// a null station-identification line on transports such as TCP that do not
+// otherwise identify the calling station.
+func taprSID() string { return "[UltimatePR-" + BuildVersion + "-HI$]" }
 
 type taprProposal struct {
 	Kind, To, At, From, BID string
@@ -45,8 +48,10 @@ func parseTAPRSend(line string) (taprProposal, error) {
 			}
 		}
 	}
-	if _, err := normalizeCall(p.From); err != nil {
-		return taprProposal{}, errors.New("invalid TAPR originator")
+	if p.From != "" {
+		if _, err := normalizeCall(p.From); err != nil {
+			return taprProposal{}, errors.New("invalid TAPR originator")
+		}
 	}
 	if p.BID != "" && !validMessageIdentifier(p.BID) {
 		return taprProposal{}, errors.New("invalid TAPR BID")
@@ -104,13 +109,21 @@ func (s *Server) serveTAPRForward(conn io.ReadWriter) error {
 	if err := writeTAPRLine(conn, ">"); err != nil {
 		return err
 	}
+	remoteCall := ""
 	for {
 		line, err := readTAPRLine(r)
 		if err != nil {
 			return err
 		}
 		if line == "F>" {
-			return nil
+			return s.sendTAPRReverse(conn, r, remoteCall)
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), ";") {
+			remoteCall = taprNullCall(line)
+			if err := writeTAPRLine(conn, ">"); err != nil {
+				return err
+			}
+			continue
 		}
 		p, err := parseTAPRSend(line)
 		if err != nil {
@@ -137,7 +150,11 @@ func (s *Server) serveTAPRForward(conn io.ReadWriter) error {
 			return err
 		}
 		routing, body := splitTAPRPayload(string(raw))
-		m := Message{Type: p.Kind, From: p.From, To: p.To, At: p.At, MID: p.BID, BID: p.BID, Subject: subject, Body: body, Routing: routing}
+		from, err := taprOriginator(p, remoteCall)
+		if err != nil {
+			return err
+		}
+		m := Message{Type: p.Kind, From: from, To: p.To, At: p.At, MID: p.BID, BID: p.BID, Subject: subject, Body: body, Routing: routing}
 		if p.Kind == "P" || p.Kind == "T" {
 			m.BID = ""
 		}
@@ -168,6 +185,14 @@ func (f *Forwarder) exchangeTAPRMaster(conn io.ReadWriter, peerID string, queue 
 	if err := expectTAPRPrompt(r); err != nil {
 		return err
 	}
+	if hasTAPRFeature(sid, 'I') && strings.TrimSpace(f.LocalCall) != "" {
+		if err := writeTAPRLine(conn, "; "+stripSSID(f.LocalCall)); err != nil {
+			return err
+		}
+		if err := expectTAPRPrompt(r); err != nil {
+			return err
+		}
+	}
 	for _, m := range queue {
 		if err := writeTAPRLine(conn, formatTAPRSend(m)); err != nil {
 			return err
@@ -176,12 +201,8 @@ func (f *Forwarder) exchangeTAPRMaster(conn io.ReadWriter, peerID string, queue 
 		if err != nil {
 			return err
 		}
-		fields := strings.Fields(strings.ToUpper(response))
-		if len(fields) == 0 {
-			return errors.New("empty TAPR response")
-		}
-		switch fields[0] {
-		case "NO":
+		switch taprResponse(response) {
+		case 'N':
 			if err := expectTAPRPrompt(r); err != nil {
 				return err
 			}
@@ -189,7 +210,7 @@ func (f *Forwarder) exchangeTAPRMaster(conn io.ReadWriter, peerID string, queue 
 				return err
 			}
 			continue
-		case "OK":
+		case 'O':
 		default:
 			return fmt.Errorf("unexpected TAPR response %q", response)
 		}
@@ -203,7 +224,74 @@ func (f *Forwarder) exchangeTAPRMaster(conn io.ReadWriter, peerID string, queue 
 			return err
 		}
 	}
-	return writeTAPRLine(conn, "F>")
+	if err := writeTAPRLine(conn, "F>"); err != nil {
+		return err
+	}
+	return f.receiveTAPRReverse(conn, r, peerID)
+}
+
+// receiveTAPRReverse performs section 3 of the TAPR BBS specification. After
+// the original master sends F>, it accepts proposals from the original slave;
+// every acceptance or rejection is acknowledged with F>, not a normal prompt.
+func (f *Forwarder) receiveTAPRReverse(conn io.ReadWriter, r *bufio.Reader, peerID string) error {
+	peerCall := ""
+	for _, peer := range f.Peers {
+		if peer.ID == peerID {
+			peerCall = peer.Callsign
+			break
+		}
+	}
+	for {
+		line, err := readTAPRLine(r)
+		if err != nil {
+			return err
+		}
+		if line == "F>" {
+			return nil
+		}
+		proposal, err := parseTAPRSend(line)
+		if err != nil {
+			return err
+		}
+		if proposal.BID != "" && f.Store.HasBID(proposal.BID) {
+			if err := writeTAPRLine(conn, "NO"); err != nil {
+				return err
+			}
+			if err := writeTAPRLine(conn, "F>"); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := writeTAPRLine(conn, "OK"); err != nil {
+			return err
+		}
+		subject, err := readTAPRLine(r)
+		if err != nil {
+			return err
+		}
+		raw, err := readUntilTAPREOM(r)
+		if err != nil {
+			return err
+		}
+		routing, body := splitTAPRPayload(string(raw))
+		from, err := taprOriginator(proposal, peerCall)
+		if err != nil {
+			return err
+		}
+		m := Message{Type: proposal.Kind, From: from, To: proposal.To, At: proposal.At, MID: proposal.BID, BID: proposal.BID, Subject: subject, Body: body, Routing: routing}
+		if m.Type == "P" || m.Type == "T" {
+			m.BID = ""
+		}
+		if m.Type == "B" {
+			m.At, m.Distribution = "", proposal.At
+		}
+		if _, _, err := f.Store.Import(m); err != nil {
+			return err
+		}
+		if err := writeTAPRLine(conn, "F>"); err != nil {
+			return err
+		}
+	}
 }
 
 func writeTAPRMessage(w io.Writer, m Message, localAddress string) error {
@@ -220,6 +308,85 @@ func writeTAPRMessage(w io.Writer, m Message, localAddress string) error {
 	body = strings.ReplaceAll(body, "\n", "\r")
 	_, err := io.WriteString(w, strings.Join(lines, "\r")+"\r\r"+body+"\r\x1a\r")
 	return err
+}
+
+// sendTAPRReverse makes the original slave the sender after an F> from the
+// original master. TCP lacks AX.25 caller identity, so queues are released
+// only after the peer supplied a TAPR I-feature null identification line.
+func (s *Server) sendTAPRReverse(w io.Writer, r *bufio.Reader, remoteCall string) error {
+	peerID := s.peerIDForTAPRCall(remoteCall)
+	if peerID == "" {
+		return writeTAPRLine(w, "F>")
+	}
+	limit := s.MaxForwardMessages
+	if limit < 1 {
+		limit = 50
+	}
+	if err := PrepareQueues(s.Store, s.ForwardPeers, limit); err != nil {
+		return err
+	}
+	queue := s.Store.ForwardQueue(peerID, limit)
+	for _, m := range queue {
+		if err := writeTAPRLine(w, formatTAPRSend(m)); err != nil {
+			return err
+		}
+		response, err := readTAPRLine(r)
+		if err != nil {
+			return err
+		}
+		switch taprResponse(response) {
+		case 'N':
+		case 'O':
+			if err := writeTAPRMessage(w, m, s.Address); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unexpected TAPR reverse response %q", response)
+		}
+		if err := expectTAPRReverse(r); err != nil {
+			return err
+		}
+		if err := s.Store.RecordForward(peerID, m.ID, true, ""); err != nil {
+			return err
+		}
+	}
+	return writeTAPRLine(w, "F>")
+}
+
+func (s *Server) peerIDForTAPRCall(call string) string {
+	call = stripSSID(call)
+	if call == "" {
+		return ""
+	}
+	for _, peer := range s.ForwardPeers {
+		if strings.EqualFold(stripSSID(peer.Callsign), call) {
+			return peer.ID
+		}
+	}
+	return ""
+}
+
+func taprNullCall(line string) string {
+	fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), ";")))
+	if len(fields) == 0 {
+		return ""
+	}
+	call, err := normalizeCall(fields[0])
+	if err != nil {
+		return ""
+	}
+	return stripSSID(call)
+}
+
+func taprOriginator(p taprProposal, fallback string) (string, error) {
+	from := p.From
+	if from == "" {
+		from = fallback
+	}
+	if from == "" {
+		return "", errors.New("TAPR message has no originator")
+	}
+	return normalizeCall(from)
 }
 
 func splitTAPRPayload(raw string) ([]string, string) {
@@ -249,7 +416,46 @@ func expectTAPRPrompt(r *bufio.Reader) error {
 	return nil
 }
 
+func expectTAPRReverse(r *bufio.Reader) error {
+	line, err := readTAPRLine(r)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(line) != "F>" {
+		return fmt.Errorf("expected TAPR reverse acknowledgment, got %q", line)
+	}
+	return nil
+}
+
+func taprResponse(line string) byte {
+	line = strings.TrimSpace(strings.ToUpper(line))
+	if line == "" {
+		return 0
+	}
+	if line[0] != 'O' && line[0] != 'N' {
+		return 0
+	}
+	if len(line) > 1 && line[1] != ' ' && line != "OK" && line != "NO" {
+		return 0
+	}
+	return line[0]
+}
+
+func hasTAPRFeature(sid string, feature byte) bool {
+	sid = strings.TrimSpace(sid)
+	if len(sid) < 5 || sid[0] != '[' || sid[len(sid)-1] != ']' {
+		return false
+	}
+	part := sid[1 : len(sid)-1]
+	lastDash := strings.LastIndex(part, "-")
+	if lastDash < 1 {
+		return false
+	}
+	features := strings.ToUpper(part[lastDash+1:])
+	return strings.ContainsRune(features, rune(feature))
+}
+
 func isTAPRSID(line string) bool {
 	line = strings.TrimSpace(line)
-	return strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") && strings.Contains(line, "H") && strings.Contains(line, "$")
+	return hasTAPRFeature(line, 'H') && hasTAPRFeature(line, '$')
 }
