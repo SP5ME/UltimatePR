@@ -74,7 +74,7 @@ func (f *Forwarder) Run(ctx context.Context) {
 	run := func() {
 		_ = PrepareQueues(f.Store, f.Peers, f.MaxMessages)
 		for _, p := range f.Peers {
-			if p.Enabled && p.Transport == "telnet" {
+			if p.Enabled && p.CanSend() && p.Transport == "telnet" {
 				if err := f.forwardPeer(ctx, p); err != nil && f.Log != nil {
 					f.Log.Warn("BBS forwarding failed", "peer", p.ID, "error", err)
 				}
@@ -97,6 +97,9 @@ func (f *Forwarder) Run(ctx context.Context) {
 }
 
 func (f *Forwarder) forwardPeer(ctx context.Context, p ForwardPeer) error {
+	if !p.CanSend() {
+		return nil
+	}
 	q := f.Store.ForwardQueue(p.ID, f.MaxMessages)
 	if len(q) == 0 {
 		return nil

@@ -30,7 +30,20 @@ Example configuration:
 ```yaml
 experimental: {services: true, uprd: true, map: true}
 server: {callsign: SP5ME, ssid: 2}
-bbs: {enabled: true, callsign: SP5ME, ssid: 8}
+bbs:
+  enabled: true
+  callsign: SP5ME
+  ssid: 8
+  sysop_callsign: SP5ME
+  max_sessions: 10
+  hierarchical_address: BBS.SP5ME.POL.EURO
+  new_user_message: "Witaj nowy uzytkowniku. Uzupelnij profil, aby korzystac z BBS."
+  info_message: "{TITLE} [{CALL}]\r\nSYSOP: {SYSOP}\r\nAdres: {ADDRESS}"
+  prompt: "{CALL}> "
+  housekeeping:
+    bulletin_retention_days: 90
+    personal_retention_days: 180
+    log_retention_days: 30
 ai:
   enabled: true
   callsign: SP5ME

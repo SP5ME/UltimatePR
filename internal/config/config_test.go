@@ -89,6 +89,59 @@ func TestExampleConfiguration(t *testing.T) {
 	}
 }
 
+func TestBBSDefaultsAndPeerDirectionCompatibility(t *testing.T) {
+	c, err := Parse([]byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+bbs:
+  enabled: true
+  listen: 127.0.0.1:8023
+  database: data/bbs.json
+  callsign: SP5ME
+  ssid: 8
+  language: pl
+  forwarding:
+    peers:
+      - {id: legacy, callsign: SR5DDD, transport: telnet, host: bbs.example, port: 7300, enabled: true, private_routes: ["#PL.POL.EURO"]}
+      - {id: receive-only, callsign: SR5EEE, transport: telnet, host: bbs2.example, port: 7300, enabled: true, send: false, receive: true, to_calls: [SP5ME], hierarchical_routes: ["#PL.POL.EURO"]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.BBS.SysopCallsign != "SP5ME" || c.BBS.MaxSessions != 10 || c.BBS.Housekeeping.BulletinRetentionDays != 90 || c.BBS.Housekeeping.PersonalRetentionDays != 180 {
+		t.Fatalf("BBS defaults = %+v", c.BBS)
+	}
+	if c.BBS.Forwarding.Peers[0].Send != nil || c.BBS.Forwarding.Peers[0].Receive != nil {
+		t.Fatal("legacy peer directions should remain unspecified and default-enabled")
+	}
+	if c.BBS.Forwarding.Peers[1].Send == nil || *c.BBS.Forwarding.Peers[1].Send || c.BBS.Forwarding.Peers[1].Receive == nil || !*c.BBS.Forwarding.Peers[1].Receive {
+		t.Fatalf("peer direction = %+v", c.BBS.Forwarding.Peers[1])
+	}
+}
+
+func TestBBSRejectsDuplicatePeerAndInvalidRetention(t *testing.T) {
+	_, err := Parse([]byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+bbs:
+  enabled: true
+  listen: 127.0.0.1:8023
+  database: data/bbs.json
+  callsign: SP5ME
+  language: pl
+  housekeeping: {bulletin_retention_days: -1, personal_retention_days: 180, log_retention_days: 30}
+  forwarding:
+    peers:
+      - {id: same, callsign: SR5DDD, transport: telnet, host: one.example, port: 7300}
+      - {id: same, callsign: SR5EEE, transport: telnet, host: two.example, port: 7300}
+`))
+	if err == nil {
+		t.Fatal("invalid BBS peer/retention configuration accepted")
+	}
+}
+
 func TestTerminalMessageDefaults(t *testing.T) {
 	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\n"))
 	if err != nil {

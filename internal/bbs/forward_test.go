@@ -38,3 +38,19 @@ func TestPrepareAndRecordForwardQueue(t *testing.T) {
 		t.Fatal("delivered message still queued")
 	}
 }
+
+func TestPlanForwardingHonorsDirectionAndTOATRouters(t *testing.T) {
+	messages := []Message{
+		{ID: 1, Type: "P", To: "SP5ME", At: "SR5DDD.#PL.POL.EURO"},
+		{ID: 2, Type: "P", To: "SP5XYZ", At: "SR5OTHER.#PL.POL.EURO"},
+	}
+	peers := []ForwardPeer{
+		{ID: "send-disabled", Enabled: true, Send: false, SendConfigured: true, ToCalls: []string{"SP5ME"}},
+		{ID: "to-route", Enabled: true, ToCalls: []string{"SP5ME"}},
+		{ID: "at-route", Enabled: true, AtCalls: []string{"SR5OTHER"}},
+	}
+	got := PlanForwarding(messages, peers, 10)
+	if len(got) != 2 || got[0].PeerID != "to-route" || got[0].Message.ID != 1 || got[1].PeerID != "at-route" || got[1].Message.ID != 2 {
+		t.Fatalf("plan = %+v", got)
+	}
+}

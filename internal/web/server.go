@@ -55,6 +55,7 @@ type Config struct {
 	GameHallCallsign   string
 	GameHallSSID       uint8
 	GameHallEnabled    bool
+	GameHallConnect    func() (net.Conn, error)
 	TerminalCallsign   string
 	TerminalSSID       uint8
 	OperatorName       string
@@ -1297,12 +1298,14 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			// addressed to this server's own BBS. No AX.25 frame reaches the TNC.
 			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)
 			localAI := callsign(s.cfg.AICallsign, s.cfg.AISSID)
+			localGameHall := callsign(s.cfg.GameHallCallsign, s.cfg.GameHallSSID)
 			if m.Mode == "tnc" && s.cfg.BBSListen != "" && strings.EqualFold(strings.TrimSpace(m.Target), localBBS) {
 				m.Mode = "bbs"
 			}
 			if m.Mode == "tnc" && s.cfg.AIEnabled && s.cfg.AIConnect != nil && strings.EqualFold(strings.TrimSpace(m.Target), localAI) {
 				m.Mode = "ai"
 			}
+			m.Mode = s.gameHallTerminalMode(m.Mode, m.Target)
 			if m.Mode == "tnc" && strings.TrimSpace(m.Target) == "" {
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Podaj znak korespondenta."})
 				continue
@@ -1422,6 +1425,23 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				done := remoteDone
 				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localAI + "\r\n"})
 				go s.copyTelnetToWS(out, conn, done, "ai", historyStation, historyPort, historySession)
+				continue
+			}
+			if m.Mode == "game_hall" {
+				conn, err := s.cfg.GameHallConnect()
+				if err != nil {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalnym Salonem Gier nieudane: " + err.Error()})
+					continue
+				}
+				remote = conn
+				historyStation, historyPort, historyDigi, historyConnected = localGameHall, "local", "", true
+				if s.cfg.History != nil {
+					historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
+				}
+				remoteDone = make(chan struct{})
+				done := remoteDone
+				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localGameHall + "\r\n"})
+				go s.copyTelnetToWS(out, conn, done, "game_hall", historyStation, historyPort, historySession)
 				continue
 			}
 			if m.Mode != "bbs" {
@@ -1574,6 +1594,14 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Rozlaczono.\r\n"})
 		}
 	}
+}
+
+func (s *Server) gameHallTerminalMode(mode, target string) string {
+	local := callsign(s.cfg.GameHallCallsign, s.cfg.GameHallSSID)
+	if mode == "tnc" && s.cfg.GameHallEnabled && s.cfg.GameHallConnect != nil && strings.EqualFold(strings.TrimSpace(target), local) {
+		return "game_hall"
+	}
+	return mode
 }
 
 func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec, historySession uint64) {

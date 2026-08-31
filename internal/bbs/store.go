@@ -51,13 +51,24 @@ type UserProfile struct {
 	Completed bool      `json:"completed"`
 }
 
+// WhitePageEntry is routing knowledge about a user. It is intentionally kept
+// separate from the local profile: a profile is operator-supplied state, while
+// White Pages may later be learned from a BBS exchange.
+type WhitePageEntry struct {
+	Callsign    string    `json:"callsign"`
+	HomeBBS     string    `json:"home_bbs"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Source      string    `json:"source"`
+}
+
 type dataFile struct {
-	SchemaVersion int                    `json:"schema_version"`
-	NextID        int64                  `json:"next_id"`
-	Users         map[string]string      `json:"users"`
-	Languages     map[string]string      `json:"languages,omitempty"`
-	Profiles      map[string]UserProfile `json:"profiles,omitempty"`
-	Messages      []Message              `json:"messages"`
+	SchemaVersion int                       `json:"schema_version"`
+	NextID        int64                     `json:"next_id"`
+	Users         map[string]string         `json:"users"`
+	Languages     map[string]string         `json:"languages,omitempty"`
+	Profiles      map[string]UserProfile    `json:"profiles,omitempty"`
+	WhitePages    map[string]WhitePageEntry `json:"white_pages,omitempty"`
+	Messages      []Message                 `json:"messages"`
 }
 
 type Store struct {
@@ -67,7 +78,7 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	s := &Store{path: path, data: dataFile{SchemaVersion: 2, NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}}}
+	s := &Store{path: path, data: dataFile{SchemaVersion: 3, NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}, WhitePages: map[string]WhitePageEntry{}}}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -90,6 +101,9 @@ func Open(path string) (*Store, error) {
 	if s.data.Profiles == nil {
 		s.data.Profiles = map[string]UserProfile{}
 	}
+	if s.data.WhitePages == nil {
+		s.data.WhitePages = map[string]WhitePageEntry{}
+	}
 	if s.migrateTAPRIdentifiers() {
 		if err := s.saveLocked(); err != nil {
 			return nil, fmt.Errorf("migrate BBS database: %w", err)
@@ -99,7 +113,7 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) migrateTAPRIdentifiers() bool {
-	changed := s.data.SchemaVersion != 2
+	changed := s.data.SchemaVersion != 3
 	for i := range s.data.Messages {
 		m := &s.data.Messages[i]
 		m.MID = strings.ToUpper(strings.TrimSpace(m.MID))
@@ -122,7 +136,23 @@ func (s *Store) migrateTAPRIdentifiers() bool {
 			changed = true
 		}
 	}
-	s.data.SchemaVersion = 2
+	for call, profile := range s.data.Profiles {
+		if profile.HomeBBS == "" {
+			continue
+		}
+		if _, exists := s.data.WhitePages[call]; !exists {
+			updated := profile.LastSeen
+			if updated.IsZero() {
+				updated = profile.CreatedAt
+			}
+			if updated.IsZero() {
+				updated = time.Now().UTC()
+			}
+			s.data.WhitePages[call] = WhitePageEntry{Callsign: call, HomeBBS: profile.HomeBBS, UpdatedAt: updated, Source: "local-profile"}
+			changed = true
+		}
+	}
+	s.data.SchemaVersion = 3
 	return changed
 }
 
@@ -139,6 +169,9 @@ func (s *Store) AddressFor(call string) string {
 	defer s.mu.RUnlock()
 	if p, ok := s.data.Profiles[call]; ok && p.HomeBBS != "" {
 		return call + "@" + p.HomeBBS
+	}
+	if wp, ok := s.data.WhitePages[call]; ok && wp.HomeBBS != "" {
+		return call + "@" + wp.HomeBBS
 	}
 	return call
 }
@@ -164,6 +197,57 @@ func (s *Store) SaveProfile(p UserProfile) error {
 		s.data.Profiles = map[string]UserProfile{}
 	}
 	s.data.Profiles[call] = p
+	if p.HomeBBS != "" {
+		s.data.WhitePages[call] = WhitePageEntry{Callsign: call, HomeBBS: p.HomeBBS, UpdatedAt: now, Source: "local-profile"}
+	}
+	return s.saveLocked()
+}
+
+func (s *Store) WhitePage(call string) (WhitePageEntry, bool) {
+	call = strings.ToUpper(strings.TrimSpace(call))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.data.WhitePages[call]
+	return entry, ok
+}
+
+func (s *Store) WhitePages() []WhitePageEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make([]WhitePageEntry, 0, len(s.data.WhitePages))
+	for _, entry := range s.data.WhitePages {
+		entries = append(entries, entry)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Callsign < entries[j].Callsign })
+	return entries
+}
+
+func (s *Store) UpsertWhitePage(entry WhitePageEntry) error {
+	call, err := normalizeCall(entry.Callsign)
+	if err != nil {
+		return err
+	}
+	if _, err := ParseHierarchicalAddress(entry.HomeBBS); err != nil {
+		return fmt.Errorf("White Pages Home BBS: %w", err)
+	}
+	entry.Callsign = call
+	entry.HomeBBS = strings.ToUpper(strings.TrimSpace(entry.HomeBBS))
+	entry.Source = language.ASCII(strings.TrimSpace(entry.Source))
+	if entry.Source == "" {
+		return errors.New("White Pages source is required")
+	}
+	if entry.UpdatedAt.IsZero() {
+		entry.UpdatedAt = time.Now().UTC()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.data.WhitePages[call]; ok && existing.UpdatedAt.After(entry.UpdatedAt) {
+		return nil
+	}
+	if s.data.WhitePages == nil {
+		s.data.WhitePages = map[string]WhitePageEntry{}
+	}
+	s.data.WhitePages[call] = entry
 	return s.saveLocked()
 }
 

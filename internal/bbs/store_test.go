@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestStorePersistsMail(t *testing.T) {
@@ -76,8 +77,38 @@ func TestOpenMigratesLegacyBIDToTAPRIdentifiers(t *testing.T) {
 		t.Fatalf("migration result: %+v", ms)
 	}
 	raw, err := os.ReadFile(p)
-	if err != nil || !strings.Contains(string(raw), `"schema_version": 2`) {
+	if err != nil || !strings.Contains(string(raw), `"schema_version": 3`) {
 		t.Fatalf("migration not persisted: %v %s", err, raw)
+	}
+}
+
+func TestWhitePagesPersistAndSupplyRoutingAddress(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bbs.json")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
+	if err := s.UpsertWhitePage(WhitePageEntry{Callsign: "SQ5XYZ", HomeBBS: "SR5DDD.#PL.POL.EURO", UpdatedAt: updated, Source: "manual"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.AddressFor("SQ5XYZ"); got != "SQ5XYZ@SR5DDD.#PL.POL.EURO" {
+		t.Fatalf("routing address = %q", got)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := reopened.WhitePage("SQ5XYZ")
+	if !ok || entry.HomeBBS != "SR5DDD.#PL.POL.EURO" || entry.Source != "manual" || !entry.UpdatedAt.Equal(updated) {
+		t.Fatalf("white page = %+v, exists=%v", entry, ok)
+	}
+	if err := reopened.UpsertWhitePage(WhitePageEntry{Callsign: "SQ5XYZ", HomeBBS: "SP5OLD.#PL.POL.EURO", UpdatedAt: updated.Add(-time.Hour), Source: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	entry, _ = reopened.WhitePage("SQ5XYZ")
+	if entry.HomeBBS != "SR5DDD.#PL.POL.EURO" {
+		t.Fatalf("older White Pages data replaced current entry: %+v", entry)
 	}
 }
 

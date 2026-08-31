@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/language"
@@ -20,6 +21,9 @@ import (
 type Server struct {
 	Listen, Title, Node, Address, Language string
 	WelcomeMessage, GoodbyeMessage         string
+	NewUserMessage, InfoMessage, Prompt    string
+	SysopCallsign                          string
+	MaxSessions                            int
 	ForwardPeers                           []ForwardPeer
 	MaxForwardMessages                     int
 	Store                                  *Store
@@ -27,6 +31,7 @@ type Server struct {
 	OnMessage                              func()
 	chatMu                                 sync.Mutex
 	chat                                   map[*chatClient]struct{}
+	activeSessions                         atomic.Int32
 }
 
 type chatClient struct {
@@ -58,8 +63,13 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 			return err
 		}
+		if !s.acquireSession() {
+			_, _ = io.WriteString(c, "BBS is busy. Please try again later.\r\n")
+			_ = c.Close()
+			continue
+		}
 		wg.Add(1)
-		go func() { defer wg.Done(); defer c.Close(); s.Serve(c, c) }()
+		go func() { defer wg.Done(); defer s.releaseSession(); defer c.Close(); s.Serve(c, c) }()
 	}
 }
 
@@ -86,6 +96,11 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 // ServeAX25 serves a station whose identity was obtained from the connected
 // AX.25 link. No additional text callsign prompt is used on radio links.
 func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
+	if !s.acquireSession() {
+		_, _ = io.WriteString(w, "BBS is busy. Please try again later.\r\n")
+		return
+	}
+	defer s.releaseSession()
 	in := lineinput.NewScanner(r)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	lang := language.Normalize(s.Language)
@@ -112,6 +127,9 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 	}
 	profile, exists := s.Store.Profile(call)
 	if !exists || !profile.Completed {
+		if strings.TrimSpace(s.NewUserMessage) != "" {
+			fmt.Fprint(w, s.expandMessage(s.NewUserMessage, call), "\r\n")
+		}
 		profile = s.registerProfile(call, lang, profile, in, w)
 	}
 	profile.LastSeen = time.Now().UTC()
@@ -119,7 +137,7 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 	if strings.TrimSpace(s.WelcomeMessage) == "" {
 		fmt.Fprintf(w, language.T(lang, "hello_bbs"), call)
 	} else {
-		fmt.Fprint(w, expandSessionMessage(s.WelcomeMessage, s.Node, call), "\r\n")
+		fmt.Fprint(w, s.expandMessage(s.WelcomeMessage, call), "\r\n")
 	}
 	line := func(prompt string) (string, bool) {
 		fmt.Fprint(w, prompt)
@@ -129,7 +147,11 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 		return strings.TrimSpace(in.Text()), true
 	}
 	for {
-		raw, ok := line(s.Node + "> ")
+		prompt := s.expandMessage(s.Prompt, call)
+		if strings.TrimSpace(prompt) == "" {
+			prompt = s.Node + "> "
+		}
+		raw, ok := line(prompt)
 		if !ok {
 			return
 		}
@@ -142,7 +164,11 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 		case "H", "HELP", "?":
 			fmt.Fprint(w, language.T(lang, "bbs_help"))
 		case "I", "INFO":
-			fmt.Fprintf(w, "%s [%s] %s\r\n", s.Title, s.Node, s.Address)
+			if strings.TrimSpace(s.InfoMessage) == "" {
+				fmt.Fprintf(w, "%s [%s] %s\r\n", s.Title, s.Node, s.Address)
+			} else {
+				fmt.Fprint(w, s.expandMessage(s.InfoMessage, call), "\r\n")
+			}
 		case "PROFILE":
 			s.printProfile(w, profile)
 		case "NAME":
@@ -318,7 +344,7 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 			if strings.TrimSpace(s.GoodbyeMessage) == "" {
 				fmt.Fprint(w, "73!\r\n")
 			} else {
-				fmt.Fprint(w, expandSessionMessage(s.GoodbyeMessage, s.Node, call), "\r\n")
+				fmt.Fprint(w, s.expandMessage(s.GoodbyeMessage, call), "\r\n")
 			}
 			return
 		default:
@@ -327,9 +353,27 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 	}
 }
 
-func expandSessionMessage(message, local, remote string) string {
-	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
+func (s *Server) expandMessage(message, remote string) string {
+	return strings.NewReplacer("{CALL}", s.Node, "{REMOTE}", remote, "{TITLE}", s.Title, "{SYSOP}", s.SysopCallsign, "{ADDRESS}", s.Address).Replace(message)
 }
+
+func (s *Server) acquireSession() bool {
+	limit := s.MaxSessions
+	if limit < 1 {
+		limit = 10
+	}
+	for {
+		current := s.activeSessions.Load()
+		if current >= int32(limit) {
+			return false
+		}
+		if s.activeSessions.CompareAndSwap(current, current+1) {
+			return true
+		}
+	}
+}
+
+func (s *Server) releaseSession() { s.activeSessions.Add(-1) }
 
 func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Scanner, w io.Writer) UserProfile {
 	p.Callsign = call

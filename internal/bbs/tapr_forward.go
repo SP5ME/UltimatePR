@@ -129,6 +129,15 @@ func (s *Server) serveTAPRForward(conn io.ReadWriter) error {
 		if err != nil {
 			return err
 		}
+		if remoteCall != "" && !s.peerCanReceive(remoteCall) {
+			if err := writeTAPRLine(conn, "NO forwarding receive disabled"); err != nil {
+				return err
+			}
+			if err := writeTAPRLine(conn, ">"); err != nil {
+				return err
+			}
+			continue
+		}
 		if p.BID != "" && s.Store.HasBID(p.BID) {
 			if err := writeTAPRLine(conn, "NO"); err != nil {
 				return err
@@ -238,6 +247,9 @@ func (f *Forwarder) receiveTAPRReverse(conn io.ReadWriter, r *bufio.Reader, peer
 	for _, peer := range f.Peers {
 		if peer.ID == peerID {
 			peerCall = peer.Callsign
+			if !peer.CanReceive() {
+				return f.rejectTAPRReverse(conn, r)
+			}
 			break
 		}
 	}
@@ -294,6 +306,27 @@ func (f *Forwarder) receiveTAPRReverse(conn io.ReadWriter, r *bufio.Reader, peer
 	}
 }
 
+func (f *Forwarder) rejectTAPRReverse(conn io.Writer, r *bufio.Reader) error {
+	for {
+		line, err := readTAPRLine(r)
+		if err != nil {
+			return err
+		}
+		if line == "F>" {
+			return nil
+		}
+		if _, err := parseTAPRSend(line); err != nil {
+			return err
+		}
+		if err := writeTAPRLine(conn, "NO forwarding receive disabled"); err != nil {
+			return err
+		}
+		if err := writeTAPRLine(conn, "F>"); err != nil {
+			return err
+		}
+	}
+}
+
 func writeTAPRMessage(w io.Writer, m Message, localAddress string) error {
 	if _, err := ParseHierarchicalAddress(localAddress); err != nil {
 		return fmt.Errorf("local TAPR BBS address: %w", err)
@@ -315,7 +348,7 @@ func writeTAPRMessage(w io.Writer, m Message, localAddress string) error {
 // only after the peer supplied a TAPR I-feature null identification line.
 func (s *Server) sendTAPRReverse(w io.Writer, r *bufio.Reader, remoteCall string) error {
 	peerID := s.peerIDForTAPRCall(remoteCall)
-	if peerID == "" {
+	if peerID == "" || !s.peerCanSend(remoteCall) {
 		return writeTAPRLine(w, "F>")
 	}
 	limit := s.MaxForwardMessages
@@ -364,6 +397,24 @@ func (s *Server) peerIDForTAPRCall(call string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Server) peerCanSend(call string) bool {
+	for _, peer := range s.ForwardPeers {
+		if strings.EqualFold(stripSSID(peer.Callsign), stripSSID(call)) {
+			return peer.CanSend()
+		}
+	}
+	return false
+}
+
+func (s *Server) peerCanReceive(call string) bool {
+	for _, peer := range s.ForwardPeers {
+		if strings.EqualFold(stripSSID(peer.Callsign), stripSSID(call)) {
+			return peer.CanReceive()
+		}
+	}
+	return true
 }
 
 func taprNullCall(line string) string {

@@ -11,8 +11,14 @@ type ForwardPeer struct {
 	ID, Callsign, Transport, Host, ViaNode string
 	Port                                   uint16
 	PrivateRoutes, BulletinScopes          []string
-	Enabled                                bool
+	ToCalls, AtCalls, HierarchicalRoutes   []string
+	Enabled, Send, Receive                 bool
+	SendConfigured, ReceiveConfigured      bool
 }
+
+func (p ForwardPeer) CanSend() bool    { return !p.SendConfigured || p.Send }
+func (p ForwardPeer) CanReceive() bool { return !p.ReceiveConfigured || p.Receive }
+
 type ForwardItem struct {
 	PeerID  string
 	Message Message
@@ -26,7 +32,7 @@ func PlanForwarding(messages []Message, peers []ForwardPeer, maxPerPeer int) []F
 	}
 	var out []ForwardItem
 	for _, p := range peers {
-		if !p.Enabled {
+		if !p.Enabled || !p.CanSend() {
 			continue
 		}
 		count := 0
@@ -88,11 +94,15 @@ func (q *QueuePlanner) Run(ctx context.Context) {
 }
 func matchesPeer(m Message, p ForwardPeer) bool {
 	if m.Type == "P" || m.Type == "T" {
+		if matches(strings.ToUpper(m.To), p.ToCalls) {
+			return true
+		}
 		dest := strings.ToUpper(m.At)
 		if dest == "" {
 			dest = strings.ToUpper(m.To)
 		}
-		return matches(dest, p.PrivateRoutes)
+		atCall := strings.Split(dest, ".")[0]
+		return matches(atCall, p.AtCalls) || matches(dest, p.HierarchicalRoutes) || matches(dest, p.PrivateRoutes)
 	}
 	if m.Type == "B" {
 		return matches(strings.ToUpper(m.Distribution), p.BulletinScopes)

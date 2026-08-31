@@ -656,6 +656,15 @@ func (c Config) Validate() error {
 		if !validLanguage(c.BBS.Language) {
 			return fmt.Errorf("bbs.language must be pl or en")
 		}
+		if _, err := parseStationText(c.BBS.SysopCallsign); err != nil {
+			return fmt.Errorf("bbs.sysop_callsign: %w", err)
+		}
+		if c.BBS.MaxSessions < 1 || c.BBS.MaxSessions > 100 {
+			return fmt.Errorf("bbs.max_sessions must be 1..100")
+		}
+		if c.BBS.Housekeeping.BulletinRetentionDays < 1 || c.BBS.Housekeeping.PersonalRetentionDays < 1 || c.BBS.Housekeeping.LogRetentionDays < 1 {
+			return fmt.Errorf("bbs.housekeeping retention values must be positive")
+		}
 		if c.BBS.Forwarding.Enabled {
 			if _, _, err := net.SplitHostPort(c.BBS.ForwardListen); err != nil {
 				return fmt.Errorf("bbs.forward_listen: %w", err)
@@ -674,10 +683,24 @@ func (c Config) Validate() error {
 				return fmt.Errorf("bbs.hierarchical_address: %w", err)
 			}
 		}
+		peerIDs := map[string]bool{}
+		peerStations := map[string]bool{}
 		for i, p := range c.BBS.Forwarding.Peers {
 			if p.ID == "" || p.Callsign == "" {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: id and callsign required", i)
 			}
+			if peerIDs[strings.ToUpper(p.ID)] {
+				return fmt.Errorf("bbs.forwarding.peers[%d]: duplicate id", i)
+			}
+			peerIDs[strings.ToUpper(p.ID)] = true
+			if err := validStation(Station{Callsign: p.Callsign, SSID: p.SSID}); err != nil {
+				return fmt.Errorf("bbs.forwarding.peers[%d]: %w", i, err)
+			}
+			station := strings.ToUpper(p.Callsign) + "-" + strconv.Itoa(int(p.SSID))
+			if peerStations[station] {
+				return fmt.Errorf("bbs.forwarding.peers[%d]: duplicate BBS station", i)
+			}
+			peerStations[station] = true
 			if p.Transport != "telnet" && p.Transport != "node" {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: transport must be telnet or node", i)
 			}
@@ -691,9 +714,41 @@ func (c Config) Validate() error {
 					}
 				}
 			}
+			if strings.TrimSpace(p.Address) != "" {
+				if _, err := bbscore.ParseHierarchicalAddress(p.Address); err != nil {
+					return fmt.Errorf("bbs.forwarding.peers[%d].hierarchical_address: %w", i, err)
+				}
+			}
+			for j, call := range p.ToCalls {
+				if _, err := parseStationText(call); err != nil {
+					return fmt.Errorf("bbs.forwarding.peers[%d].to_calls[%d]: %w", i, j, err)
+				}
+			}
+			for j, call := range p.AtCalls {
+				if _, err := parseStationText(call); err != nil {
+					return fmt.Errorf("bbs.forwarding.peers[%d].at_calls[%d]: %w", i, j, err)
+				}
+			}
+			for j, route := range p.HierarchicalRoutes {
+				if !validBBSHierarchicalRoute(route) {
+					return fmt.Errorf("bbs.forwarding.peers[%d].hierarchical_routes[%d]: invalid TAPR hierarchical route", i, j)
+				}
+			}
 		}
 	}
 	return nil
+}
+
+func validBBSHierarchicalRoute(route string) bool {
+	route = strings.ToUpper(strings.TrimSpace(route))
+	if _, err := bbscore.ParseHierarchicalAddress(route); err == nil {
+		return true
+	}
+	if !strings.HasPrefix(route, "#") {
+		return false
+	}
+	_, err := bbscore.ParseHierarchicalAddress("BBS." + route)
+	return err == nil
 }
 
 func validLocator(v string) bool {

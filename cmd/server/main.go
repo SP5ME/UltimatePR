@@ -246,6 +246,7 @@ func main() {
 	}
 	var web *webui.Server
 	var aiServer *aiservice.Service
+	var gameHall *gamehall.Hall
 	var bbsStore *bbs.Store
 	uprdMgr := uprd.New(ctx, ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, cfg.Application.Locator, heard, uprd.Config{Enabled: uprdEnabled, Interval: time.Duration(cfg.UPRD.IntervalSeconds) * time.Second, MHeardLimit: cfg.UPRD.MHeardLimit, OperatorPresent: func() bool {
 		return web != nil && web.HasActiveBrowser()
@@ -413,6 +414,17 @@ func main() {
 		GameHallCallsign: cfg.GameHall.Callsign,
 		GameHallSSID:     cfg.GameHall.SSID,
 		GameHallEnabled:  gameHallEnabled,
+		GameHallConnect: func() (net.Conn, error) {
+			if gameHall == nil {
+				return nil, fmt.Errorf("game hall service is not running")
+			}
+			client, server := net.Pipe()
+			go func() {
+				defer server.Close()
+				gameHall.ServeAX25(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), cfg.GameHall.Language, server, server)
+			}()
+			return client, nil
+		},
 		AIConnect: func() (net.Conn, error) {
 			if aiServer == nil {
 				return nil, fmt.Errorf("AI service is not running")
@@ -501,11 +513,18 @@ func main() {
 			os.Exit(2)
 		}
 		bbsStore = store
-		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, Store: store, Log: log}
+		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, NewUserMessage: cfg.BBS.NewUserMessage, InfoMessage: cfg.BBS.InfoMessage, Prompt: cfg.BBS.Prompt, SysopCallsign: cfg.BBS.SysopCallsign, MaxSessions: cfg.BBS.MaxSessions, Store: store, Log: log}
 		if cfg.BBS.Forwarding.Enabled {
 			peers := make([]bbs.ForwardPeer, 0, len(cfg.BBS.Forwarding.Peers))
 			for _, p := range cfg.BBS.Forwarding.Peers {
-				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, Enabled: p.Enabled})
+				send, receive := true, true
+				if p.Send != nil {
+					send = *p.Send
+				}
+				if p.Receive != nil {
+					receive = *p.Receive
+				}
+				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, ToCalls: p.ToCalls, AtCalls: p.AtCalls, HierarchicalRoutes: p.HierarchicalRoutes, Enabled: p.Enabled, Send: send, Receive: receive, SendConfigured: p.Send != nil, ReceiveConfigured: p.Receive != nil})
 			}
 			planner := &bbs.QueuePlanner{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, MaxPerPeer: cfg.BBS.Forwarding.MaxMessages, Log: log}
 			go planner.Run(ctx)
@@ -541,7 +560,6 @@ func main() {
 		})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
 	}
-	var gameHall *gamehall.Hall
 	if gameHallEnabled {
 		gameHall = gamehall.New(time.Duration(cfg.GameHall.InviteTimeoutSeconds) * time.Second)
 		inbound.Register(ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, func(call string, r io.Reader, w io.Writer) { gameHall.ServeAX25(call, cfg.GameHall.Language, r, w) })
