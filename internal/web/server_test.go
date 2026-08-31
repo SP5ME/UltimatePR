@@ -163,6 +163,21 @@ func TestGameHallControlsParticipateInConfigWorkflow(t *testing.T) {
 	}
 }
 
+func TestNodeConfigurationHasDedicatedPanel(t *testing.T) {
+	markup, err := assets.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"id=\"configNodeTab\">NODE", "id=\"nodeConfigPanel\"", "id=\"nodeEnabled\"", "id=\"nodeNetROMEnabled\"", "id=\"nodeNetROMMnemonic\"", "id=\"nodeRouteRows\"", "id=\"nodeWelcomeMessage\"", "id=\"nodeGoodbyeMessage\""} {
+		if !bytes.Contains(markup, []byte(required)) {
+			t.Fatalf("dedicated NODE panel does not contain %q", required)
+		}
+	}
+	if bytes.Contains(markup, []byte("id=\"nodeServiceBody\"")) || bytes.Contains(markup, []byte("id=\"servicesNodeCallsign\"")) {
+		t.Fatal("NODE controls remain in the services panel")
+	}
+}
+
 func TestStatusReportsDirectAIService(t *testing.T) {
 	s := New(Config{AICallsign: "SP5ME", AISSID: 12, AIEnabled: true}, nil)
 	recorder := httptest.NewRecorder()

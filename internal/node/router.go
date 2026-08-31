@@ -19,6 +19,7 @@ type Route struct {
 	Quality          int
 	Learned          bool
 	Updated          time.Time
+	Obsolescence     uint8
 }
 type Service struct {
 	Name, Callsign, Command string
@@ -49,19 +50,76 @@ func New(neighbors []Neighbor, routes []Route, services []Service) *Router {
 func (r *Router) Resolve(destination string) (Neighbor, Route, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	rs := append([]Route(nil), r.routes[up(destination)]...)
+	routeDestination := up(destination)
+	rs := append([]Route(nil), r.routes[routeDestination]...)
 	sort.SliceStable(rs, func(i, j int) bool { return rs[i].Quality > rs[j].Quality })
 	for _, x := range rs {
-		if n, ok := r.neighbors[x.Via]; ok {
+		if n, ok := r.neighbors[x.Via]; ok && (x.Obsolescence > 0 || !x.Learned) {
 			return n, x, nil
 		}
 	}
 	for _, n := range r.neighbors {
-		if n.Callsign == up(destination) {
+		if n.Callsign == routeDestination {
 			return n, Route{Destination: up(destination), Via: n.ID, Quality: n.Quality}, nil
 		}
 	}
 	return Neighbor{}, Route{}, errors.New("no route to destination")
+}
+
+// Learn records a route advertised by a directly connected NET/ROM neighbor.
+// Quality is reduced by the local link quality and stale learned routes are
+// replaced only by a better route from the same neighbor.
+func (r *Router) Learn(destination, neighbor string, quality uint8, obsolescence uint8, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var via string
+	for id, n := range r.neighbors {
+		if n.Callsign == up(neighbor) {
+			via = id
+			if quality > 0 && n.Quality > 0 {
+				quality = uint8(int(quality) * n.Quality / 255)
+			}
+			break
+		}
+	}
+	if via == "" || up(destination) == "" || quality == 0 {
+		return false
+	}
+	destination = up(destination)
+	for i := range r.routes[destination] {
+		x := &r.routes[destination][i]
+		if x.Via == via {
+			x.Quality, x.Obsolescence, x.Updated = int(quality), obsolescence, now
+			x.Learned = true
+			return true
+		}
+	}
+	r.routes[destination] = append(r.routes[destination], Route{Destination: destination, Via: via, Quality: int(quality), Learned: true, Updated: now, Obsolescence: obsolescence})
+	return true
+}
+
+// AgeLearned decrements automatic-route obsolescence and removes expired
+// routes. Locked/static routes are never touched.
+func (r *Router) AgeLearned() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for destination, routes := range r.routes {
+		kept := routes[:0]
+		for _, route := range routes {
+			if route.Learned {
+				if route.Obsolescence <= 1 {
+					continue
+				}
+				route.Obsolescence--
+			}
+			kept = append(kept, route)
+		}
+		if len(kept) == 0 {
+			delete(r.routes, destination)
+		} else {
+			r.routes[destination] = kept
+		}
+	}
 }
 func (r *Router) Service(command string) (Service, bool) {
 	r.mu.RLock()
@@ -78,6 +136,13 @@ func (r *Router) Neighbors() []Neighbor {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Callsign < out[j].Callsign })
 	return out
+}
+
+func (r *Router) Neighbor(id string) (Neighbor, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	n, ok := r.neighbors[id]
+	return n, ok
 }
 func (r *Router) Routes() []Route {
 	r.mu.RLock()

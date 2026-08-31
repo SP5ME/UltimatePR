@@ -50,6 +50,8 @@ lokalnego adresu hierarchicznego TAPR.
   allowlistą, osobne MID/BID, parser x.3.4, designatory dystrybucji, wybór
   wiadomości oraz klasyczny forwarding TAPR;
 - następne: uwierzytelnianie partnerów, wielosesyjny node przychodzący,
-  NET/ROM i panel konfiguracji;
+  dynamiczne NET/ROM i panel konfiguracji. CONNECT przez statyczną trasę
+  zestawia teraz rzeczywiste łącze AX.25 do sąsiada i przekazuje sesję do
+  kolejnego noda.
 - nieaktywne domyślnie: przykładowe łącze i partner SR5DDD. Wymagają prawdziwych
   parametrów uzgodnionych z jego operatorem.

@@ -70,6 +70,13 @@ bbs:
 node:
   enabled: true
   alias: N0CALL
+  # Classic NET/ROM routing is opt-in. The mnemonic is limited to six chars.
+  netrom_enabled: false
+  netrom_mnemonic: N0CALL
+  netrom_interval_seconds: 3600
+  netrom_obsolescence: 6
+  netrom_min_quality: 1
+  netrom_max_destinations: 50
   listen: 127.0.0.1:8010
   language: en
   welcome_message: "Welcome {REMOTE} to NODE {CALL}. Commands: NODES, ROUTES, PORTS, SERVICES, BBS, AI, CONNECT and HELP."

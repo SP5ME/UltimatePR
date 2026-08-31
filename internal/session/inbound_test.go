@@ -56,6 +56,46 @@ func TestInboundAX25Service(t *testing.T) {
 	m.Handle("radio", ax25.Frame{Destination: ax25.Address{Callsign: "SP5ABC", SSID: 7}, Source: ax25.Address{Callsign: "SP5ME", SSID: 1, CommandResponse: true}, Type: ax25.TypeRR, NR: 2})
 }
 
+func TestInboundPacketService(t *testing.T) {
+	sent := make(chan []byte, 8)
+	m := NewInboundMux(map[string]Sender{"radio": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil }}, nil)
+	m.t1, m.n2 = 50*time.Millisecond, 2
+	local := ax25.Address{Callsign: "N0NODE"}
+	remote := ax25.Address{Callsign: "N0PEER"}
+	received := make(chan []byte, 1)
+	m.RegisterPacket(local, func(route InboundRoute, pid byte, data []byte, send func(context.Context, byte, []byte) error) {
+		if route.Remote != remote.String() || pid != 0xCF {
+			t.Errorf("route=%+v pid=%x", route, pid)
+		}
+		received <- append([]byte(nil), data...)
+		go func() { _ = send(context.Background(), pid, []byte("reply")) }()
+	})
+	sabm := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeSABM, PollFinal: true}
+	sabm.Destination.CommandResponse = true
+	if !m.Handle("radio", sabm) {
+		t.Fatal("packet SABM not handled")
+	}
+	ua := decodeSent(t, <-sent)
+	if ua.Type != ax25.TypeUA {
+		t.Fatalf("UA=%+v", ua)
+	}
+	pid := byte(0xCF)
+	dataFrame := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeI, NS: 0, PID: &pid, Payload: []byte("request")}
+	dataFrame.Destination.CommandResponse = true
+	if !m.Handle("radio", dataFrame) {
+		t.Fatal("packet I not handled")
+	}
+	if string(<-received) != "request" {
+		t.Fatal("packet payload not delivered")
+	}
+	_ = decodeSent(t, <-sent) // AX.25 RR for the received packet.
+	reply := decodeSent(t, <-sent)
+	if reply.Type != ax25.TypeI || reply.PID == nil || *reply.PID != pid || string(reply.Payload) != "reply" {
+		t.Fatalf("reply=%+v", reply)
+	}
+	m.Handle("radio", ax25.Frame{Destination: local, Source: ax25.Address{Callsign: remote.Callsign, CommandResponse: true}, Type: ax25.TypeRR, NR: 1})
+}
+
 func assertReversePath(t *testing.T, got []ax25.Address) {
 	t.Helper()
 	if len(got) != 2 || got[0].String() != "DIGI2-2" || got[1].String() != "DIGI1-1" {

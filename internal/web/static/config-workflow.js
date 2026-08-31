@@ -2,6 +2,27 @@
   const byId = id => document.getElementById(id);
   const clone = value => JSON.parse(JSON.stringify(value));
   const workflowTranslations = {
+    'NODE':'NODE',
+    'Tożsamość noda':'Node identity',
+    'NODE aktywny':'NODE enabled',
+    'Alias':'Alias',
+    'SSID noda':'Node SSID',
+    'Język noda':'Node language',
+    'NET/ROM':'NET/ROM',
+    'NET/ROM aktywny':'NET/ROM enabled',
+    'Mnemonic noda':'Node mnemonic',
+    'Interwał NODES (s)':'NODES interval (s)',
+    'Obsolescence':'Obsolescence',
+    'Minimalna jakość':'Minimum quality',
+    'Maks. wpisów routingu':'Maximum routing entries',
+    'Wiadomości NODE':'NODE messages',
+    'Powitanie NODE':'NODE welcome message',
+    'Pożegnanie NODE':'NODE goodbye message',
+    'Trasy noda':'Node routes',
+    'Znane destinations są osiągane przez wskazanego sąsiada.':'Known destinations are reached through the selected neighbor.',
+    'Dodaj trasę':'Add route',
+    'Via sąsiad':'Via neighbor',
+    'Aktywna':'Enabled',
     'Panel WWW':'Web panel',
     'Adres, pod którym działa panel administracyjny UltimatePR.':'The address where the UltimatePR administration panel is available.',
     'Adres i port panelu':'Panel address and port',
@@ -93,12 +114,20 @@
     c.Terminal.SSID = number('terminalSSID');
     c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
     c.Server.SSID = number('nodeSSID');
-	if (byId('servicesNodeCallsign')) { c.Server.Callsign = byId('servicesNodeCallsign').value.trim().toUpperCase(); c.Server.SSID = number('servicesNodeSSID', 2); }
-	c.Node.Enabled = byId('nodeServiceEnabled')?.checked === true;
+	c.Node.Enabled = byId('nodeEnabled')?.checked === true;
     c.Node.Alias = byId('nodeAlias')?.value.trim().toUpperCase() || '';
     c.Node.Listen = byId('nodeListen')?.value.trim() || '';
     c.Node.Language = byId('nodeLanguage')?.value || c.Node.Language;
+    c.Node.WelcomeMessage = byId('nodeWelcomeMessage')?.value || '';
+    c.Node.GoodbyeMessage = byId('nodeGoodbyeMessage')?.value || '';
+    c.Node.NetROMEnabled = byId('nodeNetROMEnabled')?.checked === true;
+    c.Node.NetROMMnemonic = byId('nodeNetROMMnemonic')?.value.trim().toUpperCase() || '';
+    c.Node.NetROMInterval = number('nodeNetROMInterval', 3600);
+    c.Node.NetROMObsolescence = number('nodeNetROMObsolescence', 6);
+    c.Node.NetROMMinQuality = number('nodeNetROMMinQuality', 1);
+    c.Node.NetROMMaxDestinations = number('nodeNetROMMaxDestinations', 50);
     if (typeof collectRows === 'function') c.Node.Neighbors = collectRows('neighborRows', 'neighbor');
+    if (typeof collectRows === 'function') c.Node.Routes = collectRows('nodeRouteRows', 'route');
     c.BBS.Callsign = byId('bbsCallsign')?.value.trim().toUpperCase() || '';
     c.BBS.SSID = number('bbsSSID');
 	if (byId('servicesBBSCallsign')) { c.BBS.Callsign = byId('servicesBBSCallsign').value.trim().toUpperCase(); c.BBS.SSID = number('servicesBSSID', 8); }
@@ -232,7 +261,7 @@
   }
 
   function installRestartNotes() {
-    const panels = ['stationConfigPanel','terminalConfigPanel','tncConfigPanel','networkConfigPanel','apiConfigPanel','applicationConfigPanel','beaconConfigPanel','uprDirectConfigPanel','databaseConfigPanel'];
+    const panels = ['stationConfigPanel','terminalConfigPanel','tncConfigPanel','networkConfigPanel','apiConfigPanel','applicationConfigPanel','beaconConfigPanel','uprDirectConfigPanel','databaseConfigPanel','nodeConfigPanel'];
     panels.forEach(id => {
       const panel = byId(id);
       if (!panel || panel.querySelector('.config-restart-note')) return;

@@ -144,34 +144,40 @@ type BBSForwarding struct {
 	Peers                 []BBSPeer `yaml:"peers"`
 }
 type BBSPeer struct {
-	ID                  string   `yaml:"id"`
-	Callsign            string   `yaml:"callsign"`
-	SSID                uint8    `yaml:"ssid"`
-	Address             string   `yaml:"hierarchical_address"`
-	Enabled             bool     `yaml:"enabled"`
-	Send                *bool    `yaml:"send,omitempty"`
-	Receive             *bool    `yaml:"receive,omitempty"`
-	Transport           string   `yaml:"transport"` // legacy: telnet or node
-	Host                string   `yaml:"host"`      // legacy TCP host
-	Port                uint16   `yaml:"port"`      // legacy TCP port
-	ViaNode             string   `yaml:"via_node"`  // legacy node route
-	Schedule            []string `yaml:"schedule"`
-	PrivateRoutes       []string `yaml:"private_routes"`
-	BulletinScopes      []string `yaml:"bulletin_scopes"`
-	ToCalls             []string `yaml:"to_calls"`
-	AtCalls             []string `yaml:"at_calls"`
-	HierarchicalRoutes  []string `yaml:"hierarchical_routes"`
+	ID                 string   `yaml:"id"`
+	Callsign           string   `yaml:"callsign"`
+	SSID               uint8    `yaml:"ssid"`
+	Address            string   `yaml:"hierarchical_address"`
+	Enabled            bool     `yaml:"enabled"`
+	Send               *bool    `yaml:"send,omitempty"`
+	Receive            *bool    `yaml:"receive,omitempty"`
+	Transport          string   `yaml:"transport"` // legacy: telnet or node
+	Host               string   `yaml:"host"`      // legacy TCP host
+	Port               uint16   `yaml:"port"`      // legacy TCP port
+	ViaNode            string   `yaml:"via_node"`  // legacy node route
+	Schedule           []string `yaml:"schedule"`
+	PrivateRoutes      []string `yaml:"private_routes"`
+	BulletinScopes     []string `yaml:"bulletin_scopes"`
+	ToCalls            []string `yaml:"to_calls"`
+	AtCalls            []string `yaml:"at_calls"`
+	HierarchicalRoutes []string `yaml:"hierarchical_routes"`
 }
 type Node struct {
-	Enabled        bool           `yaml:"enabled"`
-	Alias          string         `yaml:"alias"`
-	Listen         string         `yaml:"listen"`
-	Language       string         `yaml:"language"`
-	Neighbors      []NodeNeighbor `yaml:"neighbors"`
-	Routes         []NodeRoute    `yaml:"routes"`
-	Services       []NodeService  `yaml:"services"`
-	WelcomeMessage string         `yaml:"welcome_message"`
-	GoodbyeMessage string         `yaml:"goodbye_message"`
+	Enabled               bool           `yaml:"enabled"`
+	Alias                 string         `yaml:"alias"`
+	Listen                string         `yaml:"listen"`
+	Language              string         `yaml:"language"`
+	Neighbors             []NodeNeighbor `yaml:"neighbors"`
+	Routes                []NodeRoute    `yaml:"routes"`
+	Services              []NodeService  `yaml:"services"`
+	WelcomeMessage        string         `yaml:"welcome_message"`
+	GoodbyeMessage        string         `yaml:"goodbye_message"`
+	NetROMEnabled         bool           `yaml:"netrom_enabled"`
+	NetROMMnemonic        string         `yaml:"netrom_mnemonic"`
+	NetROMInterval        int            `yaml:"netrom_interval_seconds"`
+	NetROMObsolescence    uint8          `yaml:"netrom_obsolescence"`
+	NetROMMinQuality      uint8          `yaml:"netrom_min_quality"`
+	NetROMMaxDestinations int            `yaml:"netrom_max_destinations"`
 }
 type NodeNeighbor struct {
 	ID       string `yaml:"id"`

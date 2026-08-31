@@ -29,6 +29,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/lineinput"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
 	"github.com/packet-radio/ultimatepr/internal/monitor"
+	"github.com/packet-radio/ultimatepr/internal/netrom"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
 	"github.com/packet-radio/ultimatepr/internal/session"
 	"github.com/packet-radio/ultimatepr/internal/tncproxy"
@@ -60,7 +61,9 @@ func main() {
 		log.Error("configuration failed", "error", err)
 		os.Exit(2)
 	}
-	nodeEnabled := cfg.Experimental.Services && cfg.Node.Enabled
+	// NODE is an independent subsystem; the legacy services switch only
+	// controls the optional BBS/AI/GameHall group.
+	nodeEnabled := cfg.Node.Enabled
 	bbsEnabled := cfg.Experimental.Services && cfg.BBS.Enabled
 	aiEnabled := cfg.Experimental.Services && cfg.AI.Enabled
 	gameHallEnabled := cfg.Experimental.Services && cfg.GameHall.Enabled
@@ -229,6 +232,94 @@ func main() {
 		}
 		nodeRouter = nodecore.New(neighbors, routes, services)
 		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(services))
+		if cfg.Node.NetROMEnabled {
+			mnemonic := cfg.Node.NetROMMnemonic
+			if strings.TrimSpace(mnemonic) == "" {
+				mnemonic = cfg.Node.Alias
+			}
+			interval := time.Duration(cfg.Node.NetROMInterval) * time.Second
+			if interval <= 0 {
+				interval = time.Hour
+			}
+			obsolescence := cfg.Node.NetROMObsolescence
+			if obsolescence == 0 {
+				obsolescence = 6
+			}
+			minQuality := cfg.Node.NetROMMinQuality
+			if minQuality == 0 {
+				minQuality = 1
+			}
+			maxDestinations := cfg.Node.NetROMMaxDestinations
+			if maxDestinations <= 0 {
+				maxDestinations = 50
+			}
+			go func() {
+				ticker := time.NewTicker(interval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						b := netrom.RoutingBroadcast{Sender: mnemonic}
+						own := ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}
+						b.Destinations = append(b.Destinations, netrom.Destination{Callsign: own, Mnemonic: mnemonic, Neighbor: own, Quality: 255})
+						for _, route := range nodeRouter.Routes() {
+							if len(b.Destinations) >= maxDestinations || route.Quality < int(minQuality) || (route.Learned && route.Obsolescence == 0) {
+								continue
+							}
+							n, ok := nodeRouter.Neighbor(route.Via)
+							if !ok {
+								continue
+							}
+							name := route.Destination
+							if len(name) > netrom.MnemonicSize {
+								name = name[:netrom.MnemonicSize]
+							}
+							destination, err := ax25.ParseAddress(route.Destination)
+							if err != nil {
+								continue
+							}
+							quality := route.Quality
+							if quality > 255 {
+								quality = 255
+							}
+							neighborCall, err := ax25.ParseAddress(n.Callsign)
+							if err != nil {
+								continue
+							}
+							b.Destinations = append(b.Destinations, netrom.Destination{Callsign: destination, Mnemonic: name, Neighbor: neighborCall, Quality: uint8(quality)})
+						}
+						pid := netrom.PID
+						for start := 0; start < len(b.Destinations); start += netrom.MaxRoutingDestinations {
+							end := start + netrom.MaxRoutingDestinations
+							if end > len(b.Destinations) {
+								end = len(b.Destinations)
+							}
+							part := netrom.RoutingBroadcast{Sender: b.Sender, Destinations: b.Destinations[start:end]}
+							payload, err := part.Encode()
+							if err != nil {
+								log.Warn("NET/ROM routing broadcast build failed", "error", err)
+								continue
+							}
+							frame, err := ax25.Encode(ax25.Frame{Destination: ax25.Address{Callsign: "NODES"}, Source: own, Type: ax25.TypeUI, PID: &pid, Payload: payload})
+							if err != nil {
+								continue
+							}
+							for _, portID := range portIDs {
+								runtime := runtimes[portID]
+								if runtime != nil && runtime.enabled && runtime.port.Status().Connected {
+									if send := senders[portID]; send != nil {
+										_ = send(ctx, frame)
+									}
+								}
+							}
+						}
+						nodeRouter.AgeLearned()
+					}
+				}
+			}()
+		}
 	}
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
@@ -348,6 +439,72 @@ func main() {
 	}
 	inbound := session.NewInboundMux(senders, log)
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
+	if nodeEnabled && cfg.Node.NetROMEnabled {
+		var netromMu sync.Mutex
+		netromCircuits := make(map[string]*netrom.Circuit)
+		var nextNetROMIndex uint8 = 1
+		localNode := ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}
+		inbound.RegisterPacket(localNode, func(route session.InboundRoute, pid byte, data []byte, send func(context.Context, byte, []byte) error) {
+			if pid != netrom.PID {
+				return
+			}
+			frame, err := netrom.DecodeFrame(data)
+			if err != nil {
+				log.Warn("invalid NET/ROM frame", "remote", route.Remote, "error", err)
+				return
+			}
+			key := fmt.Sprintf("%s/%d/%d", route.Remote, frame.Transport.CircuitIndex, frame.Transport.CircuitID)
+			netromMu.Lock()
+			circuit := netromCircuits[key]
+			if circuit == nil && frame.Transport.Opcode == netrom.OpcodeConnectRequest {
+				circuit, err = netrom.NewCircuit(nextNetROMIndex, nextNetROMIndex, 4)
+				if err == nil {
+					nextNetROMIndex++
+					if nextNetROMIndex == 0 {
+						nextNetROMIndex = 1
+					}
+					netromCircuits[key] = circuit
+				}
+			}
+			netromMu.Unlock()
+			if err != nil || circuit == nil {
+				log.Warn("NET/ROM circuit allocation failed", "remote", route.Remote, "error", err)
+				return
+			}
+			if frame.Transport.Opcode == netrom.OpcodeConnectRequest {
+				ack, acceptErr := circuit.Accept(frame.Transport, 4)
+				if acceptErr != nil {
+					log.Warn("NET/ROM connect rejected", "remote", route.Remote, "error", acceptErr)
+					return
+				}
+				frame.Transport = ack
+			} else {
+				event, handleErr := circuit.Handle(frame.Transport)
+				if handleErr != nil {
+					log.Warn("NET/ROM circuit frame rejected", "remote", route.Remote, "error", handleErr)
+					return
+				}
+				for _, response := range event.Packets {
+					responseFrame := netrom.Frame{Network: netrom.NetworkHeader{Origin: frame.Network.Destination, Destination: frame.Network.Origin, TTL: frame.Network.TTL}, Transport: response}
+					responseData, encodeErr := responseFrame.Encode()
+					if encodeErr == nil {
+						_ = send(context.Background(), netrom.PID, responseData)
+					}
+				}
+				if event.Closed {
+					netromMu.Lock()
+					delete(netromCircuits, key)
+					netromMu.Unlock()
+				}
+				return
+			}
+			responseFrame := netrom.Frame{Network: netrom.NetworkHeader{Origin: frame.Network.Destination, Destination: frame.Network.Origin, TTL: frame.Network.TTL}, Transport: frame.Transport}
+			responseData, err := responseFrame.Encode()
+			if err == nil {
+				_ = send(context.Background(), netrom.PID, responseData)
+			}
+		})
+	}
 	var webUPRD *uprd.Manager
 	if uprdEnabled {
 		webUPRD = uprdMgr
@@ -574,6 +731,65 @@ func main() {
 			handlers["GAME"] = gameHall.Serve
 		}
 		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, WelcomeMessage: cfg.Node.WelcomeMessage, GoodbyeMessage: cfg.Node.GoodbyeMessage, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
+		nodeServer.Connect = func(target string, neighbor nodecore.Neighbor, route nodecore.Route, local io.Reader, terminal io.Writer) error {
+			remoteCall, err := ax25.ParseAddress(neighbor.Callsign)
+			if err != nil {
+				return fmt.Errorf("invalid neighbor callsign: %w", err)
+			}
+			remote, release := radio.NewSession()
+			defer release()
+			bridgeCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			events, unsubscribe := remote.Subscribe()
+			defer unsubscribe()
+			if err := remote.Connect(bridgeCtx, neighbor.Port, remoteCall.String()); err != nil {
+				return err
+			}
+			// A direct neighbor is already the requested node. For a routed
+			// destination, ask that node to continue the path through its NODE UI.
+			if !strings.EqualFold(target, neighbor.Callsign) {
+				if err := remote.Send(bridgeCtx, []byte("C "+strings.TrimSpace(target)+"\r")); err != nil {
+					return err
+				}
+			}
+			go func() {
+				buf := make([]byte, 512)
+				for {
+					n, readErr := local.Read(buf)
+					if n > 0 {
+						if sendErr := remote.Send(bridgeCtx, buf[:n]); sendErr != nil {
+							cancel()
+							return
+						}
+					}
+					if readErr != nil {
+						cancel()
+						return
+					}
+				}
+			}()
+			for {
+				select {
+				case event, ok := <-events:
+					if !ok {
+						return nil
+					}
+					if event.Type == "data" && len(event.Data) > 0 {
+						if _, err := terminal.Write(event.Data); err != nil {
+							return err
+						}
+					}
+					if event.Type == "state" && event.State == session.Disconnected {
+						return nil
+					}
+				case <-bridgeCtx.Done():
+					disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					_ = remote.Disconnect(disconnectCtx)
+					disconnectCancel()
+					return nil
+				}
+			}
+		}
 		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)
 		go func() {
 			if err := nodeServer.Run(ctx); err != nil && ctx.Err() == nil {
@@ -618,6 +834,23 @@ func main() {
 			}
 			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
 			events.Publish("frame.rx", map[string]any{"port": pkt.PortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(pkt.Data)})
+			if nodeRouter != nil && f.Type == ax25.TypeUI && f.PID != nil && *f.PID == netrom.PID && strings.EqualFold(f.Destination.String(), "NODES") {
+				minQuality := cfg.Node.NetROMMinQuality
+				if minQuality == 0 {
+					minQuality = 1
+				}
+				obsolescence := cfg.Node.NetROMObsolescence
+				if obsolescence == 0 {
+					obsolescence = 6
+				}
+				if broadcast, err := netrom.DecodeRouting(f.Payload); err == nil {
+					for _, destination := range broadcast.Destinations {
+						if destination.Quality >= minQuality {
+							nodeRouter.Learn(destination.Callsign.String(), f.Source.String(), destination.Quality, obsolescence, time.Now().UTC())
+						}
+					}
+				}
+			}
 			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
 				available := make([]string, 0, len(runtimes))
 				for id, runtime := range runtimes {

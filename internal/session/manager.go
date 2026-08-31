@@ -24,6 +24,7 @@ const (
 type Event struct {
 	Type    string
 	State   State
+	PID     byte
 	Data    []byte
 	Message string
 }
@@ -354,6 +355,15 @@ func (m *Manager) Send(ctx context.Context, data []byte) error {
 	return m.SendWithProgress(ctx, data, nil)
 }
 
+// SendPacket sends one protocol payload using the supplied AX.25 PID. It is
+// used by network-layer protocols such as NET/ROM; terminal traffic should use
+// Send, which keeps the normal text PID 0xF0.
+func (m *Manager) SendPacket(ctx context.Context, pid byte, data []byte) error {
+	m.operation.Lock()
+	defer m.operation.Unlock()
+	return m.sendChunkWithPID(ctx, pid, data, nil)
+}
+
 // SendWithProgress splits data according to paclen, preferring whitespace
 // boundaries so words remain intact, and reports every AX.25 I frame.
 func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress func(SendPacketProgress)) error {
@@ -367,7 +377,7 @@ func (m *Manager) SendWithProgress(ctx context.Context, data []byte, progress fu
 		if progress != nil {
 			progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "sending"})
 		}
-		if err := m.sendChunk(ctx, chunk, func() {
+		if err := m.sendChunkWithPID(ctx, 0xF0, chunk, func() {
 			if progress != nil {
 				progress(SendPacketProgress{Packet: packet + 1, Total: len(chunks), Data: chunk, State: "waiting_ack"})
 			}
@@ -439,6 +449,10 @@ func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 	}
 }
 func (m *Manager) sendChunk(ctx context.Context, data []byte, transmitted func()) error {
+	return m.sendChunkWithPID(ctx, 0xF0, data, transmitted)
+}
+
+func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, transmitted func()) error {
 	m.mu.Lock()
 	if m.state != Connected {
 		m.mu.Unlock()
@@ -449,8 +463,8 @@ func (m *Manager) sendChunk(ctx context.Context, data []byte, transmitted func()
 	expected := (m.vs + 1) & 7
 	m.drainAck()
 	m.mu.Unlock()
-	pid := byte(0xF0)
-	f := m.command(ax25.TypeI, false, &pid, ns, nr)
+	protocolID := pid
+	f := m.command(ax25.TypeI, false, &protocolID, ns, nr)
 	f.Payload = append([]byte(nil), data...)
 	// V(S) is advanced when the new I frame is sent, not when it is
 	// acknowledged. V(A) remains the oldest unacknowledged sequence number.
@@ -856,7 +870,11 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			m.vr = (m.vr + 1) & 7
 			m.rejectSent = false
 			m.mu.Unlock()
-			m.emit(Event{Type: "data", Data: append([]byte(nil), f.Payload...)})
+			pid := byte(0)
+			if f.PID != nil {
+				pid = *f.PID
+			}
+			m.emit(Event{Type: "data", PID: pid, Data: append([]byte(nil), f.Payload...)})
 		} else {
 			alreadyRejected := m.rejectSent
 			m.rejectSent = true

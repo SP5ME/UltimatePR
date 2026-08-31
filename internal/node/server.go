@@ -23,6 +23,9 @@ type Server struct {
 	Handlers                          map[string]func(string, string, *bufio.Scanner, io.Writer)
 	Ports                             []string
 	Log                               *slog.Logger
+	// Connect bridges the current terminal to a resolved remote node or
+	// station. It is kept outside the node package so routing owns no radio I/O.
+	Connect func(string, Neighbor, Route, io.Reader, io.Writer) error
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -48,14 +51,15 @@ func (s *Server) Run(ctx context.Context) error {
 }
 func (s *Server) Serve(r io.Reader, w io.Writer) {
 	lang := language.Normalize(s.Language)
-	in := lineinput.NewScanner(r)
+	stream := &singleByteReader{r: r}
+	in := lineinput.NewScanner(stream)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n%s", s.Alias, s.Callsign, bbs.BuildVersion, language.T(lang, "node_call"))
 	if !in.Scan() {
 		return
 	}
 	call := strings.ToUpper(strings.TrimSpace(in.Text()))
-	s.serveCall(call, lang, in, w)
+	s.serveCall(call, lang, in, stream, w)
 }
 
 // ServeAX25 serves an already identified AX.25 station. Unlike Telnet, an
@@ -63,13 +67,14 @@ func (s *Server) Serve(r io.Reader, w io.Writer) {
 // must not ask the operator to type it again.
 func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
 	lang := language.Normalize(s.Language)
-	in := lineinput.NewScanner(r)
+	stream := &singleByteReader{r: r}
+	in := lineinput.NewScanner(stream)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n", s.Alias, s.Callsign, bbs.BuildVersion)
-	s.serveCall(strings.ToUpper(strings.TrimSpace(call)), lang, in, w)
+	s.serveCall(strings.ToUpper(strings.TrimSpace(call)), lang, in, stream, w)
 }
 
-func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
+func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reader, w io.Writer) {
 	if call == "" {
 		fmt.Fprint(w, language.T(lang, "invalid_call"))
 		return
@@ -136,6 +141,11 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 			n, route, err := s.Router.Resolve(f[1])
 			if err != nil {
 				fmt.Fprintf(w, language.T(lang, "no_route"), strings.ToUpper(f[1]))
+			} else if s.Connect != nil {
+				if err := s.Connect(f[1], n, route, stream, w); err != nil {
+					fmt.Fprintf(w, "CONNECT failed: %v\r\n", err)
+				}
+				return
 			} else {
 				fmt.Fprintf(w, language.T(lang, "route_found"), route.Destination, n.Callsign, n.Port, route.Quality)
 			}
@@ -154,6 +164,19 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 
 func expandSessionMessage(message, local, remote string) string {
 	return strings.NewReplacer("{CALL}", local, "{REMOTE}", remote).Replace(strings.TrimSpace(message))
+}
+
+// singleByteReader prevents the command scanner from reading past the command
+// line. The remaining bytes must stay available when CONNECT switches to the
+// transparent session bridge.
+type singleByteReader struct{ r io.Reader }
+
+func (r *singleByteReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	n, err := r.r.Read(p[:1])
+	return n, err
 }
 func (s *Server) runService(command, call, lang string, in *bufio.Scanner, w io.Writer) bool {
 	service, ok := s.Router.Service(command)

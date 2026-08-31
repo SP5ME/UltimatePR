@@ -31,3 +31,32 @@ func TestNodeEntersBBSAndReturns(t *testing.T) {
 		}
 	}
 }
+
+func TestNodeConnectHandsRemainingStreamToConnector(t *testing.T) {
+	router := New([]Neighbor{{ID: "n1", Callsign: "REMOTE-7", Port: "radio", Quality: 100}}, nil, nil)
+	var gotTarget string
+	var got []byte
+	srv := &Server{
+		Callsign: "LOCAL-7",
+		Alias:    "NODE",
+		Language: "en",
+		Router:   router,
+		Connect: func(target string, _ Neighbor, _ Route, r io.Reader, w io.Writer) error {
+			gotTarget = target
+			got, _ = io.ReadAll(r)
+			_, _ = io.WriteString(w, "BRIDGED\r\n")
+			return nil
+		},
+	}
+	var out bytes.Buffer
+	srv.Serve(strings.NewReader("SP5ME\nC REMOTE-7\npayload"), &out)
+	if gotTarget != "REMOTE-7" {
+		t.Fatalf("target=%q", gotTarget)
+	}
+	if string(got) != "payload" {
+		t.Fatalf("remaining stream=%q", got)
+	}
+	if !strings.Contains(out.String(), "BRIDGED") {
+		t.Fatalf("bridge output missing: %q", out.String())
+	}
+}

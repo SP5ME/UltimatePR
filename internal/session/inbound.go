@@ -25,10 +25,16 @@ type InboundRoute struct {
 
 type RoutedAX25Service func(route InboundRoute, r io.Reader, w io.Writer)
 
+// AX25PacketService handles non-text I-frame payloads after the AX.25 link is
+// established. The send function uses the supplied PID and preserves the
+// link-level acknowledgement machinery.
+type AX25PacketService func(route InboundRoute, pid byte, data []byte, send func(context.Context, byte, []byte) error)
+
 type InboundMux struct {
 	mu             sync.Mutex
 	services       map[string]AX25Service
 	routedServices map[string]RoutedAX25Service
+	packetServices map[string]AX25PacketService
 	senders        map[string]Sender
 	links          map[string]*inboundLink
 	log            *slog.Logger
@@ -59,7 +65,7 @@ type inboundLink struct {
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
-	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
+	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, packetServices: map[string]AX25PacketService{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
 }
 
 func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
@@ -87,6 +93,12 @@ func (m *InboundMux) RegisterRouted(address ax25.Address, service RoutedAX25Serv
 	m.routedServices[address.String()] = service
 }
 
+func (m *InboundMux) RegisterPacket(address ax25.Address, service AX25PacketService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.packetServices[address.String()] = service
+}
+
 // Handle returns true when the frame belongs to a registered inbound service
 // or to an established inbound session.
 func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
@@ -95,7 +107,8 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	link := m.links[key]
 	service := m.services[f.Destination.String()]
 	routedService := m.routedServices[f.Destination.String()]
-	registered := service != nil || routedService != nil
+	packetService := m.packetServices[f.Destination.String()]
+	registered := service != nil || routedService != nil || packetService != nil
 	m.mu.Unlock()
 
 	if link == nil {
@@ -142,7 +155,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 		m.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
-		if created {
+		if created && (service != nil || routedService != nil) {
 			go link.run(service, routedService)
 		}
 		if m.log != nil {
@@ -225,7 +238,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		link.mu.Lock()
 		receiveN1 := link.receiveN1
 		link.mu.Unlock()
-		if !isCommand(f) || f.PID == nil || *f.PID != 0xF0 || len(f.Payload) > receiveN1 {
+		if !isCommand(f) || f.PID == nil || len(f.Payload) > receiveN1 || (*f.PID != 0xF0 && packetService == nil) {
 			return true
 		}
 		link.mu.Lock()
@@ -234,9 +247,15 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			link.rejectSent = false
 			link.mu.Unlock()
 			data := append([]byte(nil), f.Payload...)
-			select {
-			case link.in <- data:
-			case <-link.closed:
+			if *f.PID == 0xF0 {
+				select {
+				case link.in <- data:
+				case <-link.closed:
+				}
+			} else if packetService != nil {
+				route := InboundRoute{Remote: link.remote.String(), Port: link.port, Digipeaters: append([]ax25.Address(nil), link.digipeaters...)}
+				pid, sendData := *f.PID, data
+				go packetService(route, pid, sendData, link.sendPacket)
 			}
 		} else {
 			alreadyRejected := link.rejectSent
@@ -373,11 +392,21 @@ func (l *inboundLink) transmit() {
 }
 
 func (l *inboundLink) sendChunk(data []byte) error {
+	return l.sendChunkWithPID(0xF0, data)
+}
+
+func (l *inboundLink) sendPacket(ctx context.Context, pid byte, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	return l.sendChunkWithPID(pid, data)
+}
+
+func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 	l.mu.Lock()
 	ns, nr, t1, n2 := l.vs, l.vr, l.t1, l.n2
 	expected := (ns + 1) & 7
 	l.mu.Unlock()
-	pid := byte(0xF0)
 	f := l.command(ax25.TypeI, false, nr)
 	f.NS, f.PID, f.Payload = ns, &pid, append([]byte(nil), data...)
 	l.mu.Lock()
