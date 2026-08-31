@@ -15,18 +15,21 @@ import (
 )
 
 type Message struct {
-	ID        int64                   `json:"id"`
-	Type      string                  `json:"type"`
-	From      string                  `json:"from"`
-	To        string                  `json:"to"`
-	At        string                  `json:"at,omitempty"`
-	BID       string                  `json:"bid"`
-	Subject   string                  `json:"subject"`
-	Body      string                  `json:"body"`
-	CreatedAt time.Time               `json:"created_at"`
-	ReadBy    []string                `json:"read_by,omitempty"`
-	DeletedBy []string                `json:"deleted_by,omitempty"`
-	Forward   map[string]ForwardState `json:"forward,omitempty"`
+	ID           int64                   `json:"id"`
+	Type         string                  `json:"type"`
+	From         string                  `json:"from"`
+	To           string                  `json:"to"`
+	At           string                  `json:"at,omitempty"`
+	Distribution string                  `json:"distribution,omitempty"`
+	MID          string                  `json:"mid"`
+	BID          string                  `json:"bid,omitempty"`
+	Subject      string                  `json:"subject"`
+	Body         string                  `json:"body"`
+	Routing      []string                `json:"routing_headers,omitempty"`
+	CreatedAt    time.Time               `json:"created_at"`
+	ReadBy       []string                `json:"read_by,omitempty"`
+	DeletedBy    []string                `json:"deleted_by,omitempty"`
+	Forward      map[string]ForwardState `json:"forward,omitempty"`
 }
 type ForwardState struct {
 	Status      string    `json:"status"`
@@ -49,11 +52,12 @@ type UserProfile struct {
 }
 
 type dataFile struct {
-	NextID    int64                  `json:"next_id"`
-	Users     map[string]string      `json:"users"`
-	Languages map[string]string      `json:"languages,omitempty"`
-	Profiles  map[string]UserProfile `json:"profiles,omitempty"`
-	Messages  []Message              `json:"messages"`
+	SchemaVersion int                    `json:"schema_version"`
+	NextID        int64                  `json:"next_id"`
+	Users         map[string]string      `json:"users"`
+	Languages     map[string]string      `json:"languages,omitempty"`
+	Profiles      map[string]UserProfile `json:"profiles,omitempty"`
+	Messages      []Message              `json:"messages"`
 }
 
 type Store struct {
@@ -63,7 +67,7 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	s := &Store{path: path, data: dataFile{NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}}}
+	s := &Store{path: path, data: dataFile{SchemaVersion: 2, NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}}}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -86,7 +90,40 @@ func Open(path string) (*Store, error) {
 	if s.data.Profiles == nil {
 		s.data.Profiles = map[string]UserProfile{}
 	}
+	if s.migrateTAPRIdentifiers() {
+		if err := s.saveLocked(); err != nil {
+			return nil, fmt.Errorf("migrate BBS database: %w", err)
+		}
+	}
 	return s, nil
+}
+
+func (s *Store) migrateTAPRIdentifiers() bool {
+	changed := s.data.SchemaVersion != 2
+	for i := range s.data.Messages {
+		m := &s.data.Messages[i]
+		m.MID = strings.ToUpper(strings.TrimSpace(m.MID))
+		m.BID = strings.ToUpper(strings.TrimSpace(m.BID))
+		if m.MID == "" {
+			m.MID = m.BID
+			changed = true
+		}
+		if m.Type == "P" && m.BID == m.MID {
+			m.BID = ""
+			changed = true
+		}
+		if m.Type == "B" && m.BID == "" {
+			m.BID = m.MID
+			changed = true
+		}
+		if m.Type == "B" && m.Distribution == "" {
+			m.Distribution = strings.ToUpper(strings.TrimSpace(m.To))
+			m.To = "ALL"
+			changed = true
+		}
+	}
+	s.data.SchemaVersion = 2
+	return changed
 }
 
 func (s *Store) Profile(call string) (UserProfile, bool) {
@@ -110,8 +147,10 @@ func (s *Store) SaveProfile(p UserProfile) error {
 	if err != nil {
 		return err
 	}
-	if p.HomeBBS != "" && !validBBSAddress(p.HomeBBS) {
-		return errors.New("invalid Home BBS")
+	if p.HomeBBS != "" {
+		if _, err := ParseHierarchicalAddress(p.HomeBBS); err != nil {
+			return errors.New("invalid Home BBS")
+		}
 	}
 	p.Callsign, p.Name, p.HomeBBS, p.QTH, p.Locator = call, language.ASCII(strings.TrimSpace(p.Name)), strings.ToUpper(strings.TrimSpace(p.HomeBBS)), language.ASCII(strings.TrimSpace(p.QTH)), strings.ToUpper(strings.TrimSpace(p.Locator))
 	now := time.Now().UTC()
@@ -172,6 +211,7 @@ func (s *Store) Send(kind, from, to, subject, body string) (Message, error) {
 	}
 	to = strings.ToUpper(strings.TrimSpace(to))
 	at := ""
+	distribution := ""
 	if parts := strings.SplitN(to, "@", 2); len(parts) == 2 {
 		to = parts[0]
 		at = strings.TrimSpace(parts[1])
@@ -179,36 +219,56 @@ func (s *Store) Send(kind, from, to, subject, body string) (Message, error) {
 			return Message{}, errors.New("BBS address after @ is required")
 		}
 	}
-	if kind == "P" {
+	if kind == "P" || kind == "T" {
 		if _, err := normalizeCall(to); err != nil {
 			return Message{}, fmt.Errorf("recipient: %w", err)
 		}
 	}
-	if at != "" && !validBBSAddress(at) {
-		return Message{}, errors.New("invalid hierarchical BBS address")
+	if kind != "P" && kind != "B" && kind != "T" {
+		return Message{}, errors.New("message type must be P, B or T")
 	}
-	if kind != "P" && kind != "B" {
-		return Message{}, errors.New("message type must be P or B")
+	if len(language.ASCII(strings.TrimSpace(subject))) < 1 || len(language.ASCII(strings.TrimSpace(subject))) > 79 {
+		return Message{}, errors.New("subject length must be 1..79 ASCII characters")
 	}
-	if strings.TrimSpace(subject) == "" {
-		return Message{}, errors.New("subject is required")
+	if (kind == "P" || kind == "T") && at != "" {
+		if _, err := ParseHierarchicalAddress(at); err != nil {
+			return Message{}, fmt.Errorf("invalid hierarchical BBS address: %w", err)
+		}
+	}
+	if kind == "B" {
+		if at != "" {
+			return Message{}, errors.New("bulletin distribution must not use a BBS address")
+		}
+		var err error
+		distribution, err = ParseDistributionDesignator(to)
+		if err != nil {
+			return Message{}, err
+		}
+		to = "ALL"
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
 	id := s.data.NextID
 	base := strings.Split(from, "-")[0]
-	bid := fmt.Sprintf("%d_%s", id, base)
-	if len(bid) > 12 {
-		bid = bid[:12]
+	mid := fmt.Sprintf("%d_%s", id, base)
+	if len(mid) > 12 {
+		mid = mid[:12]
 	}
-	m := Message{ID: id, Type: kind, From: from, To: to, At: at, BID: bid, Subject: language.ASCII(strings.TrimSpace(subject)), Body: language.ASCII(body), CreatedAt: now}
+	bid := ""
+	if kind == "B" {
+		bid = mid
+	}
+	m := Message{ID: id, Type: kind, From: from, To: to, At: at, Distribution: distribution, MID: mid, BID: bid, Subject: language.ASCII(strings.TrimSpace(subject)), Body: language.ASCII(body), CreatedAt: now}
 	s.data.NextID++
 	s.data.Messages = append(s.data.Messages, m)
 	return m, s.saveLocked()
 }
 
 func (s *Store) HasBID(bid string) bool {
+	if strings.TrimSpace(bid) == "" {
+		return false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, m := range s.data.Messages {
@@ -218,22 +278,70 @@ func (s *Store) HasBID(bid string) bool {
 	}
 	return false
 }
+func (s *Store) HasMID(mid string) bool {
+	if strings.TrimSpace(mid) == "" {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, m := range s.data.Messages {
+		if strings.EqualFold(m.MID, mid) {
+			return true
+		}
+	}
+	return false
+}
 func (s *Store) Import(m Message) (Message, bool, error) {
-	if strings.TrimSpace(m.BID) == "" || len(m.BID) > 80 {
+	m.MID = strings.ToUpper(strings.TrimSpace(m.MID))
+	m.BID = strings.ToUpper(strings.TrimSpace(m.BID))
+	if m.MID != "" && !validMessageIdentifier(m.MID) {
+		return Message{}, false, errors.New("invalid MID")
+	}
+	if m.BID != "" && !validMessageIdentifier(m.BID) {
 		return Message{}, false, errors.New("invalid BID")
 	}
 	if _, err := normalizeCall(m.From); err != nil {
 		return Message{}, false, err
 	}
-	if m.Type == "P" {
+	if m.Type == "P" || m.Type == "T" {
 		if _, err := normalizeCall(m.To); err != nil {
 			return Message{}, false, err
 		}
+		if m.At != "" {
+			if _, err := ParseHierarchicalAddress(m.At); err != nil {
+				return Message{}, false, err
+			}
+		}
+	}
+	if m.Type != "P" && m.Type != "B" && m.Type != "T" {
+		return Message{}, false, errors.New("message type must be P, B or T")
+	}
+	if m.Type == "B" && m.BID == "" {
+		return Message{}, false, errors.New("bulletin BID is required")
+	}
+	if m.Type == "T" && m.BID != "" {
+		return Message{}, false, errors.New("TAPR NTS traffic must not carry BID")
+	}
+	if m.Type == "B" {
+		if _, err := ParseDistributionDesignator(m.To); err != nil {
+			return Message{}, false, fmt.Errorf("bulletin category: %w", err)
+		}
+		var err error
+		m.Distribution, err = ParseDistributionDesignator(m.Distribution)
+		if err != nil {
+			return Message{}, false, err
+		}
+	}
+	if len(language.ASCII(strings.TrimSpace(m.Subject))) < 1 || len(language.ASCII(strings.TrimSpace(m.Subject))) > 79 {
+		return Message{}, false, errors.New("subject length must be 1..79 ASCII characters")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if m.MID == "" {
+		m.MID = generatedMessageID(s.data.NextID, m.From)
+	}
 	for _, x := range s.data.Messages {
-		if strings.EqualFold(x.BID, m.BID) {
+		if (m.BID != "" && strings.EqualFold(x.BID, m.BID)) || strings.EqualFold(x.MID, m.MID) {
 			return x, true, nil
 		}
 	}
@@ -358,7 +466,7 @@ func (s *Store) List(call string, bulletins bool) []Message {
 	defer s.mu.RUnlock()
 	var out []Message
 	for _, m := range s.data.Messages {
-		visible := (bulletins && m.Type == "B") || (!bulletins && m.Type == "P" && (m.To == call || m.From == call))
+		visible := (bulletins && m.Type == "B") || (!bulletins && (m.Type == "P" || m.Type == "T") && (m.To == call || m.From == call))
 		if visible && !contains(m.DeletedBy, call) {
 			out = append(out, m)
 		}
@@ -374,7 +482,7 @@ func (s *Store) Read(call string, id int64) (Message, error) {
 	for i := range s.data.Messages {
 		m := &s.data.Messages[i]
 		if m.ID == id {
-			if m.Type == "P" && m.To != call && m.From != call {
+			if (m.Type == "P" || m.Type == "T") && m.To != call && m.From != call {
 				return Message{}, errors.New("message is not addressed to you")
 			}
 			if contains(m.DeletedBy, call) {
@@ -399,7 +507,7 @@ func (s *Store) Delete(call string, id int64) error {
 	for i := range s.data.Messages {
 		m := &s.data.Messages[i]
 		if m.ID == id {
-			if m.Type == "P" && m.To != call && m.From != call {
+			if (m.Type == "P" || m.Type == "T") && m.To != call && m.From != call {
 				return errors.New("message is not yours")
 			}
 			if !contains(m.DeletedBy, call) {
@@ -447,14 +555,22 @@ func normalizeCall(v string) (string, error) {
 	}
 	return v, nil
 }
-func validBBSAddress(v string) bool {
-	if len(v) < 1 || len(v) > 80 {
+func validMessageIdentifier(v string) bool {
+	if len(v) < 1 || len(v) > 12 || strings.ContainsAny(v, " \t\r\n") {
 		return false
 	}
-	for _, r := range strings.ToUpper(v) {
-		if !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '.' && r != '#' {
+	for _, r := range v {
+		if r < 0x21 || r > 0x7e {
 			return false
 		}
 	}
 	return true
+}
+
+func generatedMessageID(id int64, from string) string {
+	mid := fmt.Sprintf("%d_%s", id, strings.Split(strings.ToUpper(strings.TrimSpace(from)), "-")[0])
+	if len(mid) > 12 {
+		mid = mid[:12]
+	}
+	return mid
 }

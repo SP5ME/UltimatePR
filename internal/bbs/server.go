@@ -225,8 +225,14 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 				to := m.To
 				if m.At != "" {
 					to += "@" + m.At
+				} else if m.Distribution != "" {
+					to += "@" + m.Distribution
 				}
-				fmt.Fprintf(w, "#%d %s from %s to %s BID %s %s\r\n%s\r\n", m.ID, m.Type, m.From, to, m.BID, m.Subject, m.Body)
+				identifier := "MID " + m.MID
+				if m.BID != "" {
+					identifier += " BID " + m.BID
+				}
+				fmt.Fprintf(w, "#%d %s from %s to %s %s %s\r\n%s\r\n", m.ID, m.Type, m.From, to, identifier, m.Subject, m.Body)
 			}
 		case "K", "KILL":
 			if len(f) < 2 {
@@ -252,6 +258,16 @@ func (s *Server) ServeSessionLanguage(call, lang string, in *bufio.Scanner, w io
 				to = s.Store.AddressFor(to)
 			}
 			s.compose(in, w, call, "P", to, lang)
+		case "ST":
+			if len(f) < 2 {
+				fmt.Fprint(w, "Usage: ST <call or call@BBS>\r\n")
+				continue
+			}
+			to := strings.ToUpper(f[1])
+			if !strings.Contains(to, "@") {
+				to = s.Store.AddressFor(to)
+			}
+			s.compose(in, w, call, "T", to, lang)
 		case "RE", "REPLY":
 			if len(f) < 2 {
 				fmt.Fprint(w, language.T(lang, "usage_reply"))
@@ -336,9 +352,6 @@ func (s *Server) registerProfile(call, lang string, p UserProfile, in *bufio.Sca
 	}
 	if p.HomeBBS == "" {
 		p.HomeBBS = strings.ToUpper(strings.TrimSpace(s.Address))
-		if p.HomeBBS == "" {
-			p.HomeBBS = s.Node
-		}
 	}
 	if language.Normalize(lang) == "pl" {
 		fmt.Fprint(w, "QTH (opcjonalnie, wpisz POMIN aby pominac): ")
@@ -449,6 +462,8 @@ func (s *Server) printMessages(w io.Writer, call string, ms []Message) {
 		to := m.To
 		if m.At != "" {
 			to += "@" + m.At
+		} else if m.Distribution != "" {
+			to += "@" + m.Distribution
 		}
 		fmt.Fprintf(w, "%5d %s %-1s %-9s %-20s %s\r\n", m.ID, mark, m.Type, m.From, to, m.Subject)
 	}

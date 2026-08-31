@@ -1,7 +1,9 @@
 package bbs
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +22,9 @@ func TestStorePersistsMail(t *testing.T) {
 	}
 	if m.ID != 1 {
 		t.Fatalf("id=%d", m.ID)
+	}
+	if m.MID != "1_SP5ABC" || m.BID != "" {
+		t.Fatalf("private identifiers: MID=%q BID=%q", m.MID, m.BID)
 	}
 	s2, err := Open(p)
 	if err != nil {
@@ -42,11 +47,37 @@ func TestStorePersistsMail(t *testing.T) {
 
 func TestBulletinVisibleToEveryone(t *testing.T) {
 	s, _ := Open(filepath.Join(t.TempDir(), "bbs.json"))
-	if _, err := s.Send("B", "SP5ABC", "ALL", "Net", "Sunday 10:00"); err != nil {
+	m, err := s.Send("B", "SP5ABC", "ALL", "Net", "Sunday 10:00")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if m.MID == "" || m.BID != m.MID || m.To != "ALL" || m.Distribution != "ALL" {
+		t.Fatalf("bulletin identifiers: MID=%q BID=%q", m.MID, m.BID)
 	}
 	if got := s.List("SQ9XYZ", true); len(got) != 1 {
 		t.Fatalf("got %d", len(got))
+	}
+}
+
+func TestOpenMigratesLegacyBIDToTAPRIdentifiers(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "bbs.json")
+	legacy := `{"next_id":3,"users":{},"messages":[` +
+		`{"id":1,"type":"P","from":"SP5AAA","to":"SP5BBB","bid":"1_SP5AAA","subject":"P","body":""},` +
+		`{"id":2,"type":"B","from":"SP5AAA","to":"ALL","bid":"2_SP5AAA","subject":"B","body":""}]}`
+	if err := os.WriteFile(p, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms := s.Messages()
+	if ms[0].MID != "1_SP5AAA" || ms[0].BID != "" || ms[1].MID != "2_SP5AAA" || ms[1].BID != "2_SP5AAA" || ms[1].To != "ALL" || ms[1].Distribution != "ALL" {
+		t.Fatalf("migration result: %+v", ms)
+	}
+	raw, err := os.ReadFile(p)
+	if err != nil || !strings.Contains(string(raw), `"schema_version": 2`) {
+		t.Fatalf("migration not persisted: %v %s", err, raw)
 	}
 }
 

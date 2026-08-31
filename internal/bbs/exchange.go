@@ -8,24 +8,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	wl2k "github.com/la5nta/wl2k-go/fbb"
-	"github.com/packet-radio/ultimatepr/internal/language"
 )
-
-// This is the classic, uncompressed FBB forwarding protocol used by packet
-// BBS software. B1F/B2F compression can be negotiated later without changing
-// the queue and message store.
-const fbbSID = "[UltimatePR-0.4.0-BF$]"
-
-type fbbProposal struct {
-	Kind, From, At, To, BID string
-	Size                    int
-}
 
 func (s *Server) RunForward(ctx context.Context, listen string) error {
 	ln, err := net.Listen("tcp", listen)
@@ -55,11 +41,9 @@ func (s *Server) runForwardListener(ctx context.Context, ln net.Listener) error 
 
 func (s *Server) handleForward(c net.Conn) {
 	_ = c.SetDeadline(time.Now().Add(2 * time.Minute))
-	mailbox := newB2FMailbox(s.Store, "", nil)
-	session := wl2k.NewSession(stripSSID(s.Node), "REMOTE", "", mailbox)
-	session.IsMaster(true)
-	configureB2FSession(session)
-	_, _ = session.Exchange(c)
+	if err := s.serveTAPRForward(c); err != nil && s.Log != nil {
+		s.Log.Warn("TAPR BBS forwarding session failed", "error", err)
+	}
 }
 
 type Forwarder struct {
@@ -68,6 +52,7 @@ type Forwarder struct {
 	Interval, ConnectTimeout, SessionTimeout time.Duration
 	MaxMessages                              int
 	LocalCall                                string
+	LocalAddress                             string
 	Log                                      *slog.Logger
 	trigger                                  chan struct{}
 	triggerOnce                              sync.Once
@@ -127,47 +112,10 @@ func (f *Forwarder) forwardPeer(ctx context.Context, p ForwardPeer) error {
 		sessionTimeout = 2 * time.Minute
 	}
 	_ = c.SetDeadline(time.Now().Add(sessionTimeout))
-	mailbox := newB2FMailbox(f.Store, p.ID, q)
-	session := wl2k.NewSession(stripSSID(f.LocalCall), stripSSID(p.Callsign), "", mailbox)
-	configureB2FSession(session)
-	_, err = session.Exchange(c)
-	mailbox.flushResults()
-	return err
+	return f.exchangeTAPRMaster(c, p.ID, q)
 }
 
-func formatFBBProposal(m Message) string {
-	at := m.At
-	if at == "" {
-		at = m.To
-	}
-	return fmt.Sprintf("FB %s %s %s %s %s %d", m.Type, stripSSID(m.From), at, stripSSID(m.To), wireBID(m), len(language.ASCII(m.Body)))
-}
-
-func parseFBBProposal(line string) (fbbProposal, bool) {
-	f := strings.Fields(line)
-	if len(f) != 7 || f[0] != "FB" || (f[1] != "P" && f[1] != "B") || len(f[5]) > 12 {
-		return fbbProposal{}, false
-	}
-	sz, err := strconv.Atoi(f[6])
-	if err != nil || sz < 0 {
-		return fbbProposal{}, false
-	}
-	return fbbProposal{Kind: f[1], From: f[2], At: f[3], To: f[4], BID: f[5], Size: sz}, true
-}
-
-func sendFBBMessage(w io.Writer, m Message, local string) error {
-	if err := writeFBBLine(w, language.ASCII(m.Subject)); err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	rline := fmt.Sprintf("R:%sZ %d@%s UltimatePR", now.Format("060102/1504"), m.ID, stripSSID(local))
-	body := strings.ReplaceAll(language.ASCII(m.Body), "\r\n", "\n")
-	body = strings.ReplaceAll(body, "\n", "\r\n")
-	_, err := io.WriteString(w, rline+"\r\n\r\n"+body+"\r\n\x1a\r")
-	return err
-}
-
-func readUntilCtrlZ(r *bufio.Reader) ([]byte, error) {
+func readUntilTAPREOM(r *bufio.Reader) ([]byte, error) {
 	b, err := r.ReadBytes(0x1a)
 	if err != nil {
 		return nil, err
@@ -178,7 +126,7 @@ func readUntilCtrlZ(r *bufio.Reader) ([]byte, error) {
 		return nil, err
 	}
 	if next != '\r' {
-		return nil, errors.New("FBB message is not terminated by CR")
+		return nil, errors.New("TAPR message is not terminated by CR")
 	}
 	if r.Buffered() > 0 {
 		n, _ := r.Peek(1)
@@ -189,7 +137,7 @@ func readUntilCtrlZ(r *bufio.Reader) ([]byte, error) {
 	return b, nil
 }
 
-func readFBBLine(r *bufio.Reader) (string, error) {
+func readTAPRLine(r *bufio.Reader) (string, error) {
 	s, err := r.ReadString('\r')
 	if err != nil {
 		return "", err
@@ -202,43 +150,15 @@ func readFBBLine(r *bufio.Reader) (string, error) {
 	return strings.TrimSuffix(s, "\r"), nil
 }
 
-func writeFBBLine(w io.Writer, line string) error {
+func writeTAPRLine(w io.Writer, line string) error {
 	_, err := io.WriteString(w, line+"\r")
 	return err
 }
 
-func checksumLine(line string) byte {
-	var sum byte
-	for _, b := range []byte(line + "\r") {
-		sum += b
-	}
-	return sum
-}
-
-func isSID(s string) bool {
-	return strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") && strings.Contains(s, "F")
-}
 func durationOr(v, fallback time.Duration) time.Duration {
 	if v > 0 {
 		return v
 	}
 	return fallback
 }
-func minPositive(v, ceiling int) int {
-	if v < 1 || v > ceiling {
-		return ceiling
-	}
-	return v
-}
 func stripSSID(s string) string { return strings.Split(strings.ToUpper(strings.TrimSpace(s)), "-")[0] }
-func wireBID(m Message) string {
-	bid := strings.ToUpper(strings.TrimSpace(m.BID))
-	if len(bid) > 0 && len(bid) <= 12 && !strings.ContainsAny(bid, " \r\n") {
-		return bid
-	}
-	bid = fmt.Sprintf("%d_%s", m.ID, stripSSID(m.From))
-	if len(bid) > 12 {
-		bid = bid[:12]
-	}
-	return bid
-}

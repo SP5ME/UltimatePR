@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	bbscore "github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/netallow"
 	"gopkg.in/yaml.v3"
 )
@@ -582,10 +583,18 @@ func (c Config) Validate() error {
 			if _, _, err := net.SplitHostPort(c.BBS.ForwardListen); err != nil {
 				return fmt.Errorf("bbs.forward_listen: %w", err)
 			}
+			if strings.TrimSpace(c.BBS.Address) == "" {
+				return fmt.Errorf("bbs.hierarchical_address is required for TAPR forwarding")
+			}
 		}
 		if c.BBS.Callsign != "" {
 			if err := validStation(Station{Callsign: c.BBS.Callsign, SSID: c.BBS.SSID}); err != nil {
 				return fmt.Errorf("bbs: %w", err)
+			}
+		}
+		if strings.TrimSpace(c.BBS.Address) != "" {
+			if _, err := bbscore.ParseHierarchicalAddress(c.BBS.Address); err != nil {
+				return fmt.Errorf("bbs.hierarchical_address: %w", err)
 			}
 		}
 		for i, p := range c.BBS.Forwarding.Peers {
@@ -597,6 +606,13 @@ func (c Config) Validate() error {
 			}
 			if p.Transport == "telnet" && (p.Host == "" || p.Port == 0) {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: host and port required", i)
+			}
+			for j, scope := range p.BulletinScopes {
+				if scope != "*" {
+					if _, err := bbscore.ParseDistributionDesignator(scope); err != nil {
+						return fmt.Errorf("bbs.forwarding.peers[%d].bulletin_scopes[%d]: %w", i, j, err)
+					}
+				}
 			}
 		}
 	}

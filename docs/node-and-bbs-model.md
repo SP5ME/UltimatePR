@@ -2,9 +2,10 @@
 
 ## Rozdzielenie odpowiedzialności
 
-Node jest routerem AX.25. Zarządza portami (KISS/AXUDP), bezpośrednimi
+Node jest powłoką usługową AX.25. Zarządza portami (KISS/AXUDP), bezpośrednimi
 sąsiadami, trasami oraz lokalnymi usługami. BBS jest jedną z usług noda i
-zarządza użytkownikami, pocztą, BID, adresami hierarchicznymi oraz forwardingiem.
+zarządza użytkownikami, pocztą, MID/BID, adresami hierarchicznymi oraz
+forwardingiem. Pełna warstwa sieciowa NET/ROM pozostaje osobnym etapem.
 
 Łącze AXUDP nie jest forwardingiem poczty. Tworzy jedynie drogę dla ramek:
 
@@ -24,8 +25,13 @@ operatorzy muszą uzgodnić rzeczywisty port i oba kierunki połączenia.
 
 ## Poczta i forwarding
 
-Prywatny adres ma postać `CALL@BBS.HA`. Biuletyn używa obszaru, np. `POL` lub
-`EU`. Każda nowa wiadomość otrzymuje unikalny BID. Partner forwardingu posiada:
+Prywatny adres ma postać `CALL@BBS.[#AREA.][REGION.]COUNTRY.CONTINENT`, np.
+`SP5ME@SP5AAA.#PL.POL.EURO`. Biuletyn przechowuje oddzielnie kategorię i
+designator dystrybucji, np. `ALL@POL`.
+
+Każda lokalna instancja wiadomości ma MID. Biuletyn ma ponadto niezmienny BID,
+który służy do blokowania duplikatów. Prywatna wiadomość do konkretnej stacji
+nie otrzymuje automatycznego BID. Partner forwardingu posiada:
 
 - transport `node` albo bezpośredni `telnet`;
 - znak BBS i opcjonalny węzeł pośredni;
@@ -33,15 +39,17 @@ Prywatny adres ma postać `CALL@BBS.HA`. Biuletyn używa obszaru, np. `POL` lub
 - trasy prywatne i obszary biuletynów;
 - limity sesji i wielkości danych.
 
-Planner wybiera wiadomości do kolejki partnera. Warstwa protokołu przesyłania
-pozostaje osobna. Obecnie używa nieskompresowanego FBB; kompresję B1F/B2F można
-dodać bez zmiany routingu i magazynu wiadomości.
+Planner wybiera wiadomości do kolejki partnera. Warstwa przesyłania implementuje
+klasyczny protokół TAPR BBS: SID z cechami `H$`, `SP`/`SB`, `OK`/`NO`, nagłówki
+`R:`, zakończenie Ctrl-Z oraz zmianę kierunku `F>`. Forwarding wymaga pełnego
+lokalnego adresu hierarchicznego TAPR.
 
 ## Stan implementacji
 
 - gotowe: konfiguracja noda/BBS, statyczne rozwiązywanie tras, AXUDP z FCS i
-  allowlistą, BID, adres `CALL@BBS`, wybór wiadomości dla partnerów;
-- następne: wielosesyjny node przychodzący, NET/ROM, trwałe stany kolejek,
-  protokół forwardingowy i panel konfiguracji;
+  allowlistą, osobne MID/BID, parser x.3.4, designatory dystrybucji, wybór
+  wiadomości oraz klasyczny forwarding TAPR;
+- następne: uwierzytelnianie partnerów, pełne reverse forwarding,
+  wielosesyjny node przychodzący, NET/ROM i panel konfiguracji;
 - nieaktywne domyślnie: przykładowe łącze i partner SR5DDD. Wymagają prawdziwych
   parametrów uzgodnionych z jego operatorem.

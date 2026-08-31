@@ -495,7 +495,7 @@ func main() {
 			}
 			planner := &bbs.QueuePlanner{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, MaxPerPeer: cfg.BBS.Forwarding.MaxMessages, Log: log}
 			go planner.Run(ctx)
-			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, LocalCall: bbsServer.Node, Log: log}
+			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, LocalCall: bbsServer.Node, LocalAddress: bbsServer.Address, Log: log}
 			bbsServer.OnMessage = forwarder.Trigger
 			go forwarder.Run(ctx)
 			go func() {

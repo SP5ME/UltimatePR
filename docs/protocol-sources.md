@@ -86,17 +86,23 @@ Several implementations use local conventions for peer addressing and optional
 headers. No wire format will be implemented until a specific interoperability
 target and public format are documented.
 
-## FBB forwarding
+## TAPR BBS forwarding
 
-The direct BBS forwarding port implements open B2F with SID capability
-negotiation, `FC` proposal blocks, `F>` checksums, `FS` selection, LZHUF
-compression and `FF`/`FQ` reverse-forwarding turns. The implementation uses
-the MIT-licensed `wl2k-go` protocol and codec package and is adapted to the
-UltimatePR store and routing layer. Primary specifications:
+The authoritative source is the TAPR BBS SIG archive:
 
-- https://www.f6fbb.org/protocole.html
-- https://www.winlink.org/B2F
+- https://tapr.org/ftp-archive/?drawer=bbssig*recommendations
+- `BBS Specification` / `bbs_spec.doc`
+- `BBS Hierarchical Addressing Protocol` / `hierarchical`
 
-`pyBBS` FWD1 is explicitly not treated as FBB. Classical ASCII/B0/B1 fallback,
-secure `;PQ`/`;PR` login and cross-implementation LinBPQ transcripts remain
-explicit interoperability gates before external-network release.
+The direct forwarding port implements the classical TAPR exchange. Both sides
+send a SID; UltimatePR advertises the required hierarchical-address and BID
+features as `H$`. A master submits `SP` or `SB`; the slave answers `OK` or `NO`.
+Accepted messages contain a subject, `R:` routing headers, a blank line, body,
+and Ctrl-Z end marker. `F>` ends the sending turn. A duplicate bulletin BID is
+answered with `NO` and is treated by the sender as already delivered.
+
+The persistence model follows TAPR terminology: MID identifies a local message
+instance, while BID identifies bulletin content across BBS instances. TAPR
+x.3.4 hierarchical addresses and bulletin distribution designators are parsed
+as different types. B2F/Winlink and private FWD1 are not protocol authorities
+for this implementation.

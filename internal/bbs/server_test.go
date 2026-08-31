@@ -54,11 +54,11 @@ func TestNewReadReplyAndSentCommands(t *testing.T) {
 func TestProfilePersistsAndHomeBBSChanges(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bbs.json")
 	store, _ := Open(path)
-	s := &Server{Title: "BBS", Node: "SP5AAA-8", Address: "SP5AAA.#PL.POL.EU", Language: "en", Store: store}
+	s := &Server{Title: "BBS", Node: "SP5AAA-8", Address: "SP5AAA.#PL.POL.EURO", Language: "en", Store: store}
 	var out bytes.Buffer
-	s.Serve(strings.NewReader("SP5ME\nMike\n\nWarsaw\nKO02MF\nHOMEBBS SR5DDD.#PL.POL.EU\nPROFILE\nB\n"), &out)
+	s.Serve(strings.NewReader("SP5ME\nMike\n\nWarsaw\nKO02MF\nHOMEBBS SR5DDD.#PL.POL.EURO\nPROFILE\nB\n"), &out)
 	p, ok := store.Profile("SP5ME")
-	if !ok || !p.Completed || p.Name != "Mike" || p.HomeBBS != "SR5DDD.#PL.POL.EU" || p.Locator != "KO02MF" {
+	if !ok || !p.Completed || p.Name != "Mike" || p.HomeBBS != "SR5DDD.#PL.POL.EURO" || p.Locator != "KO02MF" {
 		t.Fatalf("bad profile: %+v", p)
 	}
 	if !strings.Contains(out.String(), "type SKIP to skip") {
@@ -66,7 +66,7 @@ func TestProfilePersistsAndHomeBBSChanges(t *testing.T) {
 	}
 	var second bytes.Buffer
 	s.Serve(strings.NewReader("SP5ME\nPROFILE\nB\n"), &second)
-	if strings.Contains(second.String(), "First connection") || !strings.Contains(second.String(), "Home BBS: SR5DDD.#PL.POL.EU") {
+	if strings.Contains(second.String(), "First connection") || !strings.Contains(second.String(), "Home BBS: SR5DDD.#PL.POL.EURO") {
 		t.Fatalf("second login: %s", second.String())
 	}
 }
@@ -87,12 +87,12 @@ func TestProfileOptionalFieldsAcceptSkip(t *testing.T) {
 
 func TestHomeBBSExpandsRecipient(t *testing.T) {
 	store, _ := Open(filepath.Join(t.TempDir(), "bbs.json"))
-	_ = store.SaveProfile(UserProfile{Callsign: "SQ9MDD", Name: "Tom", HomeBBS: "SR5DDD.#PL.POL.EU", Completed: true})
-	s := &Server{Title: "BBS", Node: "SP5AAA-8", Address: "SP5AAA.#PL.POL.EU", Language: "en", Store: store}
+	_ = store.SaveProfile(UserProfile{Callsign: "SQ9MDD", Name: "Tom", HomeBBS: "SR5DDD.#PL.POL.EURO", Completed: true})
+	s := &Server{Title: "BBS", Node: "SP5AAA-8", Address: "SP5AAA.#PL.POL.EURO", Language: "en", Store: store}
 	var out bytes.Buffer
 	s.Serve(strings.NewReader("SP5ME\nMike\n\nWarsaw\nKO02\nS SQ9MDD\nTest\nBody\n/EX\nB\n"), &out)
 	ms := store.Messages()
-	if len(ms) != 1 || ms[0].To != "SQ9MDD" || ms[0].At != "SR5DDD.#PL.POL.EU" {
+	if len(ms) != 1 || ms[0].To != "SQ9MDD" || ms[0].At != "SR5DDD.#PL.POL.EURO" {
 		t.Fatalf("address not expanded: %+v", ms)
 	}
 }

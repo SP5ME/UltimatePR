@@ -16,7 +16,7 @@ func TestNodeEntersBBSAndReturns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.SaveProfile(bbs.UserProfile{Callsign: "SP5AAA", Name: "Test", HomeBBS: "SP5ABC-8", Language: "en", Completed: true}); err != nil {
+	if err = store.SaveProfile(bbs.UserProfile{Callsign: "SP5AAA", Name: "Test", HomeBBS: "SP5ABC.#PL.POL.EURO", Language: "en", Completed: true}); err != nil {
 		t.Fatal(err)
 	}
 	mail := &bbs.Server{Title: "Test BBS", Node: "SP5ABC-8", Language: "en", Store: store, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}

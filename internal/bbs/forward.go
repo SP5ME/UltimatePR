@@ -18,7 +18,7 @@ type ForwardItem struct {
 	Message Message
 }
 
-// PlanForwarding selects messages for each peer. Transmission and FBB protocol
+// PlanForwarding selects messages for each peer. Transmission and TAPR protocol
 // negotiation stay separate from routing and persistence.
 func PlanForwarding(messages []Message, peers []ForwardPeer, maxPerPeer int) []ForwardItem {
 	if maxPerPeer < 1 {
@@ -87,7 +87,7 @@ func (q *QueuePlanner) Run(ctx context.Context) {
 	}
 }
 func matchesPeer(m Message, p ForwardPeer) bool {
-	if m.Type == "P" {
+	if m.Type == "P" || m.Type == "T" {
 		dest := strings.ToUpper(m.At)
 		if dest == "" {
 			dest = strings.ToUpper(m.To)
@@ -95,7 +95,7 @@ func matchesPeer(m Message, p ForwardPeer) bool {
 		return matches(dest, p.PrivateRoutes)
 	}
 	if m.Type == "B" {
-		return matches(strings.ToUpper(m.To), p.BulletinScopes)
+		return matches(strings.ToUpper(m.Distribution), p.BulletinScopes)
 	}
 	return false
 }
