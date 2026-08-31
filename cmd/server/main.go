@@ -24,6 +24,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/config"
 	"github.com/packet-radio/ultimatepr/internal/digipeater"
+	"github.com/packet-radio/ultimatepr/internal/gamehall"
 	"github.com/packet-radio/ultimatepr/internal/history"
 	"github.com/packet-radio/ultimatepr/internal/lineinput"
 	"github.com/packet-radio/ultimatepr/internal/mheard"
@@ -62,6 +63,7 @@ func main() {
 	nodeEnabled := cfg.Experimental.Services && cfg.Node.Enabled
 	bbsEnabled := cfg.Experimental.Services && cfg.BBS.Enabled
 	aiEnabled := cfg.Experimental.Services && cfg.AI.Enabled
+	gameHallEnabled := cfg.Experimental.Services && cfg.GameHall.Enabled
 	// UPRD has its own visible configuration switch. The legacy experimental
 	// flag gates the optional map, not status generation or transmission.
 	uprdEnabled := cfg.UPRD.Enabled
@@ -82,6 +84,9 @@ func main() {
 	if aiEnabled {
 		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID})
 	}
+	if gameHallEnabled {
+		digiAliases = append(digiAliases, ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID})
+	}
 	ownCalls := map[string]struct{}{
 		ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(): {},
 	}
@@ -90,6 +95,9 @@ func main() {
 	}
 	if aiEnabled {
 		ownCalls[ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()] = struct{}{}
+	}
+	if gameHallEnabled {
+		ownCalls[ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String()] = struct{}{}
 	}
 	isOwnCallsign := func(call string) bool {
 		_, ok := ownCalls[strings.ToUpper(strings.TrimSpace(call))]
@@ -206,7 +214,7 @@ func main() {
 			}
 			routes = append(routes, nodecore.Route{Destination: r.Destination, Via: r.Via, Quality: r.Quality})
 		}
-		services := make([]nodecore.Service, 0, len(cfg.Node.Services)+2)
+		services := make([]nodecore.Service, 0, len(cfg.Node.Services)+3)
 		for _, s := range cfg.Node.Services {
 			services = append(services, nodecore.Service{Name: s.Name, Callsign: s.Callsign, Command: s.Command, Enabled: s.Enabled})
 		}
@@ -215,6 +223,9 @@ func main() {
 		}
 		if aiEnabled {
 			services = append(services, nodecore.Service{Name: "AI Assistant", Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String(), Command: "AI", Enabled: true})
+		}
+		if gameHallEnabled {
+			services = append(services, nodecore.Service{Name: "Game Hall", Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String(), Command: "GAME", Enabled: true})
 		}
 		nodeRouter = nodecore.New(neighbors, routes, services)
 		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(services))
@@ -525,10 +536,19 @@ func main() {
 		})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
 	}
+	var gameHall *gamehall.Hall
+	if gameHallEnabled {
+		gameHall = gamehall.New(time.Duration(cfg.GameHall.InviteTimeoutSeconds) * time.Second)
+		inbound.Register(ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, func(call string, r io.Reader, w io.Writer) { gameHall.ServeAX25(call, cfg.GameHall.Language, r, w) })
+		log.Info("game hall service enabled", "callsign", ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String())
+	}
 	if nodeEnabled {
 		handlers := map[string]func(string, string, *bufio.Scanner, io.Writer){}
 		if aiServer != nil {
 			handlers["AI"] = aiServer.ServeSession
+		}
+		if gameHall != nil {
+			handlers["GAME"] = gameHall.Serve
 		}
 		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, WelcomeMessage: cfg.Node.WelcomeMessage, GoodbyeMessage: cfg.Node.GoodbyeMessage, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
 		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)

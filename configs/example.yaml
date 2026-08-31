@@ -94,3 +94,9 @@ ai:
   goodbye_message: "73 {REMOTE}, AI {CALL}."
   queue_size: 8
   concurrency: 1
+game_hall:
+  enabled: false
+  callsign: N0CALL
+  ssid: 14
+  language: en
+  invite_timeout_seconds: 120

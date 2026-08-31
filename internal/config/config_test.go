@@ -8,6 +8,33 @@ import (
 	"testing"
 )
 
+func TestGameHallConfigurationAndSSIDZero(t *testing.T) {
+	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\nexperimental: {services: true}\ngame_hall: {enabled: true, callsign: SP5ME, ssid: 0, language: en, invite_timeout_seconds: 60}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.GameHall.Enabled || c.GameHall.SSID != 0 || c.GameHall.Callsign != "SP5ME" || c.GameHall.Language != "en" {
+		t.Fatalf("game hall configuration was not preserved: %+v", c.GameHall)
+	}
+}
+
+func TestGameHallRejectsInvalidTimeout(t *testing.T) {
+	_, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\nexperimental: {services: true}\ngame_hall: {enabled: true, callsign: SP5ME, ssid: 14, language: pl, invite_timeout_seconds: 5}\n"))
+	if err == nil {
+		t.Fatal("invalid invitation timeout was accepted")
+	}
+}
+
+func TestGameHallSSIDDefaultsOnlyWhenOmitted(t *testing.T) {
+	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {listen: 127.0.0.1:8080}\ngame_hall: {enabled: false}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.GameHall.SSID != 14 {
+		t.Fatalf("default SSID=%d", c.GameHall.SSID)
+	}
+}
+
 func TestWebDefaultsAndPasswordHashIsPrivate(t *testing.T) {
 	c, err := Parse([]byte("server: {callsign: SP5ME}\nterminal: {callsign: SP5ME}\nweb: {}\n"))
 	if err != nil {

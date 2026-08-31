@@ -91,6 +91,13 @@ type AI struct {
 	ProcessingMessage string `yaml:"processing_message"`
 	GoodbyeMessage    string `yaml:"goodbye_message"`
 }
+type GameHall struct {
+	Enabled              bool   `yaml:"enabled"`
+	Callsign             string `yaml:"callsign"`
+	SSID                 uint8  `yaml:"ssid"`
+	Language             string `yaml:"language"`
+	InviteTimeoutSeconds int    `yaml:"invite_timeout_seconds"`
+}
 type History struct {
 	Enabled               bool   `yaml:"enabled"`
 	Database              string `yaml:"database"`
@@ -204,6 +211,7 @@ type Config struct {
 	BBS          BBS          `yaml:"bbs"`
 	Node         Node         `yaml:"node"`
 	AI           AI           `yaml:"ai"`
+	GameHall     GameHall     `yaml:"game_hall"`
 }
 
 func Load(path string) (Config, error) {
@@ -221,16 +229,19 @@ func Parse(b []byte) (Config, error) {
 	}
 	var presence struct {
 		Experimental *yaml.Node `yaml:"experimental"`
+		GameHall     *struct {
+			SSID *uint8 `yaml:"ssid"`
+		} `yaml:"game_hall"`
 	}
 	_ = yaml.Unmarshal(b, &presence)
-	c.applyDefaults(presence.Experimental != nil)
+	c.applyDefaults(presence.Experimental != nil, presence.GameHall != nil && presence.GameHall.SSID != nil)
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
 	return c, nil
 }
 
-func (c *Config) applyDefaults(hasExperimental bool) {
+func (c *Config) applyDefaults(hasExperimental, hasGameHallSSID bool) {
 	if !hasExperimental {
 		c.Experimental = Experimental{UPRD: c.UPRD.Enabled, Map: c.UPRD.Enabled, Node: c.Node.Enabled, BBS: c.BBS.Enabled}
 	}
@@ -306,6 +317,18 @@ func (c *Config) applyDefaults(hasExperimental bool) {
 	c.applyTerminalMessageDefaults()
 	if strings.TrimSpace(c.AI.Callsign) == "" {
 		c.AI.Callsign = c.Terminal.Callsign
+	}
+	if strings.TrimSpace(c.GameHall.Callsign) == "" {
+		c.GameHall.Callsign = c.Terminal.Callsign
+	}
+	if !hasGameHallSSID {
+		c.GameHall.SSID = 14
+	}
+	if !validLanguage(c.GameHall.Language) {
+		c.GameHall.Language = c.Application.Language
+	}
+	if c.GameHall.InviteTimeoutSeconds == 0 {
+		c.GameHall.InviteTimeoutSeconds = 120
 	}
 	if c.AI.SSID == 0 {
 		c.AI.SSID = 12
@@ -497,6 +520,17 @@ func (c Config) Validate() error {
 		}
 		if c.AI.TimeoutSeconds < 1 || c.AI.MaxResponseChars < 1 || c.AI.MaxContext < 1 || c.AI.QueueSize < 1 || c.AI.Concurrency < 1 {
 			return fmt.Errorf("ai: timeout and limits must be positive")
+		}
+	}
+	if c.Experimental.Services && c.GameHall.Enabled {
+		if err := validStation(Station{Callsign: c.GameHall.Callsign, SSID: c.GameHall.SSID}); err != nil {
+			return fmt.Errorf("game_hall: %w", err)
+		}
+		if !validLanguage(c.GameHall.Language) {
+			return fmt.Errorf("game_hall.language must be pl or en")
+		}
+		if c.GameHall.InviteTimeoutSeconds < 10 || c.GameHall.InviteTimeoutSeconds > 3600 {
+			return fmt.Errorf("game_hall.invite_timeout_seconds must be 10..3600")
 		}
 	}
 	seen := map[string]bool{}

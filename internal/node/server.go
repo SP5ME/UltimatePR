@@ -121,7 +121,7 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, w io.Writer) {
 			}
 		case "S", "SERVICES":
 			s.services(w)
-		case "BBS", "AI":
+		case "BBS", "AI", "GAME":
 			if !s.runService(cmd, call, lang, in, w) {
 				fmt.Fprint(w, language.T(lang, "bbs_unavailable"))
 			}
