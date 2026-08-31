@@ -238,3 +238,28 @@ const monitorRange=$('monitorExportRange'),monitorCustomRange=$('monitorCustomRa
 $('beaconTextDefault')?.addEventListener('click',()=>{$('beaconText').value='{LOC}'});
 function toggleServiceCard(header){const button=header.querySelector('.service-toggle'),body=$(header.dataset.controls),expanded=button?.getAttribute('aria-expanded')==='true';button?.setAttribute('aria-expanded',String(!expanded));if(body)body.hidden=expanded;if(button)button.title=(expanded?'Rozwiń':'Zwiń')+' ustawienia usługi'}document.querySelectorAll('.service-config-header').forEach(header=>header.addEventListener('click',event=>{if(event.target.matches('input[type=checkbox]'))return;toggleServiceCard(header)}));
 uiReverseTranslations.Beacon='Beacon';applyUILanguage(uiLanguage);
+Object.assign(updateTextTranslations,{'Czekam na zamknięcie aktywnych sesji':'Waiting for active sessions to close','Rozłączanie aktywnych sesji przed aktualizacją.':'Disconnecting active sessions before the update.','Nie udało się zamknąć wszystkich aktywnych sesji. Aktualizacja nie została uruchomiona.':'Unable to close all active sessions. The update was not started.'});
+const updateConnectedStates=new Set(['connecting','awaiting_connection','connected','sending','timer_recovery','awaiting_release']);
+const activeUpdateSessions=()=>[...sessions.values()].filter(session=>updateConnectedStates.has(session.state)&&session.ws?.readyState<2);
+const waitForUpdateSessionsToClose=async()=>{
+  const active=activeUpdateSessions();
+  if(!active.length)return true;
+  const waiting='Czekam na zamknięcie aktywnych sesji';
+  renderUpdateProgress({status:'running',stage:waiting,progress:'1',message:'Rozłączanie aktywnych sesji przed aktualizacją.'});
+  $('updateState').textContent=translateUpdateForCurrentLanguage(waiting);
+  active.forEach(session=>closeSession(session));
+  const deadline=Date.now()+60000;
+  while(activeUpdateSessions().length&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,100));
+  if(!activeUpdateSessions().length)return true;
+  showUpdateProgress(false);
+  $('updateState').textContent=translateUpdateForCurrentLanguage('Nie udało się zamknąć wszystkich aktywnych sesji. Aktualizacja nie została uruchomiona.');
+  return false;
+};
+$('applyUpdate').onclick=async()=>{
+  const channel=$('updateChannel')?.value||'main';
+  if(!await showAppConfirm(`Zaktualizować UltimatePR z kanału ${channel}? Konfiguracja zostanie zachowana.`))return;
+  if(!await waitForUpdateSessionsToClose())return;
+  const originalConfirm=window.confirm;
+  window.confirm=()=>true;
+  try{return await applyUpdateCurrent()}finally{window.confirm=originalConfirm;localizeUpdateNodesCurrent()}
+};

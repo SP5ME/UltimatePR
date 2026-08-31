@@ -16,6 +16,8 @@
 
 ### Changed
 
+- Application updates now disconnect all active terminal sessions first and start the updater only after they have closed successfully.
+- Standardized the remaining configuration tabs with the collapsible card layout used by the `Services` tab while preserving the existing tab structure, content, and settings behavior.
 - Changed `main` and `dev` package versioning to `MAJOR.MINOR.BUILD-CHANNEL+SHA`; the final numeric component increases with every pushed commit.
 - Separated the manual classic beacon button from automatic UPRD; both mechanisms can operate independently.
 - Moved beacon settings to a dedicated `Beacon` tab; closing History now expands the new-connection bar.

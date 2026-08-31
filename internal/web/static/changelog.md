@@ -16,6 +16,8 @@
 
 ### Changed
 
+- Aktualizacja aplikacji najpierw rozłącza wszystkie aktywne sesje terminala i uruchamia aktualizator dopiero po ich pomyślnym zamknięciu.
+- Ujednolicono wygląd pozostałych zakładek konfiguracji ze zwijanymi kartami znanymi z zakładki `Usługi`, zachowując dotychczasowy podział, zawartość i funkcjonalność ustawień.
 - Zmieniono wersjonowanie pakietów `main` i `dev` na `MAJOR.MINOR.BUILD-KANAŁ+SHA`; ostatni liczbowy człon rośnie z każdym wypchniętym commitem.
 - Rozdzielono ręczny przycisk klasycznego beaconu od automatycznego UPRD; oba mechanizmy mogą działać niezależnie.
 - Przeniesiono ustawienia beaconu do osobnej zakładki `Beacon`, a zamknięcie Historii rozszerza pasek nowego połączenia.
