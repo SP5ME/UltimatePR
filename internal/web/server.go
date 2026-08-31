@@ -70,6 +70,7 @@ type Config struct {
 	Ports              []string
 	PortStatus         func() []transport.Status
 	NodeEnabled        bool
+	NodeListen         string
 	Radio              *session.Hub
 	MHeard             *mheard.Store
 	History            *history.Store
@@ -1299,6 +1300,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)
 			localAI := callsign(s.cfg.AICallsign, s.cfg.AISSID)
 			localGameHall := callsign(s.cfg.GameHallCallsign, s.cfg.GameHallSSID)
+			if m.Mode == "node" && !s.cfg.NodeEnabled {
+				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Lokalny NODE jest wyłączony."})
+				continue
+			}
 			if m.Mode == "tnc" && s.cfg.BBSListen != "" && strings.EqualFold(strings.TrimSpace(m.Target), localBBS) {
 				m.Mode = "bbs"
 			}
@@ -1442,6 +1447,29 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				done := remoteDone
 				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localGameHall + "\r\n"})
 				go s.copyTelnetToWS(out, conn, done, "game_hall", historyStation, historyPort, historySession)
+				continue
+			}
+			if m.Mode == "node" {
+				if strings.TrimSpace(s.cfg.NodeListen) == "" {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Adres lokalnego NODE nie jest skonfigurowany."})
+					continue
+				}
+				dialCtx, dialCancel := context.WithTimeout(r.Context(), 8*time.Second)
+				conn, err := (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext(dialCtx, "tcp", s.cfg.NodeListen)
+				dialCancel()
+				if err != nil {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Połączenie z lokalnym NODE nieudane: " + err.Error()})
+					continue
+				}
+				remote = conn
+				historyStation, historyPort, historyDigi, historyConnected = "Lokalny NODE", s.cfg.NodeListen, "", true
+				if s.cfg.History != nil {
+					historySession = s.cfg.History.Connected("node", historyStation, historyPort, "")
+				}
+				remoteDone = make(chan struct{})
+				done := remoteDone
+				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Połączono lokalnie z NODE\r\n"})
+				go s.copyTelnetToWS(out, conn, done, "node", historyStation, historyPort, historySession)
 				continue
 			}
 			if m.Mode != "bbs" {

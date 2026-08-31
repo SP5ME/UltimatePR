@@ -607,6 +607,7 @@ func main() {
 		AX25T3:             time.Duration(cfg.Application.AX25T3Seconds) * time.Second,
 		Ports:              portIDs,
 		NodeEnabled:        nodeEnabled,
+		NodeListen:         cfg.Node.Listen,
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {
