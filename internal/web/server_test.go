@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +41,36 @@ func TestConfigRestartRequired(t *testing.T) {
 	}
 }
 
+func TestConfigModelPutPersistsGameHallToggle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	c := appconfig.New(appconfig.ModeStation, "SP5ME", "", "", "pl", 0, 2, 8)
+	if err := appconfig.SaveModel(path, c); err != nil {
+		t.Fatal(err)
+	}
+	c.GameHall.Enabled = true
+	c.GameHall.Callsign = "SP5ME"
+	c.GameHall.SSID = 14
+	c.GameHall.Language = "pl"
+	c.GameHall.InviteTimeoutSeconds = 120
+	body, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{ConfigPath: path}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	recorder := httptest.NewRecorder()
+	s.configModelPut(recorder, httptest.NewRequest(http.MethodPut, "/api/config/model", bytes.NewReader(body)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	saved, err := appconfig.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.GameHall.Enabled || saved.GameHall.Callsign != "SP5ME" || saved.GameHall.SSID != 14 {
+		t.Fatalf("saved Game Hall=%+v", saved.GameHall)
+	}
+}
+
 func TestStatusReportsDirectAIService(t *testing.T) {
 	s := New(Config{AICallsign: "SP5ME", AISSID: 12, AIEnabled: true}, nil)
 	recorder := httptest.NewRecorder()
@@ -49,6 +81,19 @@ func TestStatusReportsDirectAIService(t *testing.T) {
 	}
 	if status["ai"] != "SP5ME-12" || status["ai_enabled"] != true {
 		t.Fatalf("AI status=%v", status)
+	}
+}
+
+func TestStatusReportsGameHallService(t *testing.T) {
+	s := New(Config{GameHallCallsign: "SP5ME", GameHallSSID: 14, GameHallEnabled: true}, nil)
+	recorder := httptest.NewRecorder()
+	s.status(recorder, httptest.NewRequest("GET", "/api/status", nil))
+	var status map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status["game_hall"] != "SP5ME-14" || status["game_hall_enabled"] != true {
+		t.Fatalf("Game Hall status=%v", status)
 	}
 }
 

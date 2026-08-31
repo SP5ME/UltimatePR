@@ -410,6 +410,9 @@ func main() {
 		AICallsign:       cfg.AI.Callsign,
 		AISSID:           cfg.AI.SSID,
 		AIEnabled:        aiEnabled,
+		GameHallCallsign: cfg.GameHall.Callsign,
+		GameHallSSID:     cfg.GameHall.SSID,
+		GameHallEnabled:  gameHallEnabled,
 		AIConnect: func() (net.Conn, error) {
 			if aiServer == nil {
 				return nil, fmt.Errorf("AI service is not running")
