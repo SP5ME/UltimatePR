@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
 	neturl "net/url"
@@ -26,7 +27,7 @@ type Web struct {
 }
 type API struct {
 	Enabled bool       `yaml:"enabled"`
-	Tokens  []APIToken `yaml:"tokens,omitempty"`
+	Tokens  []APIToken `yaml:"tokens,omitempty" json:"-"`
 }
 type APIToken struct {
 	Name   string   `yaml:"name"`
@@ -108,19 +109,30 @@ type History struct {
 	RetentionDays         int    `yaml:"retention_days"`
 }
 type BBS struct {
-	Enabled        bool          `yaml:"enabled"`
-	Listen         string        `yaml:"listen"`
-	ForwardListen  string        `yaml:"forward_listen"`
-	Database       string        `yaml:"database"`
-	Title          string        `yaml:"title"`
-	Callsign       string        `yaml:"callsign"`
-	SSID           uint8         `yaml:"ssid"`
-	Address        string        `yaml:"hierarchical_address"`
-	Language       string        `yaml:"language"`
-	BeaconVia      string        `yaml:"beacon_via,omitempty"`
-	Forwarding     BBSForwarding `yaml:"forwarding"`
-	WelcomeMessage string        `yaml:"welcome_message"`
-	GoodbyeMessage string        `yaml:"goodbye_message"`
+	Enabled        bool            `yaml:"enabled"`
+	Listen         string          `yaml:"listen"`
+	ForwardListen  string          `yaml:"forward_listen"`
+	Database       string          `yaml:"database"`
+	Title          string          `yaml:"title"`
+	Callsign       string          `yaml:"callsign"`
+	SSID           uint8           `yaml:"ssid"`
+	SysopCallsign  string          `yaml:"sysop_callsign,omitempty"`
+	Address        string          `yaml:"hierarchical_address"`
+	Language       string          `yaml:"language"`
+	MaxSessions    int             `yaml:"max_sessions"`
+	BeaconVia      string          `yaml:"beacon_via,omitempty"`
+	Forwarding     BBSForwarding   `yaml:"forwarding"`
+	Housekeeping   BBSHousekeeping `yaml:"housekeeping"`
+	WelcomeMessage string          `yaml:"welcome_message"`
+	NewUserMessage string          `yaml:"new_user_message"`
+	InfoMessage    string          `yaml:"info_message"`
+	Prompt         string          `yaml:"prompt"`
+	GoodbyeMessage string          `yaml:"goodbye_message"`
+}
+type BBSHousekeeping struct {
+	BulletinRetentionDays int `yaml:"bulletin_retention_days"`
+	PersonalRetentionDays int `yaml:"personal_retention_days"`
+	LogRetentionDays      int `yaml:"log_retention_days"`
 }
 type BBSForwarding struct {
 	Enabled               bool      `yaml:"enabled"`
@@ -132,16 +144,23 @@ type BBSForwarding struct {
 	Peers                 []BBSPeer `yaml:"peers"`
 }
 type BBSPeer struct {
-	ID             string   `yaml:"id"`
-	Callsign       string   `yaml:"callsign"`
-	Enabled        bool     `yaml:"enabled"`
-	Transport      string   `yaml:"transport"`
-	Host           string   `yaml:"host"`
-	Port           uint16   `yaml:"port"`
-	ViaNode        string   `yaml:"via_node"`
-	Schedule       []string `yaml:"schedule"`
-	PrivateRoutes  []string `yaml:"private_routes"`
-	BulletinScopes []string `yaml:"bulletin_scopes"`
+	ID                  string   `yaml:"id"`
+	Callsign            string   `yaml:"callsign"`
+	SSID                uint8    `yaml:"ssid"`
+	Address             string   `yaml:"hierarchical_address"`
+	Enabled             bool     `yaml:"enabled"`
+	Send                *bool    `yaml:"send,omitempty"`
+	Receive             *bool    `yaml:"receive,omitempty"`
+	Transport           string   `yaml:"transport"` // legacy: telnet or node
+	Host                string   `yaml:"host"`      // legacy TCP host
+	Port                uint16   `yaml:"port"`      // legacy TCP port
+	ViaNode             string   `yaml:"via_node"`  // legacy node route
+	Schedule            []string `yaml:"schedule"`
+	PrivateRoutes       []string `yaml:"private_routes"`
+	BulletinScopes      []string `yaml:"bulletin_scopes"`
+	ToCalls             []string `yaml:"to_calls"`
+	AtCalls             []string `yaml:"at_calls"`
+	HierarchicalRoutes  []string `yaml:"hierarchical_routes"`
 }
 type Node struct {
 	Enabled        bool           `yaml:"enabled"`
@@ -366,6 +385,30 @@ func (c *Config) applyDefaults(hasExperimental, hasGameHallSSID bool) {
 	if strings.TrimSpace(c.BBS.WelcomeMessage) == "" {
 		c.BBS.WelcomeMessage = "Witaj {REMOTE} w BBS {CALL}.\r\nTutaj mozesz czytac, wysylac i przekazywac wiadomosci packet radio. Wpisz H, aby zobaczyc pomoc."
 	}
+	if strings.TrimSpace(c.BBS.SysopCallsign) == "" {
+		c.BBS.SysopCallsign = c.BBS.Callsign
+	}
+	if c.BBS.MaxSessions == 0 {
+		c.BBS.MaxSessions = 10
+	}
+	if strings.TrimSpace(c.BBS.NewUserMessage) == "" {
+		c.BBS.NewUserMessage = "Witaj nowy uzytkowniku. Uzupelnij profil, aby korzystac z BBS."
+	}
+	if strings.TrimSpace(c.BBS.InfoMessage) == "" {
+		c.BBS.InfoMessage = "{TITLE} [{CALL}]\r\nSYSOP: {SYSOP}\r\nAdres: {ADDRESS}"
+	}
+	if strings.TrimSpace(c.BBS.Prompt) == "" {
+		c.BBS.Prompt = "{CALL}> "
+	}
+	if c.BBS.Housekeeping.BulletinRetentionDays == 0 {
+		c.BBS.Housekeeping.BulletinRetentionDays = 90
+	}
+	if c.BBS.Housekeeping.PersonalRetentionDays == 0 {
+		c.BBS.Housekeeping.PersonalRetentionDays = 180
+	}
+	if c.BBS.Housekeeping.LogRetentionDays == 0 {
+		c.BBS.Housekeeping.LogRetentionDays = 30
+	}
 	if strings.TrimSpace(c.BBS.GoodbyeMessage) == "" {
 		c.BBS.GoodbyeMessage = "73 {REMOTE}, BBS {CALL}."
 	}
@@ -483,7 +526,7 @@ func (c Config) Validate() error {
 		if len(hash) != 64 {
 			return fmt.Errorf("api.tokens[%d].hash must be a SHA-256 hex digest", i)
 		}
-		if _, err := strconv.ParseUint(hash[:16], 16, 64); err != nil {
+		if decoded, err := hex.DecodeString(hash); err != nil || len(decoded) != 32 {
 			return fmt.Errorf("api.tokens[%d].hash must be hexadecimal", i)
 		}
 	}

@@ -118,6 +118,7 @@
     c.Web.Listen = byId('webListen')?.value.trim() || '';
     c.Web.Username = baseline.Web.Username;
     c.Web.AllowedAddresses = csv(byId('webAllowedAddresses')?.value);
+    c.API = {...(c.API || {}), Enabled: byId('apiEnabled')?.checked === true};
     c.Ports = collectSafePorts();
     c.Beacon = {
       ...c.Beacon,
@@ -231,7 +232,7 @@
   }
 
   function installRestartNotes() {
-    const panels = ['stationConfigPanel','terminalConfigPanel','tncConfigPanel','networkConfigPanel','applicationConfigPanel','beaconConfigPanel','uprDirectConfigPanel','databaseConfigPanel'];
+    const panels = ['stationConfigPanel','terminalConfigPanel','tncConfigPanel','networkConfigPanel','apiConfigPanel','applicationConfigPanel','beaconConfigPanel','uprDirectConfigPanel','databaseConfigPanel'];
     panels.forEach(id => {
       const panel = byId(id);
       if (!panel || panel.querySelector('.config-restart-note')) return;
@@ -304,6 +305,9 @@
   window.fillConfig = c => {
     baseline = clone(c);
     originalFillConfig(c);
+    if (byId('apiEnabled')) byId('apiEnabled').checked = c.API?.Enabled === true;
+    if (byId('apiPublicAddress')) byId('apiPublicAddress').value = `${location.protocol}//${location.host}/api/v1/`;
+    loadAPITokens();
     setTimeout(() => {
       installRestartNotes();
       installUnifiedLayout();
@@ -324,6 +328,56 @@
   });
   byId('saveConfig').onclick = () => saveChanges(true);
   byId('reloadConfig').onclick = () => loadConfig();
+  const originalShowConfigPart = window.showConfigPart;
+  window.showConfigPart = part => {
+    originalShowConfigPart(part);
+    if (byId('apiConfigPanel')) byId('apiConfigPanel').hidden = part !== 'api';
+    byId('configAPITab')?.classList.toggle('active', part === 'api');
+  };
+  byId('configAPITab').onclick = () => window.showConfigPart('api');
+  byId('apiNetworkSettings').onclick = () => window.showConfigPart('network');
+  const scopeInputs = () => [...document.querySelectorAll('#apiScopeList input[type="checkbox"]')];
+  const setScopes = wanted => scopeInputs().forEach(input => { input.checked = wanted.includes(input.value); });
+  byId('apiScopesHomeAssistant').onclick = () => setScopes(['status.read','ports.read','mheard.read','node.read','bbs.read','digipeater.read']);
+  byId('apiScopesAllRead').onclick = () => setScopes(scopeInputs().map(input => input.value));
+
+  async function loadAPITokens() {
+    const rows = byId('apiTokenRows');
+    if (!rows) return;
+    try {
+      const response = await fetch('/api/application/api-tokens');
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      rows.replaceChildren();
+      for (const token of data.items || []) {
+        const row = document.createElement('div'); row.className = 'api-token-row';
+        const info = document.createElement('div'), name = document.createElement('strong'), scopes = document.createElement('small');
+        name.textContent = token.name; scopes.textContent = (token.scopes || []).join(', '); info.append(name, scopes);
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger-button'; remove.textContent = 'Usuń';
+        remove.onclick = async () => {
+          if (!await showAppConfirm(`Usunąć token API „${token.name}”? Klient utraci dostęp po restarcie UltimatePR.`)) return;
+          const result = await fetch('/api/application/api-tokens/' + encodeURIComponent(token.name), {method:'DELETE'});
+          if (!result.ok) { byId('apiTokenNotice').className='config-notice error'; byId('apiTokenNotice').textContent=await result.text(); return; }
+          byId('apiTokenNotice').className='config-notice ok'; byId('apiTokenNotice').textContent='Token usunięty. UltimatePR uruchamia się ponownie…'; row.remove(); waitForRestart();
+        };
+        row.append(info, remove); rows.append(row);
+      }
+      if (!(data.items || []).length) rows.textContent = 'Nie utworzono jeszcze żadnych tokenów.';
+    } catch (error) { rows.textContent = 'Nie udało się pobrać tokenów: ' + error.message; }
+  }
+
+  byId('apiTokenCreate').onclick = async () => {
+    const notice=byId('apiTokenNotice'), name=byId('apiTokenName').value.trim(), scopes=scopeInputs().filter(input=>input.checked).map(input=>input.value);
+    notice.className='config-notice'; notice.textContent='Generowanie bezpiecznego tokenu…';
+    try {
+      const response=await fetch('/api/application/api-tokens',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,scopes})});
+      const body=await response.text(); if(!response.ok) throw new Error(body);
+      const result=JSON.parse(body); byId('apiNewTokenValue').textContent=result.token; byId('apiNewToken').hidden=false;
+      notice.className='config-notice ok'; notice.textContent='Token utworzony. Skopiuj go teraz; UltimatePR uruchomi się ponownie.';
+      await navigator.clipboard?.writeText(result.token).catch(()=>{}); setTimeout(()=>waitForRestart(),500);
+    } catch(error) { notice.className='config-notice error'; notice.textContent='Nie utworzono tokenu: '+error.message; }
+  };
+  byId('apiTokenCopy').onclick = async () => { await navigator.clipboard.writeText(byId('apiNewTokenValue').textContent); byId('apiTokenCopy').textContent='Skopiowano'; };
   const updateChannelButton = byId('saveUpdateChannel');
   if (updateChannelButton) {
     const saveUpdateChannel = updateChannelButton.onclick;

@@ -22,7 +22,9 @@ api:
       scopes: [status.read, ports.read, mheard.read, monitor.read, sessions.read, events.read, node.read, bbs.read, digipeater.read]
 ```
 
-Generate a long random token, store the plaintext only in the client, and put its SHA-256 digest in YAML. PowerShell example:
+The recommended setup is **Configuration → API** in the Web UI: choose the Home Assistant profile and create a token. Creating the first token also enables the API and restarts UltimatePR. The plaintext token is displayed only once; copy it directly to the client. Network binding and allowed LAN addresses remain under **Configuration → Network**.
+
+Manual YAML and PowerShell generation remain available for unattended installations. Generate a long random token, store the plaintext only in the client, and put its SHA-256 digest in YAML:
 
 ```powershell
 $token = -join ((1..48) | ForEach-Object { 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[(Get-Random -Maximum 62)] })

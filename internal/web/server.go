@@ -2,7 +2,11 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"embed"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -299,6 +303,9 @@ func (s *Server) Run(ctx context.Context) error {
 	ui.HandleFunc("POST /api/login", s.login)
 	ui.HandleFunc("POST /api/logout", s.logout)
 	ui.HandleFunc("PUT /api/application/password", s.changePassword)
+	ui.HandleFunc("GET /api/application/api-tokens", s.apiTokensList)
+	ui.HandleFunc("POST /api/application/api-tokens", s.apiTokenCreate)
+	ui.HandleFunc("DELETE /api/application/api-tokens/{name}", s.apiTokenDelete)
 	ui.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	ui.HandleFunc("GET /api/status", s.status)
 	ui.HandleFunc("GET /api/mheard", s.mheard)
@@ -651,6 +658,7 @@ func (s *Server) configModelPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.Web.PasswordHash = current.Web.PasswordHash
+	c.API.Tokens = current.API.Tokens
 	if err := validateWebListener(current.Web.Listen, c.Web.Listen); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -673,6 +681,131 @@ func (s *Server) configModelPut(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(250 * time.Millisecond)
 			s.cfg.RequestRestart()
 		}()
+	}
+}
+
+var publicAPIScopes = map[string]bool{
+	"status.read": true, "ports.read": true, "mheard.read": true,
+	"monitor.read": true, "sessions.read": true, "events.read": true,
+	"node.read": true, "bbs.read": true, "digipeater.read": true,
+}
+
+func (s *Server) apiTokensList(w http.ResponseWriter, _ *http.Request) {
+	c, err := appconfig.Load(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type item struct {
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
+	out := make([]item, 0, len(c.API.Tokens))
+	for _, token := range c.API.Tokens {
+		out = append(out, item{Name: token.Name, Scopes: append([]string(nil), token.Scopes...)})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"items": out})
+}
+
+func (s *Server) apiTokenCreate(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&input); err != nil {
+		http.Error(w, "Invalid token request", http.StatusBadRequest)
+		return
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" || len(input.Name) > 64 {
+		http.Error(w, "Token name must contain 1-64 characters", http.StatusBadRequest)
+		return
+	}
+	seen := map[string]bool{}
+	scopes := make([]string, 0, len(input.Scopes))
+	for _, scope := range input.Scopes {
+		scope = strings.TrimSpace(scope)
+		if !publicAPIScopes[scope] {
+			http.Error(w, "Unknown API scope: "+scope, http.StatusBadRequest)
+			return
+		}
+		if !seen[scope] {
+			seen[scope] = true
+			scopes = append(scopes, scope)
+		}
+	}
+	if len(scopes) == 0 {
+		http.Error(w, "Select at least one API scope", http.StatusBadRequest)
+		return
+	}
+	c, err := appconfig.Load(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, token := range c.API.Tokens {
+		if strings.EqualFold(token.Name, input.Name) {
+			http.Error(w, "A token with this name already exists", http.StatusConflict)
+			return
+		}
+	}
+	raw := make([]byte, 32)
+	if _, err = rand.Read(raw); err != nil {
+		http.Error(w, "Could not generate token", http.StatusInternalServerError)
+		return
+	}
+	plain := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(plain))
+	c.API.Enabled = true
+	c.API.Tokens = append(c.API.Tokens, appconfig.APIToken{Name: input.Name, Hash: hex.EncodeToString(hash[:]), Scopes: scopes})
+	if err = appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.log.Info("API token created", "name", input.Name, "scopes", scopes)
+	writeJSONResponse(w, http.StatusCreated, map[string]any{"name": input.Name, "token": plain, "scopes": scopes, "restart_required": true})
+	s.requestRestartSoon()
+}
+
+func (s *Server) apiTokenDelete(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	c, err := appconfig.Load(s.cfg.ConfigPath)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	out := c.API.Tokens[:0]
+	found := false
+	for _, token := range c.API.Tokens {
+		if strings.EqualFold(token.Name, name) {
+			found = true
+			continue
+		}
+		out = append(out, token)
+	}
+	if !found {
+		http.Error(w, "API token not found", http.StatusNotFound)
+		return
+	}
+	c.API.Tokens = out
+	if err = appconfig.SaveModel(s.cfg.ConfigPath, c); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.log.Info("API token deleted", "name", name)
+	w.WriteHeader(http.StatusNoContent)
+	s.requestRestartSoon()
+}
+
+func writeJSONResponse(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+func (s *Server) requestRestartSoon() {
+	if s.cfg.RequestRestart != nil {
+		go func() { time.Sleep(2 * time.Second); s.cfg.RequestRestart() }()
 	}
 }
 

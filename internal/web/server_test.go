@@ -3,12 +3,15 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,6 +72,76 @@ func TestConfigModelPutPersistsGameHallToggle(t *testing.T) {
 	if !saved.GameHall.Enabled || saved.GameHall.Callsign != "SP5ME" || saved.GameHall.SSID != 14 {
 		t.Fatalf("saved Game Hall=%+v", saved.GameHall)
 	}
+}
+
+func TestConfigModelPutPreservesAPITokens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	c := appconfig.New(appconfig.ModeStation, "SP5ME", "", "", "pl", 0, 2, 8)
+	c.API.Enabled = true
+	c.API.Tokens = []appconfig.APIToken{{Name: "ha", Hash: strings.Repeat("a", 64), Scopes: []string{"status.read"}}}
+	if err := appconfig.SaveModel(path, c); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{ConfigPath: path}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := httptest.NewRecorder()
+	s.configModelPut(w, httptest.NewRequest(http.MethodPut, "/api/config/model", bytes.NewReader(body)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	saved, err := appconfig.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.API.Tokens) != 1 || saved.API.Tokens[0].Hash != strings.Repeat("a", 64) {
+		t.Fatalf("API tokens were not preserved: %+v", saved.API.Tokens)
+	}
+}
+
+func TestAPITokenCreateStoresOnlyHash(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	c := appconfig.New(appconfig.ModeStation, "SP5ME", "", "", "pl", 0, 2, 8)
+	if err := appconfig.SaveModel(path, c); err != nil {
+		t.Fatal(err)
+	}
+	s := New(Config{ConfigPath: path}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := httptest.NewRecorder()
+	s.apiTokenCreate(w, httptest.NewRequest(http.MethodPost, "/api/application/api-tokens", strings.NewReader(`{"name":"home-assistant","scopes":["status.read","mheard.read"]}`)))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil || response.Token == "" {
+		t.Fatalf("response=%s", w.Body.String())
+	}
+	saved, err := appconfig.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.API.Enabled || len(saved.API.Tokens) != 1 {
+		t.Fatalf("API config=%+v", saved.API)
+	}
+	h := sha256.Sum256([]byte(response.Token))
+	if saved.API.Tokens[0].Hash != hex.EncodeToString(h[:]) {
+		t.Fatal("stored hash does not match generated token")
+	}
+	if strings.Contains(string(mustRead(t, path)), response.Token) {
+		t.Fatal("plaintext token was written to configuration")
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestGameHallControlsParticipateInConfigWorkflow(t *testing.T) {
