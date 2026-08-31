@@ -14,7 +14,7 @@
   .mobile-connect-toggle[aria-expanded="true"]{box-shadow:0 0 0 2px #4ee09a30}
   .mobile-mheard-toggle[aria-expanded="true"]{border-color:var(--green);color:var(--green)}
 
-  #terminalView,#terminalView[hidden]{display:block!important;height:calc(100dvh - 56px);padding:8px;overflow:hidden}
+  #terminalView,#terminalView[hidden]{display:block!important;height:calc(var(--mobile-viewport-height,100dvh) - 56px);padding:8px;overflow:hidden}
   #configView,#infoView,#monitorView,#mheardView,#mapView{display:none!important}
   .terminal-workspace{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:7px;height:100%}
   .terminal-body{display:contents}
@@ -22,15 +22,18 @@
 
   .mobile-connect-backdrop{position:fixed;z-index:89;inset:0;display:block;border:0;background:#020709b8;opacity:0;pointer-events:none;transition:opacity .18s ease}
   .connection-bar{position:fixed;z-index:90;left:50%;top:50%;display:grid;grid-template-columns:minmax(0,1fr);gap:12px;width:min(420px,calc(100vw - 24px));padding:16px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(145deg,rgba(20,36,45,.99),rgba(11,22,28,.99));box-shadow:0 20px 55px #000a;opacity:0;pointer-events:none;transform:translate(-50%,-46%) scale(.98);transition:opacity .18s ease,transform .18s ease}
+  [data-theme="light"] .connection-bar{border-color:#91a294;background:linear-gradient(145deg,#fff,#edf4ee);box-shadow:0 20px 55px #17251b38}
   .mobile-connect-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
   .mobile-connect-head span{display:block;color:var(--cyan);font:700 10px ui-monospace,Consolas,monospace;letter-spacing:.14em}
   .mobile-connect-head strong{display:block;margin-top:5px;font-size:15px}
   .mobile-connect-head button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:5px;background:transparent;color:var(--text);font-size:23px}
   .connection-bar .segmented,.connection-bar #bbsFields{display:none!important}
   .connection-bar #tncFields{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
-  .mobile-connect-field{display:block;margin:0;color:var(--muted);font-size:10px;letter-spacing:.1em}
+  .mobile-connect-field{display:block;margin:0;color:#aebdc0;font-size:10px;font-weight:800;letter-spacing:.1em}
+  [data-theme="light"] .mobile-connect-field{color:#405247}
   .mobile-connect-field>span{display:block;margin-bottom:6px}
   .connection-bar input,.connection-bar select{height:44px;margin:0;font-size:16px;line-height:44px}
+  [data-theme="light"] .connection-bar input,[data-theme="light"] .connection-bar select{border-color:#7f9483;background:#fff;color:#17251b}
   .connection-bar .primary{width:100%;height:44px;margin:0}
   body.mobile-connect-open .mobile-connect-backdrop{opacity:1;pointer-events:auto}
   body.mobile-connect-open .connection-bar{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
@@ -43,7 +46,8 @@
   .terminal-head-actions{min-width:max-content;gap:5px}
   .terminal-state{margin:0 3px 0 0}
   .terminal-state strong{display:none}
-  .terminal-head-actions #reconnectSession,.terminal-head-actions #clear{display:none}
+  .terminal-head-actions #clear{display:none}
+  .terminal-head-actions #reconnectSession{display:inline-flex;align-items:center;height:32px;padding:0 9px;font-size:11px;font-weight:800}
   .terminal-head-actions .danger-button{height:32px;padding:0 10px;font-size:12px}
   .chat-screen{padding:10px;font-size:13px}
   .message-bubble,.message-row.tx .message-bubble{font-size:13px;line-height:1.4}
