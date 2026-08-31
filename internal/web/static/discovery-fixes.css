@@ -5,6 +5,8 @@
 #applicationConfigPanel #experimentalFeaturesCard>.check input{width:18px;height:18px;margin:0}
 #applicationConfigPanel #experimentalFeaturesList{grid-column:1/-1;gap:8px;margin-top:2px}
 #applicationConfigPanel #experimentalFeaturesList .check{padding:0}
+#applicationConfigPanel #experimentalFeaturesCard.config-section-card{display:block;padding:0}
+#applicationConfigPanel #experimentalFeaturesCard.config-section-card .config-section-header{display:grid}
 #terminalConfigPanel .field-grid label small{display:block;margin-top:5px;color:var(--muted);font-family:inherit;font-size:14px;font-weight:500;letter-spacing:0;line-height:1.55;text-transform:none}
 #terminalConfigPanel .field-grid>label small{min-height:66px}
 @media(max-width:1050px){#terminalConfigPanel .field-grid>label small{min-height:88px}}

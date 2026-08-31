@@ -71,6 +71,25 @@ func TestConfigModelPutPersistsGameHallToggle(t *testing.T) {
 	}
 }
 
+func TestGameHallControlsParticipateInConfigWorkflow(t *testing.T) {
+	workflow, err := assets.ReadFile("static/config-workflow.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"c.GameHall", "gameHallServiceEnabled", "gameHallCallsign", "gameHallSSID", "gameHallLanguage", "gameHallInviteTimeout"} {
+		if !bytes.Contains(workflow, []byte(required)) {
+			t.Fatalf("configuration workflow does not contain %q", required)
+		}
+	}
+	styles, err := assets.ReadFile("static/discovery-fixes.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(styles, []byte("#experimentalFeaturesCard.config-section-card{display:block")) {
+		t.Fatal("experimental features card does not override the legacy grid layout")
+	}
+}
+
 func TestStatusReportsDirectAIService(t *testing.T) {
 	s := New(Config{AICallsign: "SP5ME", AISSID: 12, AIEnabled: true}, nil)
 	recorder := httptest.NewRecorder()

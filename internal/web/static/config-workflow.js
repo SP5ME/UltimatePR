@@ -148,6 +148,7 @@
     }
 	c.Experimental = {UPRD:byId('uprdirectExperimental')?.checked===true,Map:byId('mapExperimental')?.checked===true,Services:byId('servicesExperimental')?.checked===true,Node:false,BBS:false,AI:false};
 	c.AI = {...(c.AI||{}),Enabled:byId('aiServiceEnabled')?.checked===true,Callsign:byId('aiCallsign')?.value.trim().toUpperCase()||'',SSID:number('aiSSID',12),Provider:'ollama',URL:byId('aiURL')?.value.trim()||'',Model:byId('aiModel')?.value.trim()||'',TimeoutSeconds:number('aiTimeout',120),MaxResponseChars:number('aiMaxResponse',2000),MaxContext:number('aiMaxContext',20),SystemPrompt:byId('aiSystemPrompt')?.value||'',QueueSize:number('aiQueueSize',8),Concurrency:number('aiConcurrency',1)};
+	c.GameHall = {...(c.GameHall||{}),Enabled:byId('gameHallServiceEnabled')?.checked===true,Callsign:byId('gameHallCallsign')?.value.trim().toUpperCase()||'',SSID:Number(byId('gameHallSSID')?.value)||0,Language:byId('gameHallLanguage')?.value||'pl',InviteTimeoutSeconds:number('gameHallInviteTimeout',120)};
     return c;
   }
 
