@@ -21,6 +21,7 @@ import (
 	aiservice "github.com/packet-radio/ultimatepr/internal/ai"
 	publicapi "github.com/packet-radio/ultimatepr/internal/api"
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/ax25core"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
 	"github.com/packet-radio/ultimatepr/internal/config"
 	"github.com/packet-radio/ultimatepr/internal/digipeater"
@@ -830,76 +831,90 @@ func main() {
 			stop()
 		}
 	}()
+	dispatcher := ax25core.New()
+	dispatcher.AddObserver(func(frame ax25core.FrameContext) {
+		f := frame.Frame
+		log.Info("frame rx", "port", frame.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
+		mon.Add("RX", frame.PortID, f, len(frame.Raw))
+		events.Publish("frame.rx", map[string]any{"port": frame.PortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(frame.Raw)})
+	})
+	dispatcher.RegisterPre(func(frame ax25core.FrameContext) bool {
+		f := frame.Frame
+		seq := rxOrder.Add(1)
+		if !isOwnCallsign(f.Source.String()) {
+			if via := mheardReturnPath(f); via != "" {
+				heard.HeardVia(f.Source.String(), frame.PortID, via)
+			} else if directlyHeard(f) {
+				heard.Heard(f.Source.String(), frame.PortID)
+			}
+			if uprdMgr != nil {
+				uprdMgr.Submit(frame.PortID, seq, f)
+			}
+		}
+		if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
+			heard.Beacon(f.Source.String(), frame.PortID, string(f.Payload))
+			reported := parseUltimatePRBeacon(string(f.Payload))
+			reported = withoutCallsigns(reported, append(digiAliases, ownCallsAsAddresses(ownCalls)...)...)
+			heard.Reported(reported, f.Source.String(), frame.PortID)
+		}
+		repeated, ok := digi.Repeat(f, frame.Raw)
+		if !ok {
+			return false
+		}
+		available := make([]string, 0, len(runtimes))
+		for id, runtime := range runtimes {
+			if runtime != nil && runtime.enabled && runtime.port.Status().Connected {
+				available = append(available, id)
+			}
+		}
+		outputPorts := digipeaterOutputPorts(frame.PortID, f.Destination.String(), heard, available)
+		for _, outputPort := range outputPorts {
+			if send := senders[outputPort]; send != nil {
+				if err := send(ctx, repeated); err != nil {
+					log.Warn("digipeater transmit failed", "input_port", frame.PortID, "output_port", outputPort, "error", err)
+				} else {
+					digipeated.Add(1)
+					lastDigipeated.Store(time.Now().UnixNano())
+					events.Publish("digipeater.activity", map[string]any{"input_port": frame.PortID, "output_port": outputPort, "source": f.Source.String(), "destination": f.Destination.String()})
+					log.Info("frame digipeated", "input_port", frame.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
+				}
+			}
+		}
+		return true
+	})
+	dispatcher.RegisterUI(func(frame ax25core.FrameContext) bool {
+		f := frame.Frame
+		if nodeRouter != nil && f.PID != nil && *f.PID == netrom.PID && strings.EqualFold(f.Destination.String(), "NODES") {
+			minQuality := cfg.Node.NetROMMinQuality
+			if minQuality == 0 {
+				minQuality = 1
+			}
+			obsolescence := cfg.Node.NetROMObsolescence
+			if obsolescence == 0 {
+				obsolescence = 6
+			}
+			if broadcast, err := netrom.DecodeRouting(f.Payload); err == nil {
+				for _, destination := range broadcast.Destinations {
+					if destination.Quality >= minQuality {
+						nodeRouter.Learn(destination.Callsign.String(), f.Source.String(), destination.Quality, obsolescence, time.Now().UTC())
+					}
+				}
+			}
+		}
+		return false
+	})
+	dispatcher.RegisterConnected(func(frame ax25core.FrameContext) bool {
+		if radio.Handle(frame.PortID, frame.Frame) {
+			return true
+		}
+		return inbound.Handle(frame.PortID, frame.Frame)
+	})
 	log.Info("server started", "callsign", cfg.Server.Callsign, "ssid", cfg.Server.SSID, "web", cfg.Web.Listen)
 	for {
 		select {
 		case pkt := <-rx:
-			f, e := ax25.Decode(pkt.Data)
-			if e != nil {
-				log.Warn("invalid AX.25 frame", "port", pkt.PortID, "error", e)
-				continue
-			}
-			seq := rxOrder.Add(1)
-			log.Info("frame rx", "port", pkt.PortID, "source", f.Source.String(), "destination", f.Destination.String(), "type", f.Type, "bytes", len(f.Payload))
-			if !isOwnCallsign(f.Source.String()) {
-				if via := mheardReturnPath(f); via != "" {
-					heard.HeardVia(f.Source.String(), pkt.PortID, via)
-				} else if directlyHeard(f) {
-					heard.Heard(f.Source.String(), pkt.PortID)
-				}
-				if uprdMgr != nil {
-					uprdMgr.Submit(pkt.PortID, seq, f)
-				}
-			}
-			if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
-				heard.Beacon(f.Source.String(), pkt.PortID, string(f.Payload))
-				reported := parseUltimatePRBeacon(string(f.Payload))
-				reported = withoutCallsigns(reported, append(digiAliases, ownCallsAsAddresses(ownCalls)...)...)
-				heard.Reported(reported, f.Source.String(), pkt.PortID)
-			}
-			mon.Add("RX", pkt.PortID, f, len(pkt.Data))
-			events.Publish("frame.rx", map[string]any{"port": pkt.PortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(pkt.Data)})
-			if nodeRouter != nil && f.Type == ax25.TypeUI && f.PID != nil && *f.PID == netrom.PID && strings.EqualFold(f.Destination.String(), "NODES") {
-				minQuality := cfg.Node.NetROMMinQuality
-				if minQuality == 0 {
-					minQuality = 1
-				}
-				obsolescence := cfg.Node.NetROMObsolescence
-				if obsolescence == 0 {
-					obsolescence = 6
-				}
-				if broadcast, err := netrom.DecodeRouting(f.Payload); err == nil {
-					for _, destination := range broadcast.Destinations {
-						if destination.Quality >= minQuality {
-							nodeRouter.Learn(destination.Callsign.String(), f.Source.String(), destination.Quality, obsolescence, time.Now().UTC())
-						}
-					}
-				}
-			}
-			if repeated, ok := digi.Repeat(f, pkt.Data); ok {
-				available := make([]string, 0, len(runtimes))
-				for id, runtime := range runtimes {
-					if runtime != nil && runtime.enabled && runtime.port.Status().Connected {
-						available = append(available, id)
-					}
-				}
-				outputPorts := digipeaterOutputPorts(pkt.PortID, f.Destination.String(), heard, available)
-				for _, outputPort := range outputPorts {
-					if send := senders[outputPort]; send != nil {
-						if err := send(ctx, repeated); err != nil {
-							log.Warn("digipeater transmit failed", "input_port", pkt.PortID, "output_port", outputPort, "error", err)
-						} else {
-							digipeated.Add(1)
-							lastDigipeated.Store(time.Now().UnixNano())
-							events.Publish("digipeater.activity", map[string]any{"input_port": pkt.PortID, "output_port": outputPort, "source": f.Source.String(), "destination": f.Destination.String()})
-							log.Info("frame digipeated", "input_port", pkt.PortID, "output_port", outputPort, "source", f.Source.String(), "destination", f.Destination.String())
-						}
-					}
-				}
-				continue
-			}
-			if !radio.Handle(pkt.PortID, f) {
-				inbound.Handle(pkt.PortID, f)
+			if _, err := dispatcher.Dispatch(pkt); err != nil {
+				log.Warn("invalid AX.25 frame", "port", pkt.PortID, "error", err)
 			}
 		case <-ctx.Done():
 			log.Info("server stopped")
