@@ -38,6 +38,11 @@ type linkCore struct {
 	rejectSent bool
 	pending    []pendingFrame
 	timer      linkTimerState
+	ackPending bool
+	ackSince   time.Time
+	ackSerial  uint64
+	lastActive time.Time
+	recovery   bool
 }
 
 func (l *linkCore) reset() {
@@ -46,6 +51,11 @@ func (l *linkCore) reset() {
 	l.rejectSent = false
 	l.pending = nil
 	l.timer = linkTimerState{}
+	l.ackPending = false
+	l.ackSince = time.Time{}
+	l.ackSerial = 0
+	l.lastActive = time.Time{}
+	l.recovery = false
 }
 
 func (l linkCore) nextSend() (ns, nr, expected uint8) {
@@ -80,6 +90,47 @@ func (l *linkCore) acknowledge(nr uint8, typ ax25.Type) (accepted, retransmit bo
 func (l *linkCore) track(frame ax25.Frame) {
 	l.pending = append(l.pending, pendingFrame{sequence: frame.NS, frame: cloneFrame(frame)})
 	l.vs = (l.vs + 1) & 7
+}
+
+func (l *linkCore) noteAcknowledgement(now time.Time) uint64 {
+	l.ackPending = true
+	l.ackSince = now
+	l.ackSerial++
+	return l.ackSerial
+}
+
+func (l *linkCore) piggybackAcknowledgement() bool {
+	if !l.ackPending {
+		return false
+	}
+	l.ackPending = false
+	l.ackSince = time.Time{}
+	return true
+}
+
+func (l *linkCore) expireAcknowledgement(now time.Time, serial uint64, t2 time.Duration) bool {
+	if !l.ackPending || serial != l.ackSerial || now.Sub(l.ackSince) < t2 {
+		return false
+	}
+	l.ackPending = false
+	l.ackSince = time.Time{}
+	return true
+}
+
+func (l *linkCore) touch(now time.Time) {
+	l.lastActive = now
+}
+
+func (l linkCore) idleExpired(now time.Time, t3 time.Duration) bool {
+	return !l.lastActive.IsZero() && now.Sub(l.lastActive) >= t3
+}
+
+func (l *linkCore) enterRecovery() {
+	l.recovery = true
+}
+
+func (l *linkCore) exitRecovery() {
+	l.recovery = false
 }
 
 func (l linkCore) retransmitFrom(nr uint8) []ax25.Frame {

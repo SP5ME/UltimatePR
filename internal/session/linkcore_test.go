@@ -86,6 +86,42 @@ func TestLinkCoreTimerAndRetryBudget(t *testing.T) {
 	}
 }
 
+func TestLinkCoreDelayedAcknowledgementAndPiggyback(t *testing.T) {
+	var l linkCore
+	now := time.Unix(200, 0)
+	serial := l.noteAcknowledgement(now)
+	if !l.ackPending || serial == 0 || l.expireAcknowledgement(now.Add(500*time.Millisecond), serial, time.Second) {
+		t.Fatalf("T2 became due too early: pending=%v serial=%d", l.ackPending, serial)
+	}
+	if !l.piggybackAcknowledgement() || l.ackPending {
+		t.Fatalf("piggyback did not consume ACK pending: pending=%v", l.ackPending)
+	}
+	serial = l.noteAcknowledgement(now)
+	if !l.expireAcknowledgement(now.Add(time.Second), serial, time.Second) || l.ackPending {
+		t.Fatalf("T2 expiry: pending=%v serial=%d", l.ackPending, serial)
+	}
+}
+
+func TestLinkCoreIdleAndRecoveryLifecycle(t *testing.T) {
+	var l linkCore
+	now := time.Unix(300, 0)
+	l.touch(now)
+	if l.idleExpired(now.Add(999*time.Millisecond), time.Second) {
+		t.Fatal("T3 expired too early")
+	}
+	if !l.idleExpired(now.Add(time.Second), time.Second) {
+		t.Fatal("T3 did not expire")
+	}
+	l.enterRecovery()
+	if !l.recovery {
+		t.Fatal("timer recovery was not entered")
+	}
+	l.exitRecovery()
+	if l.recovery {
+		t.Fatal("timer recovery was not exited")
+	}
+}
+
 func TestLinkCoreResetAndPortAdapterIsolation(t *testing.T) {
 	var vhf, uhf linkCore
 	vhf.vs, vhf.vr, vhf.peerBusy = 3, 2, true

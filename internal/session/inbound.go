@@ -39,6 +39,7 @@ type InboundMux struct {
 	links          map[string]*inboundLink
 	log            *slog.Logger
 	t1             time.Duration
+	t2             time.Duration
 	n2             int
 	paclen         int
 }
@@ -57,13 +58,14 @@ type inboundLink struct {
 	closed    chan struct{}
 	closeOnce sync.Once
 	t1        time.Duration
+	t2        time.Duration
 	n2        int
 	paclen    int
 	receiveN1 int
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
-	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, packetServices: map[string]AX25PacketService{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, n2: 10, paclen: defaultN1}
+	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, packetServices: map[string]AX25PacketService{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, t2: defaultT2, n2: 10, paclen: defaultN1}
 }
 
 func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
@@ -108,6 +110,11 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	packetService := m.packetServices[f.Destination.String()]
 	registered := service != nil || routedService != nil || packetService != nil
 	m.mu.Unlock()
+	if link != nil {
+		link.mu.Lock()
+		link.touch(time.Now())
+		link.mu.Unlock()
+	}
 
 	if link == nil {
 		if registered && f.Type == ax25.TypeXID && isCommand(f) {
@@ -140,9 +147,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			return false
 		}
 		m.mu.Lock()
-		linkT1, linkN2, linkN1 := m.t1, m.n2, m.paclen
+		linkT1, linkT2, linkN2, linkN1 := m.t1, m.t2, m.n2, m.paclen
 		m.mu.Unlock()
-		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
+		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, t2: linkT2, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
+		link.touch(time.Now())
 		created := false
 		m.mu.Lock()
 		if existing := m.links[key]; existing != nil {
@@ -153,14 +161,23 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 		m.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
-		if created && (service != nil || routedService != nil) {
-			go link.run(service, routedService)
+		if created {
+			go link.supervise()
+			if service != nil || routedService != nil {
+				go link.run(service, routedService)
+			}
 		}
 		if m.log != nil {
 			m.log.Info("AX.25 inbound connected", "port", port, "remote", f.Source.String(), "service", f.Destination.String())
 		}
 		return true
 	}
+	link.mu.Lock()
+	link.touch(time.Now())
+	if isResponse(f) && f.PollFinal && (f.Type == ax25.TypeRR || f.Type == ax25.TypeRNR || f.Type == ax25.TypeREJ || f.Type == ax25.TypeSREJ) {
+		link.exitRecovery()
+	}
+	link.mu.Unlock()
 
 	switch f.Type {
 	case ax25.TypeTEST:
@@ -199,6 +216,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 		link.mu.Lock()
 		link.linkCore.reset()
+		link.touch(time.Now())
 		link.digipeaters = reverseDigipeaters(f.Digipeaters)
 		link.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
@@ -241,6 +259,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 		link.mu.Lock()
 		accepted, sendReject := link.linkCore.receive(f.NS)
+		ackSerial := uint64(0)
+		if accepted {
+			ackSerial = link.noteAcknowledgement(time.Now())
+		}
 		if accepted {
 			link.mu.Unlock()
 			data := append([]byte(nil), f.Payload...)
@@ -254,6 +276,18 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 				pid, sendData := *f.PID, data
 				go packetService(route, pid, sendData, link.sendPacket)
 			}
+			if f.PollFinal {
+				link.mu.Lock()
+				link.piggybackAcknowledgement()
+				nr := link.vr
+				link.mu.Unlock()
+				_ = link.sendControl(ax25.TypeRR, true, nr)
+			} else {
+				link.mu.Lock()
+				t2 := link.t2
+				link.mu.Unlock()
+				link.scheduleAcknowledgement(ackSerial, t2)
+			}
 		} else {
 			nr := link.vr
 			link.mu.Unlock()
@@ -266,12 +300,26 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		case link.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: false}:
 		default:
 		}
-		link.mu.Lock()
-		nr := link.vr
-		link.mu.Unlock()
-		_ = link.sendControl(ax25.TypeRR, f.PollFinal, nr)
 	}
 	return true
+}
+
+func (l *inboundLink) scheduleAcknowledgement(serial uint64, t2 time.Duration) {
+	time.AfterFunc(t2, func() {
+		l.mu.Lock()
+		if !l.expireAcknowledgement(time.Now(), serial, t2) {
+			l.mu.Unlock()
+			return
+		}
+		nr := l.vr
+		l.mu.Unlock()
+		select {
+		case <-l.closed:
+			return
+		default:
+		}
+		_ = l.sendControl(ax25.TypeRR, false, nr)
+	})
 }
 
 func (l *inboundLink) run(service AX25Service, routedService RoutedAX25Service) {
@@ -325,6 +373,27 @@ func (l *inboundLink) run(service AX25Service, routedService RoutedAX25Service) 
 	}
 	_ = l.disconnect()
 	l.close()
+}
+
+func (l *inboundLink) supervise() {
+	ticker := time.NewTicker(defaultT3)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-l.closed:
+			return
+		case now := <-ticker.C:
+			l.mu.Lock()
+			if !l.idleExpired(now, defaultT3) {
+				l.mu.Unlock()
+				continue
+			}
+			l.enterRecovery()
+			nr := l.vr
+			l.mu.Unlock()
+			_ = l.sendControl(ax25.TypeRR, true, nr)
+		}
+	}
 }
 
 func (l *inboundLink) disconnect() error {

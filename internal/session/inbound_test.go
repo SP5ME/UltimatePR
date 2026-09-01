@@ -47,8 +47,10 @@ func TestInboundAX25Service(t *testing.T) {
 
 	pid := byte(0xF0)
 	m.Handle("radio", ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeI, NS: 0, NR: 1, PID: &pid, Payload: []byte("H\r")})
-	_ = decodeSent(t, <-sent) // RR for inbound I frame
 	reply := decodeSent(t, <-sent)
+	if reply.Type == ax25.TypeRR {
+		reply = decodeSent(t, <-sent)
+	}
 	if !strings.Contains(string(reply.Payload), "RX:H") {
 		t.Fatalf("reply=%q", reply.Payload)
 	}
@@ -88,8 +90,10 @@ func TestInboundPacketService(t *testing.T) {
 	if string(<-received) != "request" {
 		t.Fatal("packet payload not delivered")
 	}
-	_ = decodeSent(t, <-sent) // AX.25 RR for the received packet.
 	reply := decodeSent(t, <-sent)
+	if reply.Type == ax25.TypeRR {
+		reply = decodeSent(t, <-sent)
+	}
 	if reply.Type != ax25.TypeI || reply.PID == nil || *reply.PID != pid || string(reply.Payload) != "reply" {
 		t.Fatalf("reply=%+v", reply)
 	}

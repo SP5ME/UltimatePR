@@ -34,6 +34,7 @@ const (
 	// AX.25 v2.2 default used by this implementation: T1=10 seconds and N2=10.
 	// T1 must cover the transmission and acknowledgement of a maximum N1 frame.
 	defaultT1 = 10 * time.Second
+	defaultT2 = 1 * time.Second
 	// T3 is locally defined but must be greater than T1.
 	defaultT3 = 5 * time.Minute
 	// AX.25 v2.2 defines 256 octets as the default N1.
@@ -86,6 +87,7 @@ type Manager struct {
 	ack          chan acknowledgement
 	subs         map[chan Event]struct{}
 	t1           time.Duration
+	t2           time.Duration
 	n2           int
 	paclen       int
 	receiveN1    int
@@ -100,7 +102,7 @@ type Manager struct {
 }
 
 func New(local ax25.Address, ports map[string]Sender) *Manager {
-	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), xid: make(chan xidEvent, 4), subs: map[chan Event]struct{}{}, t1: defaultT1, n2: 10, paclen: defaultN1, receiveN1: defaultN1, configuredT1: defaultT1, configuredN2: 10, configuredN1: defaultN1, tm201: defaultTM201, nm201: defaultNM201}
+	return &Manager{local: local, state: Disconnected, ports: ports, control: make(chan controlEvent, 8), ack: make(chan acknowledgement, 8), xid: make(chan xidEvent, 4), subs: map[chan Event]struct{}{}, t1: defaultT1, t2: defaultT2, n2: 10, paclen: defaultN1, receiveN1: defaultN1, configuredT1: defaultT1, configuredN2: 10, configuredN1: defaultN1, tm201: defaultTM201, nm201: defaultNM201}
 }
 
 // Configure applies the negotiated-link defaults used for future operations.
@@ -298,6 +300,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 				m.uaGraceUntil = time.Now().Add(time.Duration(m.n2) * m.t1)
 				m.mu.Unlock()
 				m.setState(Connected, "Sesja AX.25 polaczona")
+				m.mu.Lock()
+				m.touch(time.Now())
+				m.mu.Unlock()
 				xidStarted := make(chan struct{})
 				go m.negotiateXID(xidCtx, send, xidStarted)
 				<-xidStarted
@@ -456,10 +461,20 @@ func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 				m.operation.Unlock()
 				continue
 			}
+			if !m.idleExpired(time.Now(), interval) {
+				m.mu.Unlock()
+				m.operation.Unlock()
+				continue
+			}
 			send, nr := m.ports[m.port], m.vr
 			m.mu.Unlock()
 			if err := m.probeLink(ctx, send, nr); err != nil && ctx.Err() == nil {
 				m.failLink("Utrata lacza AX.25")
+			} else if err == nil {
+				m.mu.Lock()
+				m.touch(time.Now())
+				m.exitRecovery()
+				m.mu.Unlock()
 			}
 			m.operation.Unlock()
 		}
@@ -487,6 +502,8 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 	// acknowledged. V(A) remains the oldest unacknowledged sequence number.
 	m.mu.Lock()
 	m.track(f)
+	m.piggybackAcknowledgement()
+	m.touch(time.Now())
 	m.startTimer(time.Now(), timerForData, n2)
 	m.mu.Unlock()
 	needSend := true
@@ -519,6 +536,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 			if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				m.mu.Lock()
 				m.stopTimer()
+				m.exitRecovery()
 				m.linkCore.acknowledge(expected, ack.type_)
 				m.mu.Unlock()
 				return nil
@@ -552,6 +570,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 						stopTimer(timer)
 						m.mu.Lock()
 						m.stopTimer()
+						m.exitRecovery()
 						m.linkCore.acknowledge(expected, ack.type_)
 						m.mu.Unlock()
 						return nil
@@ -565,6 +584,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 					stopTimer(timer)
 					m.mu.Lock()
 					m.stopTimer()
+					m.exitRecovery()
 					m.linkCore.acknowledge(expected, ack.type_)
 					m.mu.Unlock()
 					return nil
@@ -587,6 +607,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				m.mu.Lock()
 				m.timerExpired(time.Now(), t1)
 				m.retry()
+				m.enterRecovery()
 				m.mu.Unlock()
 				ack, err := m.pollAcknowledgement(ctx, send, nr)
 				if isLinkTermination(ack) {
@@ -630,6 +651,9 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 }
 
 func (m *Manager) pollAcknowledgement(ctx context.Context, send Sender, nr uint8) (acknowledgement, error) {
+	m.mu.Lock()
+	m.enterRecovery()
+	m.mu.Unlock()
 	m.setState(TimerRecovery, "Odzyskiwanie lacza AX.25")
 	if err := m.sendFrame(ctx, send, m.command(ax25.TypeRR, true, nil, 0, nr)); err != nil {
 		return acknowledgement{}, err
@@ -756,6 +780,12 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 	if !active {
 		return false
 	}
+	m.mu.Lock()
+	m.touch(time.Now())
+	if isResponse(f) && f.PollFinal && (f.Type == ax25.TypeRR || f.Type == ax25.TypeRNR || f.Type == ax25.TypeREJ || f.Type == ax25.TypeSREJ) {
+		m.exitRecovery()
+	}
+	m.mu.Unlock()
 	switch f.Type {
 	case ax25.TypeTEST:
 		if isCommand(f) {
@@ -899,7 +929,12 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		m.mu.Lock()
+		m.touch(time.Now())
 		accepted, sendReject := m.linkCore.receive(f.NS)
+		ackSerial := uint64(0)
+		if accepted {
+			ackSerial = m.noteAcknowledgement(time.Now())
+		}
 		if accepted {
 			m.mu.Unlock()
 			pid := byte(0)
@@ -907,6 +942,18 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 				pid = *f.PID
 			}
 			m.emit(Event{Type: "data", PID: pid, Data: append([]byte(nil), f.Payload...)})
+			if f.PollFinal {
+				m.mu.Lock()
+				m.piggybackAcknowledgement()
+				nr := m.vr
+				m.mu.Unlock()
+				_ = m.sendResponse(context.Background(), port, ax25.TypeRR, true, nr)
+			} else {
+				m.mu.Lock()
+				t2 := m.t2
+				m.mu.Unlock()
+				m.scheduleAcknowledgement(port, ackSerial, t2)
+			}
 		} else {
 			m.mu.Unlock()
 			if sendReject {
@@ -923,12 +970,25 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			default:
 			}
 		}
-		m.mu.Lock()
-		nr := m.vr
-		m.mu.Unlock()
-		_ = m.sendResponse(context.Background(), port, ax25.TypeRR, f.PollFinal, nr)
 	}
 	return true
+}
+
+func (m *Manager) scheduleAcknowledgement(port string, serial uint64, t2 time.Duration) {
+	time.AfterFunc(t2, func() {
+		m.mu.Lock()
+		if !m.expireAcknowledgement(time.Now(), serial, t2) {
+			m.mu.Unlock()
+			return
+		}
+		nr := m.vr
+		connected := m.state != Disconnected
+		m.mu.Unlock()
+		if !connected {
+			return
+		}
+		_ = m.sendResponse(context.Background(), port, ax25.TypeRR, false, nr)
+	})
 }
 
 func (m *Manager) command(t ax25.Type, pf bool, pid *byte, ns, nr uint8) ax25.Frame {
