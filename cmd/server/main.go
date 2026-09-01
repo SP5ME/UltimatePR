@@ -32,6 +32,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/monitor"
 	"github.com/packet-radio/ultimatepr/internal/netrom"
 	nodecore "github.com/packet-radio/ultimatepr/internal/node"
+	"github.com/packet-radio/ultimatepr/internal/service"
 	"github.com/packet-radio/ultimatepr/internal/session"
 	"github.com/packet-radio/ultimatepr/internal/tncproxy"
 	"github.com/packet-radio/ultimatepr/internal/transport"
@@ -463,6 +464,14 @@ func main() {
 		return nil
 	}
 	inbound := session.NewInboundMux(senders, log)
+	services := service.NewRegistry()
+	inbound.SetRegistry(services)
+	registerService := func(reg service.ServiceRegistration) {
+		if err := services.Register(reg); err != nil {
+			log.Error("service registration failed", "service", reg.Service.ID(), "error", err)
+			os.Exit(2)
+		}
+	}
 	inbound.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	if nodeEnabled && cfg.Node.NetROMEnabled {
 		var netromMu sync.Mutex
@@ -732,20 +741,27 @@ func main() {
 			}
 		}()
 		log.Info("BBS service started", "listen", cfg.BBS.Listen, "database", cfg.BBS.Database)
-		inbound.Register(ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, bbsServer.ServeAX25)
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "bbs", Handler: func(ctx service.ServiceContext) error {
+			bbsServer.ServeAX25(ctx.RemoteCall.String(), ctx.Reader, ctx.Writer)
+			return nil
+		}}, Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, Enabled: true})
 	}
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
 		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, ProcessingMessage: cfg.AI.ProcessingMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
-		inbound.Register(ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, func(call string, r io.Reader, w io.Writer) {
-			scanner := lineinput.NewScanner(r)
-			aiServer.ServeSession(call, cfg.Application.Language, scanner, w)
-		})
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "ai", Handler: func(ctx service.ServiceContext) error {
+			scanner := lineinput.NewScanner(ctx.Reader)
+			aiServer.ServeSession(ctx.RemoteCall.String(), cfg.Application.Language, scanner, ctx.Writer)
+			return nil
+		}}, Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, Enabled: true})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
 	}
 	if gameHallEnabled {
 		gameHall = gamehall.New(time.Duration(cfg.GameHall.InviteTimeoutSeconds) * time.Second)
-		inbound.Register(ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, func(call string, r io.Reader, w io.Writer) { gameHall.ServeAX25(call, cfg.GameHall.Language, r, w) })
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "gamehall", Handler: func(ctx service.ServiceContext) error {
+			gameHall.ServeAX25(ctx.RemoteCall.String(), cfg.GameHall.Language, ctx.Reader, ctx.Writer)
+			return nil
+		}}, Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, Enabled: true})
 		log.Info("game hall service enabled", "callsign", ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String())
 	}
 	if nodeEnabled {
@@ -816,7 +832,10 @@ func main() {
 				}
 			}
 		}
-		inbound.Register(ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, nodeServer.ServeAX25)
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "node", Handler: func(ctx service.ServiceContext) error {
+			nodeServer.ServeAX25(ctx.RemoteCall.String(), ctx.Reader, ctx.Writer)
+			return nil
+		}}, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, Aliases: []string{cfg.Node.Alias}, Enabled: true})
 		go func() {
 			if err := nodeServer.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Error("node server stopped", "error", err)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/service"
 )
 
 // AX25Service handles one connected-mode byte stream. The remote callsign is
@@ -35,6 +36,7 @@ type InboundMux struct {
 	services       map[string]AX25Service
 	routedServices map[string]RoutedAX25Service
 	packetServices map[string]AX25PacketService
+	registry       *service.Registry
 	senders        map[string]Sender
 	links          map[string]*inboundLink
 	log            *slog.Logger
@@ -66,6 +68,12 @@ type inboundLink struct {
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
 	return &InboundMux{services: map[string]AX25Service{}, routedServices: map[string]RoutedAX25Service{}, packetServices: map[string]AX25PacketService{}, senders: senders, links: map[string]*inboundLink{}, log: log, t1: defaultT1, t2: defaultT2, n2: 10, paclen: defaultN1}
+}
+
+func (m *InboundMux) SetRegistry(registry *service.Registry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.registry = registry
 }
 
 func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
@@ -105,10 +113,18 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	key := linkKey(port, f.Destination, f.Source)
 	m.mu.Lock()
 	link := m.links[key]
-	service := m.services[f.Destination.String()]
+	legacyService := m.services[f.Destination.String()]
 	routedService := m.routedServices[f.Destination.String()]
 	packetService := m.packetServices[f.Destination.String()]
-	registered := service != nil || routedService != nil || packetService != nil
+	var registeredService service.Service
+	if m.registry != nil {
+		if registration, ok := m.registry.ByCallsign(f.Destination.String()); ok {
+			registeredService = registration.Service
+		} else if registration, ok := m.registry.ByAlias(f.Destination.String()); ok {
+			registeredService = registration.Service
+		}
+	}
+	registered := legacyService != nil || routedService != nil || packetService != nil || registeredService != nil
 	m.mu.Unlock()
 	if link != nil {
 		link.mu.Lock()
@@ -167,8 +183,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		_ = link.sendControl(sabmAction.send, sabmAction.pollFinal, sabmAction.nr)
 		if created {
 			go link.supervise()
-			if service != nil || routedService != nil {
-				go link.run(service, routedService)
+			if registeredService != nil {
+				go link.run(legacyService, routedService, registeredService)
+			} else if legacyService != nil || routedService != nil {
+				go link.run(legacyService, routedService, nil)
 			}
 		}
 		if m.log != nil {
@@ -332,7 +350,7 @@ func (l *inboundLink) scheduleAcknowledgement(serial uint64, t2 time.Duration) {
 	})
 }
 
-func (l *inboundLink) run(service AX25Service, routedService RoutedAX25Service) {
+func (l *inboundLink) run(legacyService AX25Service, routedService RoutedAX25Service, registeredService service.Service) {
 	r, pw := io.Pipe()
 	pr, w := io.Pipe()
 	txDone := make(chan struct{})
@@ -369,11 +387,26 @@ func (l *inboundLink) run(service AX25Service, routedService RoutedAX25Service) 
 		}
 	}()
 	go func() { l.transmit(); close(txDone) }()
-	if routedService != nil {
+	if registeredService != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			select {
+			case <-l.closed:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		_ = registeredService.Serve(service.ServiceContext{
+			Context: ctx, LocalCall: l.local, RemoteCall: l.remote, PortID: l.port,
+			Digipeaters: append([]ax25.Address(nil), l.digipeaters...), Reader: r, Writer: w,
+			EntryType: service.EntryAX25, Cancel: cancel, Disconnect: l.disconnect,
+		})
+		cancel()
+	} else if routedService != nil {
 		route := InboundRoute{Remote: l.remote.String(), Port: l.port, Digipeaters: append([]ax25.Address(nil), l.digipeaters...)}
 		routedService(route, r, w)
 	} else {
-		service(l.remote.String(), r, w)
+		legacyService(l.remote.String(), r, w)
 	}
 	_ = w.Close()
 	select {
