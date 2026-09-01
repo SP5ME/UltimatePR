@@ -18,6 +18,7 @@ const (
 	EntryAX25  = EntryType("ax25")
 	EntryLocal = EntryType("local")
 	EntryTCP   = EntryType("tcp")
+	EntryNode  = EntryType("node")
 )
 
 // ServiceContext is the transport-neutral context of one service invocation.
@@ -42,10 +43,11 @@ type Service interface {
 }
 
 type ServiceRegistration struct {
-	Service  Service
-	Callsign ax25.Address
-	Aliases  []string
-	Enabled  bool
+	Service     Service
+	Callsign    ax25.Address
+	Aliases     []string
+	Enabled     bool
+	NodeVisible bool
 }
 
 type Registry struct {
@@ -148,6 +150,28 @@ func (r *Registry) ByAlias(alias string) (ServiceRegistration, bool) {
 	return r.lookup(id, func(reg ServiceRegistration) bool { return reg.Enabled })
 }
 
+func (r *Registry) Has(key string) bool {
+	if r == nil {
+		return false
+	}
+	if _, ok := r.ByID(key); ok {
+		return true
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if _, ok := r.services[normalizeID(key)]; ok {
+		return true
+	}
+	for _, reg := range r.services {
+		for _, alias := range reg.Aliases {
+			if alias == normalizeAlias(key) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Serve invokes an enabled service for a local, TCP, or other non-AX.25 entry.
 // AX.25 sessions are invoked by session.InboundMux after endpoint routing.
 func (r *Registry) Serve(key string, ctx ServiceContext) error {
@@ -170,6 +194,19 @@ func (r *Registry) List() []ServiceRegistration {
 	out := make([]ServiceRegistration, 0, len(r.services))
 	for _, reg := range r.services {
 		if reg.Enabled {
+			out = append(out, cloneRegistration(reg))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return normalizeID(out[i].Service.ID()) < normalizeID(out[j].Service.ID()) })
+	return out
+}
+
+func (r *Registry) ListNodeVisible() []ServiceRegistration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]ServiceRegistration, 0, len(r.services))
+	for _, reg := range r.services {
+		if reg.Enabled && reg.NodeVisible {
 			out = append(out, cloneRegistration(reg))
 		}
 	}

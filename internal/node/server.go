@@ -10,17 +10,20 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/packet-radio/ultimatepr/internal/bbs"
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/language"
 	"github.com/packet-radio/ultimatepr/internal/lineinput"
+	"github.com/packet-radio/ultimatepr/internal/service"
 )
 
 type Server struct {
 	Listen, Callsign, Alias, Language string
 	WelcomeMessage, GoodbyeMessage    string
 	Router                            *Router
-	BBS                               *bbs.Server
-	Handlers                          map[string]func(string, string, *bufio.Scanner, io.Writer)
+	Registry                          *service.Registry
+	Version                           string
+	LanguageLookup                    func(string) string
+	SetLanguage                       func(string, string) error
 	Ports                             []string
 	Log                               *slog.Logger
 	// Connect bridges the current terminal to a resolved remote node or
@@ -50,37 +53,52 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 func (s *Server) Serve(r io.Reader, w io.Writer) {
+	s.serveWithContext(service.ServiceContext{Context: context.Background(), Reader: r, Writer: w, EntryType: service.EntryTCP})
+}
+
+func (s *Server) ServeContext(ctx service.ServiceContext) {
+	s.serveWithContext(ctx)
+}
+
+func (s *Server) serveWithContext(ctx service.ServiceContext) {
 	lang := language.Normalize(s.Language)
-	stream := &singleByteReader{r: r}
+	stream := &singleByteReader{r: ctx.Reader}
 	in := lineinput.NewScanner(stream)
 	in.Buffer(make([]byte, 1024), 64*1024)
-	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n%s", s.Alias, s.Callsign, bbs.BuildVersion, language.T(lang, "node_call"))
+	fmt.Fprintf(ctx.Writer, "\r\n%s:%s NODE UltimatePR %s\r\n%s", s.Alias, s.Callsign, s.Version, language.T(lang, "node_call"))
+	if ctx.EntryType == service.EntryAX25 {
+		s.serveCall(ctx.RemoteCall.String(), lang, in, stream, ctx)
+		return
+	}
 	if !in.Scan() {
 		return
 	}
 	call := strings.ToUpper(strings.TrimSpace(in.Text()))
-	s.serveCall(call, lang, in, stream, w)
+	if parsed, err := ax25.ParseAddress(call); err == nil {
+		ctx.RemoteCall = parsed
+	}
+	s.serveCall(call, lang, in, stream, ctx)
 }
 
 // ServeAX25 serves an already identified AX.25 station. Unlike Telnet, an
 // AX.25 connected-mode session obtains the callsign from the link header and
 // must not ask the operator to type it again.
 func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
-	lang := language.Normalize(s.Language)
-	stream := &singleByteReader{r: r}
-	in := lineinput.NewScanner(stream)
-	in.Buffer(make([]byte, 1024), 64*1024)
-	fmt.Fprintf(w, "\r\n%s:%s NODE UltimatePR %s\r\n", s.Alias, s.Callsign, bbs.BuildVersion)
-	s.serveCall(strings.ToUpper(strings.TrimSpace(call)), lang, in, stream, w)
+	remote, _ := ax25.ParseAddress(call)
+	local, _ := ax25.ParseAddress(s.Callsign)
+	s.ServeContext(service.ServiceContext{Context: context.Background(), LocalCall: local, RemoteCall: remote, Reader: r, Writer: w, EntryType: service.EntryAX25})
 }
 
-func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reader, w io.Writer) {
+func remoteAddress(call string) ax25.Address { remote, _ := ax25.ParseAddress(call); return remote }
+
+func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reader, ctx service.ServiceContext) {
+	w := ctx.Writer
 	if call == "" {
 		fmt.Fprint(w, language.T(lang, "invalid_call"))
 		return
 	}
-	if s.BBS != nil && s.BBS.Store != nil {
-		if saved := s.BBS.Store.Language(call); saved != "" {
+	if s.LanguageLookup != nil {
+		if saved := s.LanguageLookup(call); saved != "" {
 			lang = language.Normalize(saved)
 		}
 	}
@@ -108,8 +126,8 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reade
 				continue
 			}
 			lang = language.Normalize(f[1])
-			if s.BBS != nil && s.BBS.Store != nil {
-				_ = s.BBS.Store.SetLanguage(call, lang)
+			if s.SetLanguage != nil {
+				_ = s.SetLanguage(call, lang)
 			}
 			if lang == "en" {
 				fmt.Fprint(w, language.T(lang, "lang_en"))
@@ -126,16 +144,17 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reade
 			}
 		case "S", "SERVICES":
 			s.services(w)
-		case "BBS", "AI", "GAME":
-			if !s.runService(cmd, call, lang, in, w) {
-				fmt.Fprint(w, language.T(lang, "bbs_unavailable"))
+		default:
+			if !s.runService(cmd, call, lang, stream, ctx) {
+				if s.Registry != nil && s.Registry.Has(cmd) {
+					fmt.Fprint(w, language.T(lang, "bbs_unavailable"))
+				} else {
+					fmt.Fprint(w, language.T(lang, "unknown"))
+				}
 			}
 		case "C", "CONNECT":
 			if len(f) < 2 {
 				fmt.Fprint(w, language.T(lang, "usage_connect"))
-				continue
-			}
-			if service, ok := s.Router.Service(f[1]); ok && s.runService(service.Command, call, lang, in, w) {
 				continue
 			}
 			n, route, err := s.Router.Resolve(f[1])
@@ -156,8 +175,6 @@ func (s *Server) serveCall(call, lang string, in *bufio.Scanner, stream io.Reade
 				fmt.Fprint(w, expandSessionMessage(s.GoodbyeMessage, s.Callsign, call), "\r\n")
 			}
 			return
-		default:
-			fmt.Fprint(w, language.T(lang, "unknown"))
 		}
 	}
 }
@@ -178,22 +195,28 @@ func (r *singleByteReader) Read(p []byte) (int, error) {
 	n, err := r.r.Read(p[:1])
 	return n, err
 }
-func (s *Server) runService(command, call, lang string, in *bufio.Scanner, w io.Writer) bool {
-	service, ok := s.Router.Service(command)
-	if !ok {
+func (s *Server) runService(command, call, lang string, stream io.Reader, parent service.ServiceContext) bool {
+	if s.Registry == nil {
 		return false
 	}
-	if h := s.Handlers[strings.ToUpper(service.Command)]; h != nil {
-		h(call, lang, in, w)
-		fmt.Fprint(w, language.T(lang, "returned"))
-		return true
+	registration, ok := s.Registry.ByAlias(command)
+	if !ok {
+		registration, ok = s.Registry.ByID(command)
 	}
-	if strings.EqualFold(service.Command, "BBS") && s.BBS != nil {
-		s.BBS.ServeSessionLanguage(call, lang, in, w)
-		fmt.Fprint(w, language.T(lang, "returned"))
-		return true
+	if !ok || !registration.NodeVisible {
+		return false
 	}
-	return false
+	ctx := parent
+	ctx.Reader, ctx.Writer, ctx.EntryType = stream, parent.Writer, service.EntryNode
+	if ctx.Context == nil {
+		ctx.Context = context.Background()
+	}
+	if ctx.RemoteCall.Callsign == "" {
+		ctx.RemoteCall = remoteAddress(call)
+	}
+	_ = s.Registry.Serve(registration.Service.ID(), ctx)
+	fmt.Fprint(parent.Writer, language.T(lang, "returned"))
+	return true
 }
 func (s *Server) nodes(w io.Writer, lang string) {
 	ns := s.Router.Neighbors()
@@ -216,7 +239,10 @@ func (s *Server) routes(w io.Writer, lang string) {
 	}
 }
 func (s *Server) services(w io.Writer) {
-	for _, x := range s.Router.Services() {
-		fmt.Fprintf(w, "%-8s %-10s %s\r\n", x.Command, x.Callsign, x.Name)
+	if s.Registry == nil {
+		return
+	}
+	for _, registration := range s.Registry.ListNodeVisible() {
+		fmt.Fprintf(w, "%-8s %-10s %s\r\n", strings.Join(registration.Aliases, ","), registration.Callsign.String(), registration.Service.ID())
 	}
 }

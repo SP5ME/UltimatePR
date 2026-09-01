@@ -52,6 +52,7 @@ type Config struct {
 	AISSID             uint8
 	AIEnabled          bool
 	AIConnect          func() (net.Conn, error)
+	ServiceConnect     func(string) (net.Conn, error)
 	GameHallCallsign   string
 	GameHallSSID       uint8
 	GameHallEnabled    bool
@@ -1416,7 +1417,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if m.Mode == "ai" {
-				conn, err := s.cfg.AIConnect()
+				var conn net.Conn
+				var err error
+				if s.cfg.ServiceConnect != nil {
+					conn, err = s.cfg.ServiceConnect("ai")
+				} else {
+					conn, err = s.cfg.AIConnect()
+				}
 				if err != nil {
 					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalna IA nieudane: " + err.Error()})
 					continue
@@ -1433,7 +1440,13 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if m.Mode == "game_hall" {
-				conn, err := s.cfg.GameHallConnect()
+				var conn net.Conn
+				var err error
+				if s.cfg.ServiceConnect != nil {
+					conn, err = s.cfg.ServiceConnect("gamehall")
+				} else {
+					conn, err = s.cfg.GameHallConnect()
+				}
 				if err != nil {
 					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalnym Salonem Gier nieudane: " + err.Error()})
 					continue

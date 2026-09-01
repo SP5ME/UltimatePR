@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -228,6 +227,7 @@ func main() {
 		}
 	}
 	var nodeRouter *nodecore.Router
+	services := service.NewRegistry()
 	if nodeEnabled {
 		neighbors := make([]nodecore.Neighbor, 0, len(cfg.Node.Neighbors))
 		for _, n := range cfg.Node.Neighbors {
@@ -243,21 +243,12 @@ func main() {
 			}
 			routes = append(routes, nodecore.Route{Destination: r.Destination, Via: r.Via, Quality: r.Quality})
 		}
-		services := make([]nodecore.Service, 0, len(cfg.Node.Services)+3)
+		advertisedServices := make([]nodecore.Service, 0, len(cfg.Node.Services))
 		for _, s := range cfg.Node.Services {
-			services = append(services, nodecore.Service{Name: s.Name, Callsign: s.Callsign, Command: s.Command, Enabled: s.Enabled})
+			advertisedServices = append(advertisedServices, nodecore.Service{Name: s.Name, Callsign: s.Callsign, Command: s.Command, Enabled: s.Enabled})
 		}
-		if bbsEnabled {
-			services = append(services, nodecore.Service{Name: "BBS", Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Command: "BBS", Enabled: true})
-		}
-		if aiEnabled {
-			services = append(services, nodecore.Service{Name: "AI Assistant", Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String(), Command: "AI", Enabled: true})
-		}
-		if gameHallEnabled {
-			services = append(services, nodecore.Service{Name: "Game Hall", Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String(), Command: "GAME", Enabled: true})
-		}
-		nodeRouter = nodecore.New(neighbors, routes, services)
-		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(services))
+		nodeRouter = nodecore.New(neighbors, routes, advertisedServices)
+		log.Info("node routing configured", "alias", cfg.Node.Alias, "neighbors", len(neighbors), "routes", len(routes), "services", len(advertisedServices))
 		if cfg.Node.NetROMEnabled {
 			mnemonic := cfg.Node.NetROMMnemonic
 			if strings.TrimSpace(mnemonic) == "" {
@@ -464,7 +455,6 @@ func main() {
 		return nil
 	}
 	inbound := session.NewInboundMux(senders, log)
-	services := service.NewRegistry()
 	inbound.SetRegistry(services)
 	registerService := func(reg service.ServiceRegistration) {
 		if err := services.Register(reg); err != nil {
@@ -574,7 +564,7 @@ func main() {
 				if !nodeEnabled || nodeRouter == nil {
 					return publicapi.NodeStatus{Enabled: false}
 				}
-				return publicapi.NodeStatus{Enabled: true, Neighbors: len(nodeRouter.Neighbors()), Routes: len(nodeRouter.Routes()), Services: len(nodeRouter.Services())}
+				return publicapi.NodeStatus{Enabled: true, Neighbors: len(nodeRouter.Neighbors()), Routes: len(nodeRouter.Routes()), Services: len(services.List())}
 			},
 			BBS: func() *bbs.Store { return bbsStore },
 			Digipeater: func() publicapi.DigipeaterStatus {
@@ -625,6 +615,22 @@ func main() {
 				defer server.Close()
 				scanner := lineinput.NewScanner(server)
 				aiServer.ServeSession(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), cfg.Application.Language, scanner, server)
+			}()
+			return client, nil
+		},
+		ServiceConnect: func(id string) (net.Conn, error) {
+			registration, ok := services.ByID(id)
+			if !ok {
+				return nil, fmt.Errorf("service %q is not available", id)
+			}
+			client, server := net.Pipe()
+			go func() {
+				defer server.Close()
+				local := registration.Callsign
+				remote := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
+				if err := services.Serve(id, service.ServiceContext{Context: context.Background(), LocalCall: local, RemoteCall: remote, PortID: "local", Reader: server, Writer: server, EntryType: service.EntryLocal}); err != nil {
+					log.Warn("local service stopped", "service", id, "error", err)
+				}
 			}()
 			return client, nil
 		},
@@ -744,7 +750,7 @@ func main() {
 		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "bbs", Handler: func(ctx service.ServiceContext) error {
 			bbsServer.ServeAX25(ctx.RemoteCall.String(), ctx.Reader, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, Enabled: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, Aliases: []string{"BBS"}, Enabled: true, NodeVisible: true})
 	}
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
@@ -753,7 +759,7 @@ func main() {
 			scanner := lineinput.NewScanner(ctx.Reader)
 			aiServer.ServeSession(ctx.RemoteCall.String(), cfg.Application.Language, scanner, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, Enabled: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, Aliases: []string{"AI"}, Enabled: true, NodeVisible: true})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
 	}
 	if gameHallEnabled {
@@ -761,18 +767,20 @@ func main() {
 		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "gamehall", Handler: func(ctx service.ServiceContext) error {
 			gameHall.ServeAX25(ctx.RemoteCall.String(), cfg.GameHall.Language, ctx.Reader, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, Enabled: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, Aliases: []string{"GAME", "GAMES", "GRY"}, Enabled: true, NodeVisible: true})
 		log.Info("game hall service enabled", "callsign", ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String())
 	}
 	if nodeEnabled {
-		handlers := map[string]func(string, string, *bufio.Scanner, io.Writer){}
-		if aiServer != nil {
-			handlers["AI"] = aiServer.ServeSession
+		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, Version: bbs.BuildVersion, Registry: services, Router: nodeRouter, Ports: portIDs, Log: log}
+		nodeServer.LanguageLookup = func(call string) string {
+			if bbsStore == nil {
+				return ""
+			}
+			return bbsStore.Language(call)
 		}
-		if gameHall != nil {
-			handlers["GAME"] = gameHall.Serve
+		if bbsStore != nil {
+			nodeServer.SetLanguage = bbsStore.SetLanguage
 		}
-		nodeServer := &nodecore.Server{Listen: cfg.Node.Listen, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}.String(), Alias: cfg.Node.Alias, Language: cfg.Node.Language, WelcomeMessage: cfg.Node.WelcomeMessage, GoodbyeMessage: cfg.Node.GoodbyeMessage, Router: nodeRouter, BBS: bbsServer, Handlers: handlers, Ports: portIDs, Log: log}
 		nodeServer.Connect = func(target string, neighbor nodecore.Neighbor, route nodecore.Route, local io.Reader, terminal io.Writer) error {
 			remoteCall, err := ax25.ParseAddress(neighbor.Callsign)
 			if err != nil {
@@ -833,7 +841,7 @@ func main() {
 			}
 		}
 		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "node", Handler: func(ctx service.ServiceContext) error {
-			nodeServer.ServeAX25(ctx.RemoteCall.String(), ctx.Reader, ctx.Writer)
+			nodeServer.ServeContext(ctx)
 			return nil
 		}}, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, Aliases: []string{cfg.Node.Alias}, Enabled: true})
 		go func() {

@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/packet-radio/ultimatepr/internal/ax25"
 	"github.com/packet-radio/ultimatepr/internal/bbs"
+	"github.com/packet-radio/ultimatepr/internal/lineinput"
+	"github.com/packet-radio/ultimatepr/internal/service"
 )
 
 func TestNodeEntersBBSAndReturns(t *testing.T) {
@@ -20,10 +23,17 @@ func TestNodeEntersBBSAndReturns(t *testing.T) {
 		t.Fatal(err)
 	}
 	mail := &bbs.Server{Title: "Test BBS", Node: "SP5ABC-8", Language: "en", Store: store, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	router := New(nil, nil, []Service{{Name: "BBS", Callsign: "SP5ABC-8", Command: "BBS", Enabled: true}})
-	srv := &Server{Callsign: "SP5ABC-7", Alias: "SP5ND", Language: "en", Router: router, BBS: mail, Ports: []string{"radio-2m"}}
+	registry := service.NewRegistry()
+	if err := registry.Register(service.ServiceRegistration{Service: service.Func{ServiceID: "bbs", Handler: func(ctx service.ServiceContext) error {
+		mail.ServeSessionLanguage(ctx.RemoteCall.String(), "en", lineinput.NewScanner(ctx.Reader), ctx.Writer)
+		return nil
+	}}, Callsign: ax25.Address{Callsign: "SP5ABC", SSID: 8}, Aliases: []string{"BBS"}, Enabled: true, NodeVisible: true}); err != nil {
+		t.Fatal(err)
+	}
+	router := New(nil, nil, nil)
+	srv := &Server{Callsign: "SP5ABC-7", Alias: "SP5ND", Language: "en", Router: router, Registry: registry, Ports: []string{"radio-2m"}}
 	var out bytes.Buffer
-	srv.Serve(strings.NewReader("SP5AAA\nSERVICES\nC BBS\nL\nB\nPORTS\nBYE\n"), &out)
+	srv.Serve(strings.NewReader("SP5AAA\nSERVICES\nBBS\nL\nB\nPORTS\nBYE\n"), &out)
 	text := out.String()
 	for _, want := range []string{"SP5ND:SP5ABC-7 NODE", "SP5ABC-8", "Hello SP5AAA", "Returned to node", "radio-2m", "73!"} {
 		if !strings.Contains(text, want) {
