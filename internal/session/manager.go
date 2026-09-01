@@ -270,6 +270,10 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	if m.localResolve != nil && m.localResolve(remote) && m.localSend != nil {
 		selectedSend = m.localSend(port)
 	}
+	// Use the resolved path for the whole link setup, including SABM and
+	// subsequent XID/control frames. Remote destinations retain the physical
+	// sender selected above.
+	send = selectedSend
 	m.mu.Lock()
 	if m.state != Disconnected {
 		m.mu.Unlock()

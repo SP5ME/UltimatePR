@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 	wire := make(chan transport.Packet, 128)
 	loop := loopback.New(wire)
-	send := func(ctx context.Context, data []byte) error {
-		return loop.Send(ctx, transport.Packet{PortID: "radio-2m", Data: append([]byte(nil), data...)})
+	var physicalCalls atomic.Int32
+	physicalSend := func(context.Context, []byte) error {
+		physicalCalls.Add(1)
+		return nil
 	}
 
 	local := ax25.Address{Callsign: "LOCAL"}
@@ -45,9 +48,10 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 			return loop.Send(ctx, transport.Packet{PortID: portID, Data: append([]byte(nil), data...)})
 		}
 	})
-	inbound := NewInboundMux(map[string]Sender{"radio-2m": send}, nil)
+	localPortSend := localSend("radio-2m")
+	inbound := NewInboundMux(map[string]Sender{"radio-2m": localPortSend}, nil)
 	inbound.SetRegistry(registry)
-	hub := NewHub(local, map[string]Sender{"radio-2m": send})
+	hub := NewHub(local, map[string]Sender{"radio-2m": physicalSend})
 	hub.SetLocalDelivery(func(address ax25.Address) bool { _, ok := registry.ByCallsign(address.String()); return ok }, localSend)
 	manager, release := hub.NewSession()
 	defer release()
@@ -85,6 +89,9 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 
 	select {
 	case ctx := <-serviceStarted:
+		if got := physicalCalls.Load(); got != 0 {
+			t.Fatalf("physical sender calls=%d", got)
+		}
 		if ctx.PortID != "radio-2m" || ctx.EntryType != service.EntryAX25 || ctx.RemoteCall.String() != local.String() || ctx.LocalCall.String() != remote.String() {
 			t.Fatalf("service context=%+v", ctx)
 		}
@@ -115,5 +122,32 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 	defer disconnectCancel()
 	if err := manager.Disconnect(disconnectCtx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLocalDeliveryDoesNotInterceptRemoteDestination(t *testing.T) {
+	var physicalCalls atomic.Int32
+	physicalSend := func(context.Context, []byte) error {
+		physicalCalls.Add(1)
+		return nil
+	}
+	hub := NewHub(ax25.Address{Callsign: "LOCAL"}, map[string]Sender{"radio-2m": physicalSend})
+	hub.SetLocalDelivery(func(address ax25.Address) bool {
+		return address.String() == "TEST-10"
+	}, func(string) Sender {
+		return func(context.Context, []byte) error {
+			t.Fatal("local sender intercepted remote destination")
+			return nil
+		}
+	})
+	manager, release := hub.NewSession()
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := manager.Connect(ctx, "radio-2m", "REMOTE"); err == nil {
+		t.Fatal("remote connection unexpectedly succeeded without a peer")
+	}
+	if got := physicalCalls.Load(); got == 0 {
+		t.Fatal("physical sender was not used for remote destination")
 	}
 }
