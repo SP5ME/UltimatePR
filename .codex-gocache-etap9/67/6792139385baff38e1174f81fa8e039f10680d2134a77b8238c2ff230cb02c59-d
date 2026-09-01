@@ -1,0 +1,5 @@
+./game.go
+./hall.go
+./tictactoe.go
+./hall_test.go
+./tictactoe_test.go

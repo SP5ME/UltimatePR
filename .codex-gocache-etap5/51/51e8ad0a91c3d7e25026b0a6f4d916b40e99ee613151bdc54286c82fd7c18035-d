@@ -1,0 +1,13 @@
+./address.go
+./exchange.go
+./forward.go
+./server.go
+./store.go
+./tapr_forward.go
+./version.go
+./address_test.go
+./exchange_test.go
+./forward_test.go
+./server_test.go
+./store_test.go
+./tapr_forward_test.go

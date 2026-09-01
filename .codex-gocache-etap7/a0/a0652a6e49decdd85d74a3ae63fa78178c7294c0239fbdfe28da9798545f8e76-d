@@ -1,0 +1,13 @@
+# test log
+open ../../configs/example.yaml
+getenv GOTMPDIR
+open ../../configs/example.yaml
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile1856297923\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile1856297923\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveRejectsInvalidWithoutChangingFile1856297923\001\config.yaml
+open C:\Users\mikol\AppData\Local\Temp
+open ../../configs/example.yaml
+getenv GOTMPDIR
+open C:\Users\mikol\AppData\Local\Temp\TestSaveModelRoundTrip3109570073\001\config.yaml.tmp
+open C:\Users\mikol\AppData\Local\Temp\TestSaveModelRoundTrip3109570073\001\config.yaml
+open C:\Users\mikol\AppData\Local\Temp

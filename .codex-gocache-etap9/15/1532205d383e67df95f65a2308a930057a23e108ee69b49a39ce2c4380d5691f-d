@@ -1,0 +1,11 @@
+{
+	"github.com/packet-radio/ultimatepr/internal/session": {
+		"printf": [
+			{
+				"posn": "F:\\GitHub\\BBS-Serwer\\internal\\session\\linkcore_test.go:147:46",
+				"end": "F:\\GitHub\\BBS-Serwer\\internal\\session\\linkcore_test.go:147:48",
+				"message": "(*testing.common).Fatalf format %s has arg tt.wantSend of wrong type github.com/packet-radio/ultimatepr/internal/ax25.Type"
+			}
+		]
+	}
+}

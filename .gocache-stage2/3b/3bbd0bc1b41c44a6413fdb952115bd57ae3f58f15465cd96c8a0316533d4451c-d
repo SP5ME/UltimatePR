@@ -1,0 +1,4 @@
+./ollama.go
+./provider.go
+./service.go
+./service_test.go

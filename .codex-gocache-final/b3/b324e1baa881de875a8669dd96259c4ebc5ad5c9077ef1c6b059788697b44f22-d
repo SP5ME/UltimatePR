@@ -1,0 +1,9 @@
+./auth.go
+./server.go
+./setup.go
+./telnet.go
+./terminal_messages.go
+./update.go
+./auth_test.go
+./server_test.go
+./update_test.go
