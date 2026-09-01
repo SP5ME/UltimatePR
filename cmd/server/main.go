@@ -338,7 +338,13 @@ func main() {
 			}()
 		}
 	}
-	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, senders)
+	outboundSenders := make(map[string]session.Sender, len(senders))
+	for id, sender := range senders {
+		if runtime := runtimes[id]; runtime != nil && runtime.enabled {
+			outboundSenders[id] = sender
+		}
+	}
+	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, outboundSenders)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
 	mheardSnapshotPath := *path + ".mheard-snapshot.json"

@@ -382,6 +382,19 @@ func TestConnectRequiresTargetCallsign(t *testing.T) {
 	}
 }
 
+func TestConnectRejectsUnavailablePortBeforeStarting(t *testing.T) {
+	m := New(ax25.Address{Callsign: "SP5LOCAL"}, map[string]Sender{"vhf": func(context.Context, []byte) error {
+		t.Fatal("unavailable port sender was called")
+		return nil
+	}})
+	if err := m.Connect(context.Background(), "uhf", "REMOTE-1"); err == nil {
+		t.Fatal("unknown port accepted")
+	}
+	if m.State() != Disconnected {
+		t.Fatalf("state=%s", m.State())
+	}
+}
+
 func TestConnectIncludesDigipeaterPath(t *testing.T) {
 	m, sent := testManager(t)
 	done := make(chan error, 1)
