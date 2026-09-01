@@ -122,6 +122,44 @@ func TestLinkCoreIdleAndRecoveryLifecycle(t *testing.T) {
 	}
 }
 
+func TestLinkCoreLifecycleActions(t *testing.T) {
+	tests := []struct {
+		name      string
+		initial   State
+		event     linkEvent
+		wantState State
+		wantSend  ax25.Type
+		wantRetry bool
+	}{
+		{name: "local connect", initial: Disconnected, event: linkEvent{kind: eventConnectRequested}, wantState: AwaitingConnection, wantSend: ax25.TypeSABM},
+		{name: "remote connect", initial: Disconnected, event: linkEvent{kind: eventRemoteSABM, pf: true}, wantState: Connected, wantSend: ax25.TypeUA},
+		{name: "local release", initial: Connected, event: linkEvent{kind: eventDisconnectRequested}, wantState: AwaitingRelease, wantSend: ax25.TypeDISC},
+		{name: "remote release", initial: Connected, event: linkEvent{kind: eventRemoteDISC, pf: true}, wantState: Disconnected, wantSend: ax25.TypeUA},
+		{name: "T2", initial: Connected, event: linkEvent{kind: eventT2Expired}, wantState: Connected, wantSend: ax25.TypeRR},
+		{name: "T3", initial: Connected, event: linkEvent{kind: eventT3Expired}, wantState: TimerRecovery, wantSend: ax25.TypeRR},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var l linkCore
+			l.state = tt.initial
+			action := l.handleEvent(tt.event)
+			if action.state != tt.wantState || action.send != tt.wantSend {
+				t.Fatalf("action=%+v, want state=%s send=%v", action, tt.wantState, tt.wantSend)
+			}
+		})
+	}
+
+	var l linkCore
+	l.state = AwaitingConnection
+	l.startTimer(time.Unix(400, 0), timerForConnect, 1)
+	if action := l.handleEvent(linkEvent{kind: eventT1Expired}); !action.retry || action.terminate || action.send != ax25.TypeSABM {
+		t.Fatalf("T1 retry action=%+v", action)
+	}
+	if action := l.handleEvent(linkEvent{kind: eventT1Expired}); !action.terminate || action.state != Disconnected {
+		t.Fatalf("N2 exhaustion action=%+v", action)
+	}
+}
+
 func TestLinkCoreResetAndPortAdapterIsolation(t *testing.T) {
 	var vhf, uhf linkCore
 	vhf.vs, vhf.vr, vhf.peerBusy = 3, 2, true

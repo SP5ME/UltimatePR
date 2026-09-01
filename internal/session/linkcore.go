@@ -29,6 +29,40 @@ type linkTimerState struct {
 	limit     int
 }
 
+type linkEventKind uint8
+
+const (
+	eventConnectRequested linkEventKind = iota
+	eventRemoteSABM
+	eventDisconnectRequested
+	eventRemoteDISC
+	eventRemoteDM
+	eventT1Expired
+	eventT2Expired
+	eventT3Expired
+	eventTimerRecoveryResponse
+	eventRemoteBusy
+	eventRemoteReady
+	eventServiceClosed
+)
+
+type linkEvent struct {
+	kind  linkEventKind
+	final bool
+	pf    bool
+}
+
+type linkAction struct {
+	send        ax25.Type
+	pollFinal   bool
+	nr          uint8
+	state       State
+	retry       bool
+	terminate   bool
+	recover     bool
+	acknowledge bool
+}
+
 // linkCore is the shared modulo-8 connected-link state. Adapters own the
 // mutex and call these methods while holding it, so their existing channel and
 // lifecycle synchronization remains unchanged.
@@ -43,6 +77,7 @@ type linkCore struct {
 	ackSerial  uint64
 	lastActive time.Time
 	recovery   bool
+	state      State
 }
 
 func (l *linkCore) reset() {
@@ -56,6 +91,7 @@ func (l *linkCore) reset() {
 	l.ackSerial = 0
 	l.lastActive = time.Time{}
 	l.recovery = false
+	l.state = Disconnected
 }
 
 func (l linkCore) nextSend() (ns, nr, expected uint8) {
@@ -131,6 +167,68 @@ func (l *linkCore) enterRecovery() {
 
 func (l *linkCore) exitRecovery() {
 	l.recovery = false
+}
+
+// handleEvent is the protocol decision boundary. Adapters translate its
+// action into actual frame I/O and physical timer operations.
+func (l *linkCore) handleEvent(event linkEvent) linkAction {
+	switch event.kind {
+	case eventConnectRequested:
+		l.reset()
+		l.state = AwaitingConnection
+		return linkAction{send: ax25.TypeSABM, pollFinal: true, state: l.state}
+	case eventRemoteSABM:
+		l.reset()
+		l.state = Connected
+		return linkAction{send: ax25.TypeUA, pollFinal: event.pf, state: l.state}
+	case eventDisconnectRequested, eventServiceClosed:
+		if l.state == Disconnected {
+			return linkAction{state: Disconnected}
+		}
+		l.state = AwaitingRelease
+		return linkAction{send: ax25.TypeDISC, pollFinal: true, state: l.state}
+	case eventRemoteDISC:
+		l.state = Disconnected
+		l.stopTimer()
+		return linkAction{send: ax25.TypeUA, pollFinal: event.pf, state: l.state, terminate: true}
+	case eventRemoteDM:
+		l.state = Disconnected
+		l.stopTimer()
+		return linkAction{state: l.state, terminate: true}
+	case eventRemoteBusy:
+		l.peerBusy = true
+		return linkAction{state: l.state}
+	case eventRemoteReady:
+		l.peerBusy = false
+		return linkAction{state: l.state}
+	case eventTimerRecoveryResponse:
+		if event.final {
+			l.exitRecovery()
+			l.state = Connected
+			return linkAction{state: l.state, acknowledge: true}
+		}
+	case eventT2Expired:
+		return linkAction{send: ax25.TypeRR, nr: l.vr, state: l.state, acknowledge: true}
+	case eventT3Expired:
+		l.enterRecovery()
+		return linkAction{send: ax25.TypeRR, pollFinal: true, nr: l.vr, state: TimerRecovery, recover: true}
+	case eventT1Expired:
+		if !l.retry() {
+			l.state = Disconnected
+			return linkAction{state: l.state, terminate: true}
+		}
+		switch l.state {
+		case AwaitingConnection:
+			return linkAction{send: ax25.TypeSABM, pollFinal: true, state: l.state, retry: true}
+		case AwaitingRelease:
+			return linkAction{send: ax25.TypeDISC, pollFinal: true, state: l.state, retry: true}
+		case Connected, TimerRecovery:
+			l.enterRecovery()
+			l.state = TimerRecovery
+			return linkAction{send: ax25.TypeRR, pollFinal: true, nr: l.vr, state: l.state, retry: true, recover: true}
+		}
+	}
+	return linkAction{state: l.state}
 }
 
 func (l linkCore) retransmitFrom(nr uint8) []ax25.Frame {

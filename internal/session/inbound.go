@@ -151,6 +151,10 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		m.mu.Unlock()
 		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, t2: linkT2, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
 		link.touch(time.Now())
+		link.mu.Lock()
+		sabmAction := link.handleEvent(linkEvent{kind: eventRemoteSABM, pf: f.PollFinal})
+		link.touch(time.Now())
+		link.mu.Unlock()
 		created := false
 		m.mu.Lock()
 		if existing := m.links[key]; existing != nil {
@@ -160,7 +164,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			created = true
 		}
 		m.mu.Unlock()
-		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
+		_ = link.sendControl(sabmAction.send, sabmAction.pollFinal, sabmAction.nr)
 		if created {
 			go link.supervise()
 			if service != nil || routedService != nil {
@@ -200,6 +204,9 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeDM:
 		if isResponse(f) {
+			link.mu.Lock()
+			link.handleEvent(linkEvent{kind: eventRemoteDM})
+			link.mu.Unlock()
 			select {
 			case link.control <- controlEvent{type_: f.Type, final: f.PollFinal, response: true}:
 			default:
@@ -215,20 +222,23 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		link.mu.Lock()
-		link.linkCore.reset()
+		sabmAction := link.handleEvent(linkEvent{kind: eventRemoteSABM, pf: f.PollFinal})
 		link.touch(time.Now())
 		link.digipeaters = reverseDigipeaters(f.Digipeaters)
 		link.mu.Unlock()
-		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
+		_ = link.sendControl(sabmAction.send, sabmAction.pollFinal, sabmAction.nr)
 	case ax25.TypeDISC:
 		if !isCommand(f) {
 			return true
 		}
-		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
+		link.mu.Lock()
+		action := link.handleEvent(linkEvent{kind: eventRemoteDISC, pf: f.PollFinal})
+		link.mu.Unlock()
+		_ = link.sendControl(action.send, action.pollFinal, action.nr)
 		link.close()
 	case ax25.TypeRR, ax25.TypeREJ, ax25.TypeSREJ:
 		link.mu.Lock()
-		link.peerBusy = false
+		link.handleEvent(linkEvent{kind: eventRemoteReady})
 		nr := link.vr
 		link.mu.Unlock()
 		select {
@@ -240,7 +250,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeRNR:
 		link.mu.Lock()
-		link.peerBusy = true
+		link.handleEvent(linkEvent{kind: eventRemoteBusy})
 		nr := link.vr
 		link.mu.Unlock()
 		select {
@@ -311,14 +321,14 @@ func (l *inboundLink) scheduleAcknowledgement(serial uint64, t2 time.Duration) {
 			l.mu.Unlock()
 			return
 		}
-		nr := l.vr
+		action := l.handleEvent(linkEvent{kind: eventT2Expired})
 		l.mu.Unlock()
 		select {
 		case <-l.closed:
 			return
 		default:
 		}
-		_ = l.sendControl(ax25.TypeRR, false, nr)
+		_ = l.sendControl(action.send, action.pollFinal, action.nr)
 	})
 }
 
@@ -388,10 +398,9 @@ func (l *inboundLink) supervise() {
 				l.mu.Unlock()
 				continue
 			}
-			l.enterRecovery()
-			nr := l.vr
+			action := l.handleEvent(linkEvent{kind: eventT3Expired})
 			l.mu.Unlock()
-			_ = l.sendControl(ax25.TypeRR, true, nr)
+			_ = l.sendControl(action.send, action.pollFinal, action.nr)
 		}
 	}
 }
@@ -409,10 +418,14 @@ func (l *inboundLink) disconnect() error {
 	}
 drained:
 	l.mu.Lock()
+	action := l.handleEvent(linkEvent{kind: eventServiceClosed})
 	l.startTimer(time.Now(), timerForRelease, n2)
 	l.mu.Unlock()
+	if action.state == Disconnected {
+		return nil
+	}
 	for attempt := 0; attempt < n2; attempt++ {
-		if err := l.sendCommand(ax25.TypeDISC, true, 0); err != nil {
+		if err := l.sendCommand(action.send, action.pollFinal, action.nr); err != nil {
 			return err
 		}
 		timer := time.NewTimer(t1)
@@ -428,7 +441,11 @@ drained:
 		case <-timer.C:
 			l.mu.Lock()
 			l.timerExpired(time.Now(), t1)
+			action := l.handleEvent(linkEvent{kind: eventT1Expired})
 			l.mu.Unlock()
+			if action.terminate {
+				return errors.New("AX.25 disconnect timeout")
+			}
 		case <-l.closed:
 			stopTimer(timer)
 			return io.ErrClosedPipe
@@ -518,9 +535,12 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 		case <-time.After(t1):
 			l.mu.Lock()
 			l.timerExpired(time.Now(), t1)
-			l.retry()
+			action := l.handleEvent(linkEvent{kind: eventT1Expired})
 			l.mu.Unlock()
-			if err := l.sendControl(ax25.TypeRR, true, nr); err != nil {
+			if action.terminate {
+				return errors.New("AX.25 inbound data acknowledgement timeout")
+			}
+			if err := l.sendControl(action.send, action.pollFinal, action.nr); err != nil {
 				return err
 			}
 			pollTimer := time.NewTimer(t1)
@@ -544,8 +564,11 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 				case <-pollTimer.C:
 					l.mu.Lock()
 					l.timerExpired(time.Now(), t1)
-					l.retry()
+					action := l.handleEvent(linkEvent{kind: eventT1Expired})
 					l.mu.Unlock()
+					if action.terminate {
+						return errors.New("AX.25 inbound data acknowledgement timeout")
+					}
 					pollDone = true
 				case <-l.closed:
 					stopTimer(pollTimer)
@@ -592,8 +615,11 @@ func (l *inboundLink) waitRemoteReady() error {
 		case <-time.After(t1):
 			l.mu.Lock()
 			l.timerExpired(time.Now(), t1)
-			l.retry()
+			action := l.handleEvent(linkEvent{kind: eventT1Expired})
 			l.mu.Unlock()
+			if action.terminate {
+				return errors.New("AX.25 remote receiver remains busy")
+			}
 		case <-l.closed:
 			return io.ErrClosedPipe
 		}

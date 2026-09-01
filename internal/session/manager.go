@@ -278,7 +278,10 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 		<-m.xid
 	}
 	m.mu.Unlock()
-	m.setState(AwaitingConnection, fmt.Sprintf("0/%d", m.n2))
+	m.mu.Lock()
+	connectAction := m.handleEvent(linkEvent{kind: eventConnectRequested})
+	m.mu.Unlock()
+	m.setState(connectAction.state, fmt.Sprintf("0/%d", m.n2))
 	f := m.command(ax25.TypeSABM, true, nil, 0, 0)
 	m.mu.Lock()
 	m.startTimer(time.Now(), timerForConnect, m.n2)
@@ -295,6 +298,8 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 			if event.type_ == ax25.TypeUA && event.response && event.final {
 				m.mu.Lock()
 				m.stopTimer()
+				m.state = Connected
+				m.linkCore.state = Connected
 				m.mu.Unlock()
 				m.mu.Lock()
 				m.uaGraceUntil = time.Now().Add(time.Duration(m.n2) * m.t1)
@@ -318,8 +323,12 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 		case <-time.After(m.t1):
 			m.mu.Lock()
 			m.timerExpired(time.Now(), m.t1)
-			m.retry()
+			action := m.handleEvent(linkEvent{kind: eventT1Expired})
 			m.mu.Unlock()
+			if action.terminate {
+				m.failLink("Brak odpowiedzi UA")
+				return errors.New("AX.25 connect timeout")
+			}
 			m.setState(AwaitingConnection, fmt.Sprintf("%d/%d", attempt+1, m.n2))
 		case <-ctx.Done():
 			m.failLink("Polaczenie anulowane")
@@ -345,8 +354,12 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 	m.setState(AwaitingRelease, "Rozlaczanie")
 	f := m.command(ax25.TypeDISC, true, nil, 0, 0)
 	m.mu.Lock()
+	releaseAction := m.handleEvent(linkEvent{kind: eventDisconnectRequested})
 	m.startTimer(time.Now(), timerForRelease, n2)
 	m.mu.Unlock()
+	if releaseAction.state != AwaitingRelease {
+		return nil
+	}
 	for attempt := 0; attempt < n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			break
@@ -363,8 +376,11 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		case <-time.After(t1):
 			m.mu.Lock()
 			m.timerExpired(time.Now(), t1)
-			m.retry()
+			action := m.handleEvent(linkEvent{kind: eventT1Expired})
 			m.mu.Unlock()
+			if action.terminate {
+				break
+			}
 		case <-ctx.Done():
 			break
 		}
@@ -466,6 +482,7 @@ func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 				m.operation.Unlock()
 				continue
 			}
+			m.handleEvent(linkEvent{kind: eventT3Expired})
 			send, nr := m.ports[m.port], m.vr
 			m.mu.Unlock()
 			if err := m.probeLink(ctx, send, nr); err != nil && ctx.Err() == nil {
@@ -530,7 +547,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 			}
 			if ack.type_ == ax25.TypeRNR {
 				m.mu.Lock()
-				m.peerBusy = true
+				m.handleEvent(linkEvent{kind: eventRemoteBusy})
 				m.mu.Unlock()
 			}
 			if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
@@ -564,7 +581,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				}
 				if ack.type_ == ax25.TypeRNR {
 					m.mu.Lock()
-					m.peerBusy = true
+					m.handleEvent(linkEvent{kind: eventRemoteBusy})
 					m.mu.Unlock()
 					if ack.nr == expected {
 						stopTimer(timer)
@@ -606,9 +623,11 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 			case <-timer.C:
 				m.mu.Lock()
 				m.timerExpired(time.Now(), t1)
-				m.retry()
-				m.enterRecovery()
+				action := m.handleEvent(linkEvent{kind: eventT1Expired})
 				m.mu.Unlock()
+				if action.terminate {
+					return errors.New("AX.25 data acknowledgement timeout")
+				}
 				ack, err := m.pollAcknowledgement(ctx, send, nr)
 				if isLinkTermination(ack) {
 					return errors.New("AX.25 link terminated by remote station")
@@ -624,7 +643,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				}
 				if ack.type_ == ax25.TypeRNR {
 					m.mu.Lock()
-					m.peerBusy = true
+					m.handleEvent(linkEvent{kind: eventRemoteBusy})
 					m.mu.Unlock()
 				}
 				if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
@@ -743,15 +762,18 @@ func (m *Manager) waitRemoteReady(ctx context.Context) error {
 						}
 					}
 					m.mu.Lock()
-					m.peerBusy = false
+					m.handleEvent(linkEvent{kind: eventRemoteReady})
 					m.mu.Unlock()
 					return nil
 				}
 			case <-timer.C:
 				m.mu.Lock()
 				m.timerExpired(time.Now(), t1)
-				m.retry()
+				action := m.handleEvent(linkEvent{kind: eventT1Expired})
 				m.mu.Unlock()
+				if action.terminate {
+					return errors.New("AX.25 remote receiver remains busy")
+				}
 				goto retry
 			case <-ctx.Done():
 				if !timer.Stop() {
@@ -847,6 +869,9 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 	case ax25.TypeUA, ax25.TypeDM:
 		response := isResponse(f)
 		if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeDM {
+			m.mu.Lock()
+			m.handleEvent(linkEvent{kind: eventRemoteDM})
+			m.mu.Unlock()
 			m.failLink("Zdalna stacja zakonczyla lacze (DM)")
 			m.queueAck(acknowledgement{type_: ax25.TypeDM, final: f.PollFinal, response: response})
 		} else if (state == Connected || state == TimerRecovery) && f.Type == ax25.TypeUA && f.PollFinal && response && time.Now().Before(uaGraceUntil) {
@@ -866,27 +891,33 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			}
 		}
 	case ax25.TypeDISC:
-		_ = m.sendResponse(context.Background(), port, ax25.TypeUA, f.PollFinal, 0)
+		m.mu.Lock()
+		action := m.handleEvent(linkEvent{kind: eventRemoteDISC, pf: f.PollFinal})
+		m.mu.Unlock()
+		_ = m.sendResponse(context.Background(), port, action.send, action.pollFinal, action.nr)
 		m.failLink("Zdalna stacja rozlaczyla sesje")
 		m.queueAck(acknowledgement{type_: ax25.TypeDISC})
 	case ax25.TypeSABM:
 		if state == AwaitingConnection {
-			_ = m.sendResponse(context.Background(), port, ax25.TypeUA, f.PollFinal, 0)
+			m.mu.Lock()
+			action := m.handleEvent(linkEvent{kind: eventRemoteSABM, pf: f.PollFinal})
+			m.mu.Unlock()
+			_ = m.sendResponse(context.Background(), port, action.send, action.pollFinal, action.nr)
 			select {
 			case m.control <- controlEvent{type_: ax25.TypeUA, final: true, response: true}:
 			default:
 			}
 		} else if state == Connected || state == TimerRecovery {
 			m.mu.Lock()
-			m.linkCore.reset()
+			action := m.handleEvent(linkEvent{kind: eventRemoteSABM, pf: f.PollFinal})
 			m.mu.Unlock()
-			_ = m.sendResponse(context.Background(), port, ax25.TypeUA, f.PollFinal, 0)
+			_ = m.sendResponse(context.Background(), port, action.send, action.pollFinal, action.nr)
 			m.queueAck(acknowledgement{type_: ax25.TypeSABM})
 			m.emit(Event{Type: "notice", Message: "Zdalna stacja zresetowala lacze AX.25"})
 		}
 	case ax25.TypeRR:
 		m.mu.Lock()
-		m.peerBusy = false
+		m.handleEvent(linkEvent{kind: eventRemoteReady})
 		m.mu.Unlock()
 		select {
 		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
@@ -900,7 +931,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeRNR:
 		m.mu.Lock()
-		m.peerBusy = true
+		m.handleEvent(linkEvent{kind: eventRemoteBusy})
 		m.mu.Unlock()
 		select {
 		case m.ack <- acknowledgement{type_: f.Type, nr: f.NR, final: f.PollFinal, response: isResponse(f)}:
@@ -981,13 +1012,13 @@ func (m *Manager) scheduleAcknowledgement(port string, serial uint64, t2 time.Du
 			m.mu.Unlock()
 			return
 		}
-		nr := m.vr
+		action := m.handleEvent(linkEvent{kind: eventT2Expired})
 		connected := m.state != Disconnected
 		m.mu.Unlock()
 		if !connected {
 			return
 		}
-		_ = m.sendResponse(context.Background(), port, ax25.TypeRR, false, nr)
+		_ = m.sendResponse(context.Background(), port, action.send, action.pollFinal, action.nr)
 	})
 }
 
