@@ -38,6 +38,7 @@ type InboundMux struct {
 	packetServices map[string]AX25PacketService
 	registry       *service.Registry
 	senders        map[string]Sender
+	localSend      LocalSender
 	links          map[string]*inboundLink
 	log            *slog.Logger
 	t1             time.Duration
@@ -64,6 +65,7 @@ type inboundLink struct {
 	n2        int
 	paclen    int
 	receiveN1 int
+	sender    Sender
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
@@ -74,6 +76,14 @@ func (m *InboundMux) SetRegistry(registry *service.Registry) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.registry = registry
+}
+
+// SetLocalDelivery supplies the return path for frames injected internally
+// while retaining the logical port selected by the originating session.
+func (m *InboundMux) SetLocalDelivery(send LocalSender) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.localSend = send
 }
 
 func (m *InboundMux) Configure(t1 time.Duration, n2, n1 int) {
@@ -110,6 +120,16 @@ func (m *InboundMux) RegisterPacket(address ax25.Address, service AX25PacketServ
 // Handle returns true when the frame belongs to a registered inbound service
 // or to an established inbound session.
 func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
+	return m.handle(port, f, false)
+}
+
+// HandleInternal routes an internally delivered frame without changing its
+// logical port. Its responses use the local return path instead of RF.
+func (m *InboundMux) HandleInternal(port string, f ax25.Frame) bool {
+	return m.handle(port, f, true)
+}
+
+func (m *InboundMux) handle(port string, f ax25.Frame, internal bool) bool {
 	key := linkKey(port, f.Destination, f.Source)
 	m.mu.Lock()
 	link := m.links[key]
@@ -135,28 +155,28 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	if link == nil {
 		if registered && f.Type == ax25.TypeXID && isCommand(f) {
 			if f.PollFinal {
-				_ = m.sendXIDResponse(port, f, nil)
+				_ = m.sendXIDResponse(port, f, nil, internal)
 			}
 			return true
 		}
 		if registered && f.Type == ax25.TypeSABME && isCommand(f) {
 			// This endpoint has not switched its receive decoder to modulo 128,
 			// therefore AX.25 requires a negative mode-setting response.
-			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM, internal)
 			return true
 		}
 		if registered && f.Type == ax25.TypeTEST && isCommand(f) {
-			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload)
+			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload, internal)
 			return true
 		}
 		if registered && f.Type == ax25.TypeUI && isCommand(f) {
 			if f.PollFinal {
-				_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+				_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM, internal)
 			}
 			return true
 		}
 		if registered && f.Type != ax25.TypeSABM && f.Type != ax25.TypeUI && isCommand(f) {
-			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM)
+			_ = m.sendDisconnectedResponse(port, f, ax25.TypeDM, internal)
 			return true
 		}
 		if f.Type != ax25.TypeSABM || !registered || !isCommand(f) {
@@ -165,7 +185,11 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		m.mu.Lock()
 		linkT1, linkT2, linkN2, linkN1 := m.t1, m.t2, m.n2, m.paclen
 		m.mu.Unlock()
-		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, t2: linkT2, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
+		linkSend := m.senders[port]
+		if internal && m.localSend != nil {
+			linkSend = m.localSend(port)
+		}
+		link = &inboundLink{mux: m, port: port, local: f.Destination, remote: f.Source, digipeaters: reverseDigipeaters(f.Digipeaters), sender: linkSend, in: make(chan []byte, 32), tx: make(chan []byte, 32), ack: make(chan acknowledgement, 8), control: make(chan controlEvent, 4), closed: make(chan struct{}), t1: linkT1, t2: linkT2, n2: linkN2, paclen: linkN1, receiveN1: linkN1}
 		link.touch(time.Now())
 		link.mu.Lock()
 		sabmAction := link.handleEvent(linkEvent{kind: eventRemoteSABM, pf: f.PollFinal})
@@ -204,7 +228,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 	switch f.Type {
 	case ax25.TypeTEST:
 		if isCommand(f) {
-			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload)
+			_ = m.sendUnnumberedResponse(port, f, ax25.TypeTEST, f.Payload, internal)
 		}
 	case ax25.TypeUI:
 		if isCommand(f) && f.PollFinal {
@@ -233,7 +257,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 		}
 	case ax25.TypeXID:
 		if isCommand(f) && f.PollFinal {
-			_ = m.sendXIDResponse(port, f, link)
+			_ = m.sendXIDResponse(port, f, link, internal)
 		}
 	case ax25.TypeSABM:
 		if !isCommand(f) {
@@ -660,7 +684,7 @@ func (l *inboundLink) waitRemoteReady() error {
 	return errors.New("AX.25 remote receiver remains busy")
 }
 
-func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, typ ax25.Type) error {
+func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, typ ax25.Type, internal bool) error {
 	d, s := received.Source, received.Destination
 	d.CommandResponse, s.CommandResponse = false, true
 	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: true}
@@ -668,14 +692,14 @@ func (m *InboundMux) sendDisconnectedResponse(port string, received ax25.Frame, 
 	if err != nil {
 		return err
 	}
-	send := m.senders[port]
+	send := m.sender(port, internal)
 	if send == nil {
 		return errors.New("AX.25 port unavailable")
 	}
 	return send(context.Background(), b)
 }
 
-func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame, link *inboundLink) error {
+func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame, link *inboundLink, internal bool) error {
 	m.mu.Lock()
 	n1, n2, t1 := m.paclen, m.n2, m.t1
 	m.mu.Unlock()
@@ -705,13 +729,13 @@ func (m *InboundMux) sendXIDResponse(port string, received ax25.Frame, link *inb
 	if err != nil {
 		return err
 	}
-	if send := m.senders[port]; send != nil {
+	if send := m.sender(port, internal); send != nil {
 		return send(context.Background(), b)
 	}
 	return errors.New("AX.25 port unavailable")
 }
 
-func (m *InboundMux) sendUnnumberedResponse(port string, received ax25.Frame, typ ax25.Type, payload []byte) error {
+func (m *InboundMux) sendUnnumberedResponse(port string, received ax25.Frame, typ ax25.Type, payload []byte, internal bool) error {
 	d, s := received.Source, received.Destination
 	d.CommandResponse, s.CommandResponse = false, true
 	f := ax25.Frame{Destination: d, Source: s, Digipeaters: reverseDigipeaters(received.Digipeaters), Type: typ, PollFinal: received.PollFinal, Payload: append([]byte(nil), payload...)}
@@ -719,7 +743,7 @@ func (m *InboundMux) sendUnnumberedResponse(port string, received ax25.Frame, ty
 	if err != nil {
 		return err
 	}
-	if send := m.senders[port]; send != nil {
+	if send := m.sender(port, internal); send != nil {
 		return send(context.Background(), b)
 	}
 	return errors.New("AX.25 port unavailable")
@@ -773,11 +797,18 @@ func (l *inboundLink) send(f ax25.Frame) error {
 	if err != nil {
 		return err
 	}
-	s := l.mux.senders[l.port]
+	s := l.sender
 	if s == nil {
 		return errors.New("AX.25 port unavailable")
 	}
 	return s(context.Background(), b)
+}
+
+func (m *InboundMux) sender(port string, internal bool) Sender {
+	if internal && m.localSend != nil {
+		return m.localSend(port)
+	}
+	return m.senders[port]
 }
 func (l *inboundLink) close() {
 	l.closeOnce.Do(func() {

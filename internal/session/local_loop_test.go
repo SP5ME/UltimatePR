@@ -48,9 +48,9 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 			return loop.Send(ctx, transport.Packet{PortID: portID, Data: append([]byte(nil), data...)})
 		}
 	})
-	localPortSend := localSend("radio-2m")
-	inbound := NewInboundMux(map[string]Sender{"radio-2m": localPortSend}, nil)
+	inbound := NewInboundMux(map[string]Sender{"radio-2m": physicalSend}, nil)
 	inbound.SetRegistry(registry)
+	inbound.SetLocalDelivery(localSend)
 	hub := NewHub(local, map[string]Sender{"radio-2m": physicalSend})
 	hub.SetLocalDelivery(func(address ax25.Address) bool { _, ok := registry.ByCallsign(address.String()); return ok }, localSend)
 	manager, release := hub.NewSession()
@@ -73,7 +73,11 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 				if manager.Handle(pkt.PortID, frame) {
 					continue
 				}
-				inbound.Handle(pkt.PortID, frame)
+				if pkt.Internal {
+					inbound.HandleInternal(pkt.PortID, frame)
+				} else {
+					inbound.Handle(pkt.PortID, frame)
+				}
 			case <-stop:
 				return
 			}
@@ -149,5 +153,58 @@ func TestLocalDeliveryDoesNotInterceptRemoteDestination(t *testing.T) {
 	}
 	if got := physicalCalls.Load(); got == 0 {
 		t.Fatal("physical sender was not used for remote destination")
+	}
+}
+
+func TestLocalDeliveryHandlesSynchronousUA(t *testing.T) {
+	local := ax25.Address{Callsign: "LOCAL"}
+	remote := ax25.Address{Callsign: "TEST", SSID: 10}
+	registry := service.NewRegistry()
+	if err := registry.Register(service.ServiceRegistration{
+		Service: service.Func{ServiceID: "echo", Handler: func(ctx service.ServiceContext) error {
+			<-ctx.Context.Done()
+			return nil
+		}}, Callsign: remote, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var manager *Manager
+	var inbound *InboundMux
+	localSend := LocalSender(func(port string) Sender {
+		return func(ctx context.Context, data []byte) error {
+			frame, err := ax25.Decode(data)
+			if err != nil {
+				return err
+			}
+			if manager != nil && manager.Handle(port, frame) {
+				return nil
+			}
+			inbound.HandleInternal(port, frame)
+			return nil
+		}
+	})
+	inbound = NewInboundMux(map[string]Sender{"radio-2m": func(context.Context, []byte) error {
+		t.Fatal("synchronous local response used physical sender")
+		return nil
+	}}, nil)
+	inbound.SetRegistry(registry)
+	inbound.SetLocalDelivery(localSend)
+	hub := NewHub(local, map[string]Sender{"radio-2m": func(context.Context, []byte) error {
+		t.Fatal("synchronous local SABM used physical sender")
+		return nil
+	}})
+	hub.SetLocalDelivery(func(address ax25.Address) bool {
+		_, ok := registry.ByCallsign(address.String())
+		return ok
+	}, localSend)
+	manager, release := hub.NewSession()
+	defer release()
+	manager.Configure(200*time.Millisecond, 2, 64)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := manager.Connect(ctx, "radio-2m", remote.String()); err != nil {
+		t.Fatal(err)
 	}
 }

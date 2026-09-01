@@ -476,6 +476,7 @@ func main() {
 		return nil
 	}
 	inbound := session.NewInboundMux(senders, log)
+	inbound.SetLocalDelivery(localSend)
 	inbound.SetRegistry(services)
 	registerService := func(reg service.ServiceRegistration) {
 		if err := services.Register(reg); err != nil {
@@ -918,6 +919,9 @@ func main() {
 	dispatcher.RegisterConnected(func(frame ax25core.FrameContext) bool {
 		if radio.Handle(frame.PortID, frame.Frame) {
 			return true
+		}
+		if frame.Internal {
+			return inbound.HandleInternal(frame.PortID, frame.Frame)
 		}
 		return inbound.Handle(frame.PortID, frame.Frame)
 	})
