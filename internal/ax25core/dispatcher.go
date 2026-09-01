@@ -22,6 +22,7 @@ type FrameContext struct {
 	InterfaceID string
 	PortID      string
 	Channel     uint8
+	Internal    bool
 	Frame       ax25.Frame
 	Raw         []byte
 	ReceivedAt  time.Time
@@ -86,6 +87,7 @@ func (d *Dispatcher) Dispatch(pkt transport.Packet) (bool, error) {
 		InterfaceID: pkt.InterfaceID,
 		PortID:      pkt.PortID,
 		Channel:     pkt.Channel,
+		Internal:    pkt.Internal,
 		Frame:       frame,
 		Raw:         append([]byte(nil), pkt.Data...),
 		ReceivedAt:  time.Now().UTC(),

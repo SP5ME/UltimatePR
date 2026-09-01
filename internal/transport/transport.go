@@ -8,8 +8,14 @@ type Packet struct {
 	InterfaceID string
 	PortID      string
 	Channel     uint8
-	Data        []byte
+	// Internal marks packets produced by an in-process transport such as the
+	// local AX.25 loopback. They still use the normal dispatcher pipeline but
+	// must not be treated as RF observations.
+	Internal bool
+	Data     []byte
 }
+
+const LocalLoopPortID = "local-loop"
 
 type Port interface {
 	ID() string

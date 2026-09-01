@@ -51,12 +51,9 @@ type Config struct {
 	AICallsign         string
 	AISSID             uint8
 	AIEnabled          bool
-	AIConnect          func() (net.Conn, error)
-	ServiceConnect     func(string) (net.Conn, error)
 	GameHallCallsign   string
 	GameHallSSID       uint8
 	GameHallEnabled    bool
-	GameHallConnect    func() (net.Conn, error)
 	TerminalCallsign   string
 	TerminalSSID       uint8
 	OperatorName       string
@@ -71,7 +68,6 @@ type Config struct {
 	Ports              []string
 	PortStatus         func() []transport.Status
 	NodeEnabled        bool
-	NodeListen         string
 	Radio              *session.Hub
 	MHeard             *mheard.Store
 	History            *history.Store
@@ -1124,7 +1120,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 	s.wsClients.Add(1)
 	defer s.wsClients.Add(-1)
 	ws.SetReadLimit(16 * 1024)
-	_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Terminal gotowy. Wybierz TNC / Radio lub lokalny BBS.\r\n"})
+	_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Terminal gotowy. Wybierz port i adresata AX.25.\r\n"})
 	var remote net.Conn
 	activeMode := ""
 	historyStation, historyPort, historyDigi := "", "", ""
@@ -1296,22 +1292,10 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			selectedCodec, _ := terminalcodec.New(terminalcodec.Default)
 			terminalCodec = selectedCodec
 			terminalTXCodec, _ = terminalcodec.New(terminalcodec.Default)
-			// Keep the operator workflow in TNC/Radio, but short-circuit a call
-			// addressed to this server's own BBS. No AX.25 frame reaches the TNC.
-			localBBS := callsign(s.cfg.BBSCallsign, s.cfg.BSSSID)
-			localAI := callsign(s.cfg.AICallsign, s.cfg.AISSID)
-			localGameHall := callsign(s.cfg.GameHallCallsign, s.cfg.GameHallSSID)
-			if m.Mode == "node" && !s.cfg.NodeEnabled {
-				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Lokalny NODE jest wyłączony."})
+			if m.Mode != "tnc" && m.Mode != "incoming" {
+				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Wybierz port AX.25."})
 				continue
 			}
-			if m.Mode == "tnc" && s.cfg.BBSListen != "" && strings.EqualFold(strings.TrimSpace(m.Target), localBBS) {
-				m.Mode = "bbs"
-			}
-			if m.Mode == "tnc" && s.cfg.AIEnabled && s.cfg.AIConnect != nil && strings.EqualFold(strings.TrimSpace(m.Target), localAI) {
-				m.Mode = "ai"
-			}
-			m.Mode = s.gameHallTerminalMode(m.Mode, m.Target)
 			if m.Mode == "tnc" && strings.TrimSpace(m.Target) == "" {
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Podaj znak korespondenta."})
 				continue
@@ -1416,101 +1400,6 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				}()
 				continue
 			}
-			if m.Mode == "ai" {
-				var conn net.Conn
-				var err error
-				if s.cfg.ServiceConnect != nil {
-					conn, err = s.cfg.ServiceConnect("ai")
-				} else {
-					conn, err = s.cfg.AIConnect()
-				}
-				if err != nil {
-					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalna IA nieudane: " + err.Error()})
-					continue
-				}
-				remote = conn
-				historyStation, historyPort, historyDigi, historyConnected = localAI, "local", "", true
-				if s.cfg.History != nil {
-					historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
-				}
-				remoteDone = make(chan struct{})
-				done := remoteDone
-				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localAI + "\r\n"})
-				go s.copyTelnetToWS(out, conn, done, "ai", historyStation, historyPort, historySession)
-				continue
-			}
-			if m.Mode == "game_hall" {
-				var conn net.Conn
-				var err error
-				if s.cfg.ServiceConnect != nil {
-					conn, err = s.cfg.ServiceConnect("gamehall")
-				} else {
-					conn, err = s.cfg.GameHallConnect()
-				}
-				if err != nil {
-					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie z lokalnym Salonem Gier nieudane: " + err.Error()})
-					continue
-				}
-				remote = conn
-				historyStation, historyPort, historyDigi, historyConnected = localGameHall, "local", "", true
-				if s.cfg.History != nil {
-					historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
-				}
-				remoteDone = make(chan struct{})
-				done := remoteDone
-				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono lokalnie z " + localGameHall + "\r\n"})
-				go s.copyTelnetToWS(out, conn, done, "game_hall", historyStation, historyPort, historySession)
-				continue
-			}
-			if m.Mode == "node" {
-				if strings.TrimSpace(s.cfg.NodeListen) == "" {
-					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Adres lokalnego NODE nie jest skonfigurowany."})
-					continue
-				}
-				dialCtx, dialCancel := context.WithTimeout(r.Context(), 8*time.Second)
-				conn, err := (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext(dialCtx, "tcp", s.cfg.NodeListen)
-				dialCancel()
-				if err != nil {
-					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Połączenie z lokalnym NODE nieudane: " + err.Error()})
-					continue
-				}
-				remote = conn
-				historyStation, historyPort, historyDigi, historyConnected = "Lokalny NODE", s.cfg.NodeListen, "", true
-				if s.cfg.History != nil {
-					historySession = s.cfg.History.Connected("node", historyStation, historyPort, "")
-				}
-				remoteDone = make(chan struct{})
-				done := remoteDone
-				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Połączono lokalnie z NODE\r\n"})
-				go s.copyTelnetToWS(out, conn, done, "node", historyStation, historyPort, historySession)
-				continue
-			}
-			if m.Mode != "bbs" {
-				_ = out.write(serverMessage{Type: "error", Error: "Nieznany tryb terminala."})
-				continue
-			}
-			if s.cfg.BBSListen == "" {
-				_ = out.write(serverMessage{Type: "error", Error: "Lokalny BBS jest wylaczony."})
-				continue
-			}
-			address := s.cfg.BBSListen
-			dialCtx, dialCancel := context.WithTimeout(r.Context(), 8*time.Second)
-			conn, err := (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext(dialCtx, "tcp", address)
-			dialCancel()
-			if err != nil {
-				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Polaczenie nieudane: " + err.Error()})
-				continue
-			}
-			remote = conn
-			historyStation = "Lokalny BBS"
-			historyPort, historyDigi, historyConnected = address, "", true
-			if s.cfg.History != nil {
-				historySession = s.cfg.History.Connected(m.Mode, historyStation, historyPort, historyDigi)
-			}
-			remoteDone = make(chan struct{})
-			done := remoteDone
-			_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Polaczono z " + conn.RemoteAddr().String() + "\r\n"})
-			go s.copyTelnetToWS(out, conn, done, "bbs", historyStation, historyPort, historySession)
 		case "data":
 			if m.Line {
 				m.Data += lineEnding()
@@ -1622,7 +1511,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 				_ = radioSession.Disconnect(closeCtx)
 				cancel()
 			}
-			if activeMode == "bbs" && remote != nil && strings.TrimSpace(goodbye) != "" {
+			if activeMode == "tnc" && remote != nil && strings.TrimSpace(goodbye) != "" {
 				_, _ = remote.Write([]byte(terminalResponseText(goodbye)))
 			}
 			closeRemote()
@@ -1635,14 +1524,6 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			_ = out.write(serverMessage{Type: "state", State: "idle", Data: "Rozlaczono.\r\n"})
 		}
 	}
-}
-
-func (s *Server) gameHallTerminalMode(mode, target string) string {
-	local := callsign(s.cfg.GameHallCallsign, s.cfg.GameHallSSID)
-	if mode == "tnc" && s.cfg.GameHallEnabled && s.cfg.GameHallConnect != nil && strings.EqualFold(strings.TrimSpace(target), local) {
-		return "game_hall"
-	}
-	return mode
 }
 
 func (s *Server) copyOperatorToWS(ws *safeWS, in *operatorSession, station string, codec *terminalcodec.Codec, historySession uint64) {

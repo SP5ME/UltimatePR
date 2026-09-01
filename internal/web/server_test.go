@@ -204,20 +204,6 @@ func TestStatusReportsGameHallService(t *testing.T) {
 	}
 }
 
-func TestTerminalRoutesOwnGameHallCallLocally(t *testing.T) {
-	s := New(Config{GameHallCallsign: "SP5ME", GameHallSSID: 14, GameHallEnabled: true, GameHallConnect: func() (net.Conn, error) { return nil, nil }}, nil)
-	if got := s.gameHallTerminalMode("tnc", " sp5me-14 "); got != "game_hall" {
-		t.Fatalf("mode=%q", got)
-	}
-	if got := s.gameHallTerminalMode("tnc", "SP5ME-13"); got != "tnc" {
-		t.Fatalf("unrelated target mode=%q", got)
-	}
-	s.cfg.GameHallEnabled = false
-	if got := s.gameHallTerminalMode("tnc", "SP5ME-14"); got != "tnc" {
-		t.Fatalf("disabled Game Hall mode=%q", got)
-	}
-}
-
 func TestAIModelsConnectsAndReturnsOllamaTags(t *testing.T) {
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {

@@ -37,6 +37,7 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/transport"
 	"github.com/packet-radio/ultimatepr/internal/transport/axudp"
 	"github.com/packet-radio/ultimatepr/internal/transport/kiss"
+	"github.com/packet-radio/ultimatepr/internal/transport/loopback"
 	"github.com/packet-radio/ultimatepr/internal/uprd"
 	webui "github.com/packet-radio/ultimatepr/internal/web"
 )
@@ -226,6 +227,14 @@ func main() {
 			startPort(runtime)
 		}
 	}
+	localPort := loopback.New(rx)
+	senders[transport.LocalLoopPortID] = func(ctx context.Context, b []byte) error {
+		if f, err := ax25.Decode(b); err == nil {
+			mon.Add("TX", transport.LocalLoopPortID, f, len(b))
+			events.Publish("frame.tx", map[string]any{"port": transport.LocalLoopPortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
+		}
+		return localPort.Send(ctx, transport.Packet{Data: b})
+	}
 	var nodeRouter *nodecore.Router
 	services := service.NewRegistry()
 	if nodeEnabled {
@@ -340,7 +349,7 @@ func main() {
 	}
 	outboundSenders := make(map[string]session.Sender, len(senders))
 	for id, sender := range senders {
-		if runtime := runtimes[id]; runtime != nil && runtime.enabled {
+		if id == transport.LocalLoopPortID || (runtimes[id] != nil && runtimes[id].enabled) {
 			outboundSenders[id] = sender
 		}
 	}
@@ -586,60 +595,22 @@ func main() {
 		apiHandler = apiServer.Handler()
 		log.Info("public API enabled", "listener", cfg.Web.Listen, "prefix", "/api/v1")
 	}
+	terminalPorts := append(append([]string(nil), portIDs...), transport.LocalLoopPortID)
 	web = webui.New(webui.Config{
-		Listen:           cfg.Web.Listen,
-		Username:         cfg.Web.Username,
-		PasswordHash:     cfg.Web.PasswordHash,
-		AllowedAddresses: cfg.Web.AllowedAddresses,
-		NodeCallsign:     cfg.Server.Callsign,
-		NodeSSID:         cfg.Server.SSID,
-		BBSCallsign:      cfg.BBS.Callsign,
-		BSSSID:           cfg.BBS.SSID,
-		AICallsign:       cfg.AI.Callsign,
-		AISSID:           cfg.AI.SSID,
-		AIEnabled:        aiEnabled,
-		GameHallCallsign: cfg.GameHall.Callsign,
-		GameHallSSID:     cfg.GameHall.SSID,
-		GameHallEnabled:  gameHallEnabled,
-		GameHallConnect: func() (net.Conn, error) {
-			if gameHall == nil {
-				return nil, fmt.Errorf("game hall service is not running")
-			}
-			client, server := net.Pipe()
-			go func() {
-				defer server.Close()
-				gameHall.ServeAX25(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), cfg.GameHall.Language, server, server)
-			}()
-			return client, nil
-		},
-		AIConnect: func() (net.Conn, error) {
-			if aiServer == nil {
-				return nil, fmt.Errorf("AI service is not running")
-			}
-			client, server := net.Pipe()
-			go func() {
-				defer server.Close()
-				scanner := lineinput.NewScanner(server)
-				aiServer.ServeSession(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}.String(), cfg.Application.Language, scanner, server)
-			}()
-			return client, nil
-		},
-		ServiceConnect: func(id string) (net.Conn, error) {
-			registration, ok := services.ByID(id)
-			if !ok {
-				return nil, fmt.Errorf("service %q is not available", id)
-			}
-			client, server := net.Pipe()
-			go func() {
-				defer server.Close()
-				local := registration.Callsign
-				remote := ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}
-				if err := services.Serve(id, service.ServiceContext{Context: context.Background(), LocalCall: local, RemoteCall: remote, PortID: "local", Reader: server, Writer: server, EntryType: service.EntryLocal}); err != nil {
-					log.Warn("local service stopped", "service", id, "error", err)
-				}
-			}()
-			return client, nil
-		},
+		Listen:             cfg.Web.Listen,
+		Username:           cfg.Web.Username,
+		PasswordHash:       cfg.Web.PasswordHash,
+		AllowedAddresses:   cfg.Web.AllowedAddresses,
+		NodeCallsign:       cfg.Server.Callsign,
+		NodeSSID:           cfg.Server.SSID,
+		BBSCallsign:        cfg.BBS.Callsign,
+		BSSSID:             cfg.BBS.SSID,
+		AICallsign:         cfg.AI.Callsign,
+		AISSID:             cfg.AI.SSID,
+		AIEnabled:          aiEnabled,
+		GameHallCallsign:   cfg.GameHall.Callsign,
+		GameHallSSID:       cfg.GameHall.SSID,
+		GameHallEnabled:    gameHallEnabled,
 		TerminalCallsign:   cfg.Terminal.Callsign,
 		TerminalSSID:       cfg.Terminal.SSID,
 		OperatorName:       cfg.Application.OperatorName,
@@ -651,9 +622,8 @@ func main() {
 		TerminalInfo:       cfg.Application.InfoMessage,
 		TerminalEOL:        cfg.Application.TerminalEOL,
 		AX25T3:             time.Duration(cfg.Application.AX25T3Seconds) * time.Second,
-		Ports:              portIDs,
+		Ports:              terminalPorts,
 		NodeEnabled:        nodeEnabled,
-		NodeListen:         cfg.Node.Listen,
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {
@@ -874,7 +844,7 @@ func main() {
 	dispatcher.RegisterPre(func(frame ax25core.FrameContext) bool {
 		f := frame.Frame
 		seq := rxOrder.Add(1)
-		if !isOwnCallsign(f.Source.String()) {
+		if !frame.Internal && !isOwnCallsign(f.Source.String()) {
 			if via := mheardReturnPath(f); via != "" {
 				heard.HeardVia(f.Source.String(), frame.PortID, via)
 			} else if directlyHeard(f) {
@@ -884,11 +854,14 @@ func main() {
 				uprdMgr.Submit(frame.PortID, seq, f)
 			}
 		}
-		if !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
+		if !frame.Internal && !isOwnCallsign(f.Source.String()) && directlyHeard(f) && f.Type == ax25.TypeUI && strings.EqualFold(f.Destination.String(), "BEACON") && len(f.Payload) > 0 {
 			heard.Beacon(f.Source.String(), frame.PortID, string(f.Payload))
 			reported := parseUltimatePRBeacon(string(f.Payload))
 			reported = withoutCallsigns(reported, append(digiAliases, ownCallsAsAddresses(ownCalls)...)...)
 			heard.Reported(reported, f.Source.String(), frame.PortID)
+		}
+		if frame.Internal {
+			return false
 		}
 		repeated, ok := digi.Repeat(f, frame.Raw)
 		if !ok {

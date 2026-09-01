@@ -1,0 +1,111 @@
+package session
+
+import (
+	"context"
+	"io"
+	"testing"
+	"time"
+
+	"github.com/packet-radio/ultimatepr/internal/ax25"
+	"github.com/packet-radio/ultimatepr/internal/service"
+	"github.com/packet-radio/ultimatepr/internal/transport"
+	"github.com/packet-radio/ultimatepr/internal/transport/loopback"
+)
+
+func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
+	wire := make(chan transport.Packet, 128)
+	port := loopback.New(wire)
+	send := func(ctx context.Context, data []byte) error {
+		return port.Send(ctx, transport.Packet{Data: append([]byte(nil), data...)})
+	}
+
+	local := ax25.Address{Callsign: "LOCAL"}
+	remote := ax25.Address{Callsign: "TEST", SSID: 10}
+	registry := service.NewRegistry()
+	serviceStarted := make(chan service.ServiceContext, 1)
+	if err := registry.Register(service.ServiceRegistration{
+		Service: service.Func{ServiceID: "echo", Handler: func(ctx service.ServiceContext) error {
+			serviceStarted <- ctx
+			buf := make([]byte, 5)
+			if _, err := io.ReadFull(ctx.Reader, buf); err != nil {
+				return err
+			}
+			if _, err := ctx.Writer.Write(buf); err != nil {
+				return err
+			}
+			<-ctx.Context.Done()
+			return nil
+		}}, Callsign: remote, Enabled: true, NodeVisible: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	inbound := NewInboundMux(map[string]Sender{transport.LocalLoopPortID: send}, nil)
+	inbound.SetRegistry(registry)
+	manager := New(local, map[string]Sender{transport.LocalLoopPortID: send})
+	manager.Configure(200*time.Millisecond, 2, 64)
+	events, unsubscribe := manager.Subscribe()
+	defer unsubscribe()
+
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		for {
+			select {
+			case pkt := <-wire:
+				frame, err := ax25.Decode(pkt.Data)
+				if err != nil {
+					t.Errorf("loopback frame decode: %v", err)
+					return
+				}
+				if manager.Handle(pkt.PortID, frame) {
+					continue
+				}
+				inbound.Handle(pkt.PortID, frame)
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	connectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := manager.Connect(connectCtx, transport.LocalLoopPortID, remote.String()); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+
+	select {
+	case ctx := <-serviceStarted:
+		if ctx.PortID != transport.LocalLoopPortID || ctx.EntryType != service.EntryAX25 || ctx.RemoteCall.String() != local.String() || ctx.LocalCall.String() != remote.String() {
+			t.Fatalf("service context=%+v", ctx)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("service did not start through local AX.25")
+	}
+
+	if err := manager.Send(context.Background(), []byte("HELLO")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-events:
+		for event.Type != "data" {
+			select {
+			case event = <-events:
+			case <-time.After(time.Second):
+				t.Fatal("echo response not received")
+			}
+		}
+		if string(event.Data) != "HELLO" {
+			t.Fatalf("echo=%q", event.Data)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("echo response not received")
+	}
+
+	disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer disconnectCancel()
+	if err := manager.Disconnect(disconnectCtx); err != nil {
+		t.Fatal(err)
+	}
+}
