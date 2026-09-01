@@ -49,19 +49,17 @@ type inboundLink struct {
 	port          string
 	local, remote ax25.Address
 	digipeaters   []ax25.Address
-	vr, vs, va    uint8
-	in            chan []byte
-	tx            chan []byte
-	ack           chan acknowledgement
-	control       chan controlEvent
-	closed        chan struct{}
-	closeOnce     sync.Once
-	peerBusy      bool
-	rejectSent    bool
-	t1            time.Duration
-	n2            int
-	paclen        int
-	receiveN1     int
+	linkCore
+	in        chan []byte
+	tx        chan []byte
+	ack       chan acknowledgement
+	control   chan controlEvent
+	closed    chan struct{}
+	closeOnce sync.Once
+	t1        time.Duration
+	n2        int
+	paclen    int
+	receiveN1 int
 }
 
 func NewInboundMux(senders map[string]Sender, log *slog.Logger) *InboundMux {
@@ -200,7 +198,7 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		link.mu.Lock()
-		link.vr, link.vs, link.va = 0, 0, 0
+		link.linkCore.reset()
 		link.digipeaters = reverseDigipeaters(f.Digipeaters)
 		link.mu.Unlock()
 		_ = link.sendControl(ax25.TypeUA, f.PollFinal, 0)
@@ -242,9 +240,8 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		link.mu.Lock()
-		if f.NS == link.vr {
-			link.vr = (link.vr + 1) & 7
-			link.rejectSent = false
+		accepted, sendReject := link.linkCore.receive(f.NS)
+		if accepted {
 			link.mu.Unlock()
 			data := append([]byte(nil), f.Payload...)
 			if *f.PID == 0xF0 {
@@ -258,11 +255,9 @@ func (m *InboundMux) Handle(port string, f ax25.Frame) bool {
 				go packetService(route, pid, sendData, link.sendPacket)
 			}
 		} else {
-			alreadyRejected := link.rejectSent
-			link.rejectSent = true
 			nr := link.vr
 			link.mu.Unlock()
-			if !alreadyRejected {
+			if sendReject {
 				_ = link.sendControl(ax25.TypeREJ, f.PollFinal, nr)
 			}
 			return true
@@ -404,8 +399,8 @@ func (l *inboundLink) sendPacket(ctx context.Context, pid byte, data []byte) err
 
 func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 	l.mu.Lock()
-	ns, nr, t1, n2 := l.vs, l.vr, l.t1, l.n2
-	expected := (ns + 1) & 7
+	ns, nr, expected := l.nextSend()
+	t1, n2 := l.t1, l.n2
 	l.mu.Unlock()
 	f := l.command(ax25.TypeI, false, nr)
 	f.NS, f.PID, f.Payload = ns, &pid, append([]byte(nil), data...)
@@ -427,7 +422,7 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 		case ack := <-l.ack:
 			if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				l.mu.Lock()
-				l.va = expected
+				l.linkCore.acknowledge(expected, ack.type_)
 				l.mu.Unlock()
 				return nil
 			}
@@ -449,7 +444,7 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 					stopTimer(pollTimer)
 					if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 						l.mu.Lock()
-						l.va = expected
+						l.linkCore.acknowledge(expected, ack.type_)
 						l.mu.Unlock()
 						return nil
 					}
@@ -599,7 +594,7 @@ func (l *inboundLink) command(t ax25.Type, pf bool, nr uint8) ax25.Frame {
 func (l *inboundLink) validNR(nr uint8) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return nr == l.va || nr == l.vs
+	return l.linkCore.validNR(nr)
 }
 
 func reverseDigipeaters(path []ax25.Address) []ax25.Address {

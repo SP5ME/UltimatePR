@@ -73,15 +73,15 @@ type xidEvent struct {
 }
 
 type Manager struct {
-	mu           sync.Mutex
-	operation    sync.Mutex
-	local        ax25.Address
-	state        State
-	port         string
-	remote       ax25.Address
-	digipeaters  []ax25.Address
-	ports        map[string]Sender
-	vs, va, vr   uint8
+	mu          sync.Mutex
+	operation   sync.Mutex
+	local       ax25.Address
+	state       State
+	port        string
+	remote      ax25.Address
+	digipeaters []ax25.Address
+	ports       map[string]Sender
+	linkCore
 	control      chan controlEvent
 	ack          chan acknowledgement
 	subs         map[chan Event]struct{}
@@ -96,8 +96,6 @@ type Manager struct {
 	nm201        int
 	xid          chan xidEvent
 	xidCancel    context.CancelFunc
-	peerBusy     bool
-	rejectSent   bool
 	uaGraceUntil time.Time
 }
 
@@ -267,11 +265,7 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.port = port
 	m.remote = remote
 	m.digipeaters = digis
-	m.vs = 0
-	m.va = 0
-	m.vr = 0
-	m.peerBusy = false
-	m.rejectSent = false
+	m.linkCore.reset()
 	if m.xidCancel != nil {
 		m.xidCancel()
 	}
@@ -459,8 +453,8 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 		return errors.New("AX.25 session is not connected")
 	}
 	send := m.ports[m.port]
-	ns, nr, t1, n2 := m.vs, m.vr, m.t1, m.n2
-	expected := (m.vs + 1) & 7
+	ns, nr, expected := m.nextSend()
+	t1, n2 := m.t1, m.n2
 	m.drainAck()
 	m.mu.Unlock()
 	protocolID := pid
@@ -500,7 +494,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 			}
 			if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				m.mu.Lock()
-				m.va = expected
+				m.linkCore.acknowledge(expected, ack.type_)
 				m.mu.Unlock()
 				return nil
 			}
@@ -532,7 +526,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 					if ack.nr == expected {
 						stopTimer(timer)
 						m.mu.Lock()
-						m.va = expected
+						m.linkCore.acknowledge(expected, ack.type_)
 						m.mu.Unlock()
 						return nil
 					}
@@ -544,7 +538,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				if m.validNR(ack.nr) && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ && ack.nr == expected {
 					stopTimer(timer)
 					m.mu.Lock()
-					m.va = expected
+					m.linkCore.acknowledge(expected, ack.type_)
 					m.mu.Unlock()
 					return nil
 				}
@@ -577,7 +571,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				}
 				if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 					m.mu.Lock()
-					m.va = expected
+					m.linkCore.acknowledge(expected, ack.type_)
 					m.mu.Unlock()
 					return nil
 				}
@@ -813,9 +807,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			}
 		} else if state == Connected || state == TimerRecovery {
 			m.mu.Lock()
-			m.vs, m.va, m.vr = 0, 0, 0
-			m.peerBusy = false
-			m.rejectSent = false
+			m.linkCore.reset()
 			m.mu.Unlock()
 			_ = m.sendResponse(context.Background(), port, ax25.TypeUA, f.PollFinal, 0)
 			m.queueAck(acknowledgement{type_: ax25.TypeSABM})
@@ -866,9 +858,8 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			return true
 		}
 		m.mu.Lock()
-		if f.NS == m.vr {
-			m.vr = (m.vr + 1) & 7
-			m.rejectSent = false
+		accepted, sendReject := m.linkCore.receive(f.NS)
+		if accepted {
 			m.mu.Unlock()
 			pid := byte(0)
 			if f.PID != nil {
@@ -876,10 +867,8 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 			}
 			m.emit(Event{Type: "data", PID: pid, Data: append([]byte(nil), f.Payload...)})
 		} else {
-			alreadyRejected := m.rejectSent
-			m.rejectSent = true
 			m.mu.Unlock()
-			if !alreadyRejected {
+			if sendReject {
 				m.mu.Lock()
 				nr := m.vr
 				m.mu.Unlock()
@@ -974,9 +963,7 @@ func (m *Manager) failLink(message string) {
 		m.xidCancel = nil
 	}
 	m.state = Disconnected
-	m.vs, m.va, m.vr = 0, 0, 0
-	m.peerBusy = false
-	m.rejectSent = false
+	m.linkCore.reset()
 	m.uaGraceUntil = time.Time{}
 	m.t1, m.n2, m.paclen, m.receiveN1 = m.configuredT1, m.configuredN2, m.configuredN1, m.configuredN1
 	m.mu.Unlock()
@@ -989,7 +976,7 @@ func (m *Manager) failLink(message string) {
 func (m *Manager) validNR(nr uint8) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return nr == m.va || nr == m.vs
+	return m.linkCore.validNR(nr)
 }
 
 func isCommand(f ax25.Frame) bool {
