@@ -21,6 +21,9 @@ type Route struct {
 	Updated          time.Time
 	Obsolescence     uint8
 }
+
+// Service describes a network-advertised service. It is not a local service
+// handler; local services are owned by service.Registry.
 type Service struct {
 	Name, Callsign, Command string
 	Enabled                 bool
@@ -58,10 +61,21 @@ func (r *Router) Resolve(destination string) (Neighbor, Route, error) {
 			return n, x, nil
 		}
 	}
+	var direct []Neighbor
 	for _, n := range r.neighbors {
 		if n.Callsign == routeDestination {
-			return n, Route{Destination: up(destination), Via: n.ID, Quality: n.Quality}, nil
+			direct = append(direct, n)
 		}
+	}
+	sort.SliceStable(direct, func(i, j int) bool {
+		if direct[i].Quality != direct[j].Quality {
+			return direct[i].Quality > direct[j].Quality
+		}
+		return direct[i].ID < direct[j].ID
+	})
+	if len(direct) > 0 {
+		n := direct[0]
+		return n, Route{Destination: up(destination), Via: n.ID, Quality: n.Quality}, nil
 	}
 	return Neighbor{}, Route{}, errors.New("no route to destination")
 }

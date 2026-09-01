@@ -66,7 +66,7 @@ func (s *Server) serveWithContext(ctx service.ServiceContext) {
 	in := lineinput.NewScanner(stream)
 	in.Buffer(make([]byte, 1024), 64*1024)
 	fmt.Fprintf(ctx.Writer, "\r\n%s:%s NODE UltimatePR %s\r\n%s", s.Alias, s.Callsign, s.Version, language.T(lang, "node_call"))
-	if ctx.EntryType == service.EntryAX25 {
+	if ctx.EntryType == service.EntryAX25 || ctx.EntryType == service.EntryNode {
 		s.serveCall(ctx.RemoteCall.String(), lang, in, stream, ctx)
 		return
 	}
