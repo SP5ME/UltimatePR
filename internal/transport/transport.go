@@ -3,9 +3,12 @@ package transport
 import "context"
 
 type Packet struct {
-	PortID  string
-	Channel uint8
-	Data    []byte
+	// InterfaceID identifies the physical/network adapter. PortID is the
+	// logical packet-radio port selected after interface mapping.
+	InterfaceID string
+	PortID      string
+	Channel     uint8
+	Data        []byte
 }
 
 type Port interface {

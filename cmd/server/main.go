@@ -163,13 +163,32 @@ func main() {
 		return nil
 	}
 	runtimes := make(map[string]*runningPort, len(cfg.Ports))
+	logicalPorts := make(map[string]struct{}, len(cfg.Ports))
 	for _, pc := range cfg.Ports {
 		cfgPort := pc
-		portIDs = append(portIDs, cfgPort.ID)
+		interfaceID := cfgPort.InterfaceID
+		if strings.TrimSpace(interfaceID) == "" {
+			interfaceID = cfgPort.ID
+		}
+		channelPorts := cfgPort.Channels
+		kissPortMap := cfgPort.Channels
+		if cfgPort.Type == "axudp" {
+			channelPorts = map[uint8]string{0: cfgPort.ID}
+			kissPortMap = nil
+		}
+		if len(channelPorts) == 0 {
+			channelPorts = map[uint8]string{cfgPort.KISSPort: cfgPort.ID}
+		}
+		for _, logicalID := range channelPorts {
+			if _, exists := logicalPorts[logicalID]; !exists {
+				portIDs = append(portIDs, logicalID)
+				logicalPorts[logicalID] = struct{}{}
+			}
+		}
 		enabled := cfgPort.Enabled == nil || *cfgPort.Enabled
 		var p transport.Port
 		if cfgPort.Type == "axudp" {
-			p = axudp.New(axudp.Config{ID: cfgPort.ID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
+			p = axudp.New(axudp.Config{ID: cfgPort.ID, InterfaceID: interfaceID, Listen: cfgPort.Listen, RemoteHost: cfgPort.RemoteHost, RemotePort: cfgPort.RemotePort, FCS: cfgPort.FCS, AllowFrom: cfgPort.AllowFrom, MaxFrame: cfgPort.MaxFrameBytes, Queue: 256}, log)
 		} else {
 			address := net.JoinHostPort(cfgPort.Host, fmtPort(cfgPort.Port))
 			if cfgPort.TNCProxyEnabled {
@@ -180,22 +199,27 @@ func main() {
 				}
 				address = net.JoinHostPort("127.0.0.1", fmtPort(cfgPort.TNCProxyPort))
 			}
-			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, Address: address, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
+			p = kiss.NewTCPPort(kiss.TCPConfig{ID: cfgPort.ID, InterfaceID: interfaceID, Address: address, MaxFrame: cfgPort.MaxFrameBytes, Reconnect: time.Duration(cfgPort.ReconnectSeconds) * time.Second, Queue: 256, Port: cfgPort.KISSPort, PortMap: kissPortMap, TXDelay: cfgPort.KISSTXDelay, Persistence: cfgPort.KISSPersistence, SlotTime: cfgPort.KISSSlotTime, TXTail: cfgPort.KISSTXTail, FullDuplex: cfgPort.KISSFullDuplex}, log)
 		}
 		runtime := &runningPort{port: p, enabled: enabled}
+		// Keep the configured transport ID addressable for existing status and
+		// restart paths; channel mappings expose the logical PortIDs separately.
 		runtimes[cfgPort.ID] = runtime
-		senders[cfgPort.ID] = func(port transport.Port, active bool, id string, channel uint8) session.Sender {
-			return func(ctx context.Context, b []byte) error {
-				if !active {
-					return fmt.Errorf("port %q is disabled", id)
+		for channel, logicalID := range channelPorts {
+			runtimes[logicalID] = runtime
+			senders[logicalID] = func(port transport.Port, active bool, id string, interfaceID string, channel uint8) session.Sender {
+				return func(ctx context.Context, b []byte) error {
+					if !active {
+						return fmt.Errorf("port %q is disabled", id)
+					}
+					if f, err := ax25.Decode(b); err == nil {
+						mon.Add("TX", id, f, len(b))
+						events.Publish("frame.tx", map[string]any{"port": id, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
+					}
+					return port.Send(ctx, transport.Packet{InterfaceID: interfaceID, PortID: id, Channel: channel, Data: b})
 				}
-				if f, err := ax25.Decode(b); err == nil {
-					mon.Add("TX", port.ID(), f, len(b))
-					events.Publish("frame.tx", map[string]any{"port": port.ID(), "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
-				}
-				return port.Send(ctx, transport.Packet{PortID: port.ID(), Channel: channel, Data: b})
-			}
-		}(p, enabled, cfgPort.ID, cfgPort.KISSPort)
+			}(p, enabled, logicalID, interfaceID, channel)
+		}
 		ports = append(ports, p)
 		if enabled {
 			startPort(runtime)

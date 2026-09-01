@@ -278,3 +278,24 @@ func TestInboundRoutedServiceReceivesReturnPath(t *testing.T) {
 		t.Fatal("routed service was not called")
 	}
 }
+
+func TestInboundSessionKeyIncludesPort(t *testing.T) {
+	sent := make(chan []byte, 4)
+	m := NewInboundMux(map[string]Sender{"vhf": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil }, "uhf": func(_ context.Context, b []byte) error { sent <- append([]byte(nil), b...); return nil }}, nil)
+	local := ax25.Address{Callsign: "SP5ABC", CommandResponse: true}
+	remote := ax25.Address{Callsign: "SQ5XYZ"}
+	m.Register(local, func(string, io.Reader, io.Writer) {})
+	for _, port := range []string{"vhf", "uhf"} {
+		frame := ax25.Frame{Destination: local, Source: remote, Type: ax25.TypeSABM, PollFinal: true}
+		if !m.Handle(port, frame) {
+			t.Fatalf("SABM on %s was not handled", port)
+		}
+		_ = <-sent
+	}
+	m.mu.Lock()
+	links := len(m.links)
+	m.mu.Unlock()
+	if links != 2 {
+		t.Fatalf("links=%d, want two independent port-scoped sessions", links)
+	}
+}

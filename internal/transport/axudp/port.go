@@ -13,11 +13,11 @@ import (
 )
 
 type Config struct {
-	ID, Listen, RemoteHost string
-	RemotePort             uint16
-	FCS                    bool
-	AllowFrom              []string
-	MaxFrame, Queue        int
+	ID, InterfaceID, Listen, RemoteHost string
+	RemotePort                          uint16
+	FCS                                 bool
+	AllowFrom                           []string
+	MaxFrame, Queue                     int
 }
 type Stats struct{ RXFrames, TXFrames, RXBytes, TXBytes, BadFCS, Dropped, Rejected atomic.Uint64 }
 type Port struct {
@@ -34,6 +34,9 @@ func New(c Config, l *slog.Logger) *Port {
 	}
 	if c.MaxFrame < 256 {
 		c.MaxFrame = 4096
+	}
+	if c.InterfaceID == "" {
+		c.InterfaceID = c.ID
 	}
 	return &Port{cfg: c, tx: make(chan transport.Packet, c.Queue), log: l}
 }
@@ -107,7 +110,7 @@ func (p *Port) read(ctx context.Context, c *net.UDPConn, out chan<- transport.Pa
 		}
 		p.stats.RXFrames.Add(1)
 		select {
-		case out <- transport.Packet{PortID: p.ID(), Data: frame}:
+		case out <- transport.Packet{InterfaceID: p.cfg.InterfaceID, PortID: p.ID(), Data: frame}:
 		case <-ctx.Done():
 			return
 		}

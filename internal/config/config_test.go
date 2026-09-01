@@ -235,6 +235,44 @@ ports:
 	}
 }
 
+func TestKISSMultiportMappingIsPreserved(t *testing.T) {
+	raw := []byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - id: kiss-main
+    interface_id: kiss-main
+    type: kiss-tcp
+    host: 127.0.0.1
+    port: 8001
+    channels: {0: vhf, 1: uhf}
+    max_frame_bytes: 4096
+    reconnect_seconds: 5
+`)
+	c, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Ports[0].InterfaceID != "kiss-main" || c.Ports[0].Channels[0] != "vhf" || c.Ports[0].Channels[1] != "uhf" {
+		t.Fatalf("unexpected KISS mapping: %+v", c.Ports[0])
+	}
+}
+
+func TestLegacyPortConfigStillUsesSingleLogicalPort(t *testing.T) {
+	c, err := Parse([]byte(`server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: vhf, type: kiss-tcp, host: 127.0.0.1, port: 8001, kiss_port: 0, max_frame_bytes: 4096, reconnect_seconds: 5}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Ports[0].InterfaceID != "" || len(c.Ports[0].Channels) != 0 {
+		t.Fatalf("legacy config unexpectedly changed: %+v", c.Ports[0])
+	}
+}
+
 func TestRejectsKISSPortAbove15(t *testing.T) {
 	raw := []byte(`
 server: {callsign: SP5ME}

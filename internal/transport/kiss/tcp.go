@@ -13,16 +13,17 @@ import (
 )
 
 type TCPConfig struct {
-	ID, Address string
-	MaxFrame    int
-	Reconnect   time.Duration
-	Queue       int
-	Port        uint8
-	TXDelay     *uint8
-	Persistence *uint8
-	SlotTime    *uint8
-	TXTail      *uint8
-	FullDuplex  *bool
+	ID, Address, InterfaceID string
+	MaxFrame                 int
+	Reconnect                time.Duration
+	Queue                    int
+	Port                     uint8
+	PortMap                  map[uint8]string
+	TXDelay                  *uint8
+	Persistence              *uint8
+	SlotTime                 *uint8
+	TXTail                   *uint8
+	FullDuplex               *bool
 }
 type Stats struct{ RXFrames, TXFrames, RXBytes, TXBytes, DecodeErrors, DroppedTX atomic.Uint64 }
 type TCPPort struct {
@@ -31,13 +32,21 @@ type TCPPort struct {
 	log       *slog.Logger
 	stats     Stats
 	connected atomic.Bool
+	multiport bool
 }
 
 func NewTCPPort(c TCPConfig, l *slog.Logger) *TCPPort {
 	if c.Queue < 1 {
 		c.Queue = 128
 	}
-	return &TCPPort{cfg: c, tx: make(chan transport.Packet, c.Queue), log: l}
+	if c.InterfaceID == "" {
+		c.InterfaceID = c.ID
+	}
+	multiport := len(c.PortMap) > 0
+	if len(c.PortMap) == 0 {
+		c.PortMap = map[uint8]string{0: c.ID, c.Port: c.ID}
+	}
+	return &TCPPort{cfg: c, tx: make(chan transport.Packet, c.Queue), log: l, multiport: multiport}
 }
 func (p *TCPPort) ID() string { return p.cfg.ID }
 func (p *TCPPort) Status() transport.Status {
@@ -101,11 +110,12 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 			fs, es := d.Feed(b[:n])
 			p.stats.DecodeErrors.Add(uint64(len(es)))
 			for _, f := range fs {
-				if !acceptFrame(f, p.cfg.Port) {
+				portID, ok := p.cfg.PortMap[f.Port]
+				if !ok || !acceptFrame(f, p.cfg.Port, p.cfg.PortMap) {
 					continue
 				}
 				p.stats.RXFrames.Add(1)
-				pkt := transport.Packet{PortID: p.ID(), Channel: p.cfg.Port, Data: f.Data}
+				pkt := transport.Packet{InterfaceID: p.cfg.InterfaceID, PortID: portID, Channel: f.Port, Data: f.Data}
 				select {
 				case out <- pkt:
 				case <-ctx.Done():
@@ -121,9 +131,13 @@ func (p *TCPPort) readLoop(ctx context.Context, c net.Conn, out chan<- transport
 	}
 }
 
-func acceptFrame(f Frame, port uint8) bool {
+func acceptFrame(f Frame, port uint8, portMap ...map[uint8]string) bool {
 	if f.Command != 0 {
 		return false
+	}
+	if len(portMap) > 0 && len(portMap[0]) > 0 {
+		_, ok := portMap[0][f.Port]
+		return ok
 	}
 	// Some TNC applications transmit received data on the standard KISS
 	// channel 0 even when the configured TX channel is different.
@@ -137,7 +151,11 @@ func (p *TCPPort) writeLoop(ctx context.Context, c net.Conn, errch chan<- error)
 	for {
 		select {
 		case pkt := <-p.tx:
-			b, err := Encode(Frame{Port: p.cfg.Port, Command: CommandData, Data: pkt.Data})
+			channel := pkt.Channel
+			if !p.multiport {
+				channel = p.cfg.Port
+			}
+			b, err := Encode(Frame{Port: channel, Command: CommandData, Data: pkt.Data})
 			if err == nil {
 				_, err = writeAll(c, b)
 			}

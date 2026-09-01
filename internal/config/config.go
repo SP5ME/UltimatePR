@@ -200,27 +200,29 @@ type NodeService struct {
 	Enabled  bool   `yaml:"enabled"`
 }
 type Port struct {
-	ID               string   `yaml:"id"`
-	Type             string   `yaml:"type"`
-	Enabled          *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	Host             string   `yaml:"host"`
-	Port             uint16   `yaml:"port"`
-	MaxFrameBytes    int      `yaml:"max_frame_bytes"`
-	ReconnectSeconds int      `yaml:"reconnect_seconds"`
-	KISSPort         uint8    `yaml:"kiss_port"`
-	KISSTXDelay      *uint8   `yaml:"kiss_txdelay,omitempty"`
-	KISSPersistence  *uint8   `yaml:"kiss_persistence,omitempty"`
-	KISSSlotTime     *uint8   `yaml:"kiss_slottime,omitempty"`
-	KISSTXTail       *uint8   `yaml:"kiss_txtail,omitempty"`
-	KISSFullDuplex   *bool    `yaml:"kiss_full_duplex,omitempty"`
-	TNCProxyEnabled  bool     `yaml:"tncproxy_enabled,omitempty" json:"tncproxy_enabled,omitempty"`
-	TNCProxyPort     uint16   `yaml:"tncproxy_port,omitempty" json:"tncproxy_port,omitempty"`
-	TNCProxyListen   string   `yaml:"tncproxy_listen,omitempty" json:"-"` // legacy address form
-	Listen           string   `yaml:"listen"`
-	RemoteHost       string   `yaml:"remote_host"`
-	RemotePort       uint16   `yaml:"remote_port"`
-	FCS              bool     `yaml:"fcs"`
-	AllowFrom        []string `yaml:"allow_from"`
+	ID               string           `yaml:"id"`
+	InterfaceID      string           `yaml:"interface_id,omitempty"`
+	Channels         map[uint8]string `yaml:"channels,omitempty"`
+	Type             string           `yaml:"type"`
+	Enabled          *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Host             string           `yaml:"host"`
+	Port             uint16           `yaml:"port"`
+	MaxFrameBytes    int              `yaml:"max_frame_bytes"`
+	ReconnectSeconds int              `yaml:"reconnect_seconds"`
+	KISSPort         uint8            `yaml:"kiss_port"`
+	KISSTXDelay      *uint8           `yaml:"kiss_txdelay,omitempty"`
+	KISSPersistence  *uint8           `yaml:"kiss_persistence,omitempty"`
+	KISSSlotTime     *uint8           `yaml:"kiss_slottime,omitempty"`
+	KISSTXTail       *uint8           `yaml:"kiss_txtail,omitempty"`
+	KISSFullDuplex   *bool            `yaml:"kiss_full_duplex,omitempty"`
+	TNCProxyEnabled  bool             `yaml:"tncproxy_enabled,omitempty" json:"tncproxy_enabled,omitempty"`
+	TNCProxyPort     uint16           `yaml:"tncproxy_port,omitempty" json:"tncproxy_port,omitempty"`
+	TNCProxyListen   string           `yaml:"tncproxy_listen,omitempty" json:"-"` // legacy address form
+	Listen           string           `yaml:"listen"`
+	RemoteHost       string           `yaml:"remote_host"`
+	RemotePort       uint16           `yaml:"remote_port"`
+	FCS              bool             `yaml:"fcs"`
+	AllowFrom        []string         `yaml:"allow_from"`
 }
 type Config struct {
 	Application  Application  `yaml:"application"`
@@ -583,6 +585,10 @@ func (c Config) Validate() error {
 		}
 	}
 	seen := map[string]bool{}
+	logicalOwners := map[string]string{}
+	for _, p := range c.Ports {
+		logicalOwners[p.ID] = p.ID
+	}
 	for i, p := range c.Ports {
 		if p.Enabled == nil {
 			enabled := true
@@ -595,6 +601,26 @@ func (c Config) Validate() error {
 		seen[p.ID] = true
 		if p.Type != "kiss-tcp" && p.Type != "axudp" {
 			return fmt.Errorf("ports[%d]: unsupported type %q", i, p.Type)
+		}
+		if strings.TrimSpace(p.InterfaceID) == "" {
+			p.InterfaceID = p.ID
+		}
+		if p.Type == "axudp" && len(p.Channels) > 0 {
+			return fmt.Errorf("ports[%d]: channels are supported only for kiss-tcp", i)
+		}
+		seenLogicalPorts := map[string]bool{}
+		for channel, logicalID := range p.Channels {
+			if channel > 15 || strings.TrimSpace(logicalID) == "" {
+				return fmt.Errorf("ports[%d].channels[%d]: logical port id is required", i, channel)
+			}
+			if seenLogicalPorts[logicalID] {
+				return fmt.Errorf("ports[%d].channels: logical port %q is mapped more than once", i, logicalID)
+			}
+			if owner := logicalOwners[logicalID]; owner != "" && owner != p.ID {
+				return fmt.Errorf("ports[%d].channels: logical port %q is already owned by %q", i, logicalID, owner)
+			}
+			seenLogicalPorts[logicalID] = true
+			logicalOwners[logicalID] = p.ID
 		}
 		if p.MaxFrameBytes < 256 || p.MaxFrameBytes > 65535 {
 			return fmt.Errorf("ports[%d]: max_frame_bytes out of range", i)
