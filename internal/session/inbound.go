@@ -339,6 +339,9 @@ func (l *inboundLink) disconnect() error {
 		}
 	}
 drained:
+	l.mu.Lock()
+	l.startTimer(time.Now(), timerForRelease, n2)
+	l.mu.Unlock()
 	for attempt := 0; attempt < n2; attempt++ {
 		if err := l.sendCommand(ax25.TypeDISC, true, 0); err != nil {
 			return err
@@ -348,9 +351,15 @@ drained:
 		case event := <-l.control:
 			stopTimer(timer)
 			if event.response && event.final && (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) {
+				l.mu.Lock()
+				l.stopTimer()
+				l.mu.Unlock()
 				return nil
 			}
 		case <-timer.C:
+			l.mu.Lock()
+			l.timerExpired(time.Now(), t1)
+			l.mu.Unlock()
 		case <-l.closed:
 			stopTimer(timer)
 			return io.ErrClosedPipe
@@ -405,7 +414,8 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 	f := l.command(ax25.TypeI, false, nr)
 	f.NS, f.PID, f.Payload = ns, &pid, append([]byte(nil), data...)
 	l.mu.Lock()
-	l.vs = expected
+	l.track(f)
+	l.startTimer(time.Now(), timerForData, n2)
 	l.mu.Unlock()
 	needSend := true
 	for attempt := 0; attempt < n2; attempt++ {
@@ -422,14 +432,25 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 		case ack := <-l.ack:
 			if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				l.mu.Lock()
+				l.stopTimer()
 				l.linkCore.acknowledge(expected, ack.type_)
 				l.mu.Unlock()
 				return nil
 			}
 			if (ack.type_ == ax25.TypeREJ || ack.type_ == ax25.TypeSREJ) && ack.nr == ns {
+				l.mu.Lock()
+				frames := l.retransmitFrom(ack.nr)
+				l.mu.Unlock()
+				if len(frames) > 0 {
+					f = frames[0]
+				}
 				needSend = true
 			}
 		case <-time.After(t1):
+			l.mu.Lock()
+			l.timerExpired(time.Now(), t1)
+			l.retry()
+			l.mu.Unlock()
 			if err := l.sendControl(ax25.TypeRR, true, nr); err != nil {
 				return err
 			}
@@ -444,6 +465,7 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 					stopTimer(pollTimer)
 					if l.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 						l.mu.Lock()
+						l.stopTimer()
 						l.linkCore.acknowledge(expected, ack.type_)
 						l.mu.Unlock()
 						return nil
@@ -451,6 +473,10 @@ func (l *inboundLink) sendChunkWithPID(pid byte, data []byte) error {
 					needSend = true
 					pollDone = true
 				case <-pollTimer.C:
+					l.mu.Lock()
+					l.timerExpired(time.Now(), t1)
+					l.retry()
+					l.mu.Unlock()
 					pollDone = true
 				case <-l.closed:
 					stopTimer(pollTimer)
@@ -495,6 +521,10 @@ func (l *inboundLink) waitRemoteReady() error {
 			}
 			l.mu.Unlock()
 		case <-time.After(t1):
+			l.mu.Lock()
+			l.timerExpired(time.Now(), t1)
+			l.retry()
+			l.mu.Unlock()
 		case <-l.closed:
 			return io.ErrClosedPipe
 		}

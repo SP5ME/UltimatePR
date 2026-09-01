@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	"github.com/packet-radio/ultimatepr/internal/ax25"
 )
@@ -41,12 +42,47 @@ func TestLinkCoreReceiveRejectsUnexpectedSequenceOnce(t *testing.T) {
 
 func TestLinkCoreREJRequestsRetransmissionWithoutAcknowledging(t *testing.T) {
 	var l linkCore
-	l.vs, l.va = 1, 0
-	if accepted, retransmit := l.acknowledge(0, ax25.TypeREJ); accepted || !retransmit {
+	for i := uint8(0); i < 3; i++ {
+		l.track(ax25.Frame{NS: i, Type: ax25.TypeI, Payload: []byte{byte(i)}})
+	}
+	if accepted, retransmit := l.acknowledge(1, ax25.TypeREJ); accepted || !retransmit {
 		t.Fatalf("REJ result: accepted=%v retransmit=%v", accepted, retransmit)
 	}
-	if l.va != 0 {
-		t.Fatalf("REJ changed VA to %d", l.va)
+	frames := l.retransmitFrom(1)
+	if len(frames) != 2 || frames[0].NS != 1 || frames[1].NS != 2 {
+		t.Fatalf("REJ retransmission range=%+v", frames)
+	}
+}
+
+func TestLinkCorePartialAndCompleteAcknowledgement(t *testing.T) {
+	var l linkCore
+	for i := uint8(0); i < 3; i++ {
+		l.track(ax25.Frame{NS: i, Type: ax25.TypeI})
+	}
+	if accepted, retransmit := l.acknowledge(1, ax25.TypeRR); !accepted || retransmit || l.va != 1 {
+		t.Fatalf("partial ACK: accepted=%v retransmit=%v VA=%d", accepted, retransmit, l.va)
+	}
+	if len(l.pending) != 2 || l.pending[0].sequence != 1 {
+		t.Fatalf("partial ACK pending=%+v", l.pending)
+	}
+	if accepted, retransmit := l.acknowledge(3, ax25.TypeRR); !accepted || retransmit || l.va != 3 || len(l.pending) != 0 {
+		t.Fatalf("complete ACK: accepted=%v retransmit=%v VA=%d pending=%d", accepted, retransmit, l.va, len(l.pending))
+	}
+}
+
+func TestLinkCoreTimerAndRetryBudget(t *testing.T) {
+	var l linkCore
+	now := time.Unix(100, 0)
+	l.startTimer(now, timerForData, 2)
+	if l.timer.reason != timerForData || !l.timer.active || l.timerExpired(now.Add(time.Second), 2*time.Second) {
+		t.Fatalf("timer state=%+v", l.timer)
+	}
+	if !l.timerExpired(now.Add(2*time.Second), 2*time.Second) || !l.retry() || !l.retry() || l.retry() {
+		t.Fatalf("retry budget state=%+v", l.timer)
+	}
+	l.stopTimer()
+	if l.timer.active {
+		t.Fatal("timer remained active after stop")
 	}
 }
 

@@ -278,6 +278,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	m.mu.Unlock()
 	m.setState(AwaitingConnection, fmt.Sprintf("0/%d", m.n2))
 	f := m.command(ax25.TypeSABM, true, nil, 0, 0)
+	m.mu.Lock()
+	m.startTimer(time.Now(), timerForConnect, m.n2)
+	m.mu.Unlock()
 	for attempt := 0; attempt < m.n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			m.failLink(err.Error())
@@ -289,6 +292,9 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 			// only as a response with F=1. UA(F=0) is error D and is ignored.
 			if event.type_ == ax25.TypeUA && event.response && event.final {
 				m.mu.Lock()
+				m.stopTimer()
+				m.mu.Unlock()
+				m.mu.Lock()
 				m.uaGraceUntil = time.Now().Add(time.Duration(m.n2) * m.t1)
 				m.mu.Unlock()
 				m.setState(Connected, "Sesja AX.25 polaczona")
@@ -298,10 +304,17 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 				return nil
 			}
 			if event.type_ == ax25.TypeDM && event.response && event.final {
+				m.mu.Lock()
+				m.stopTimer()
+				m.mu.Unlock()
 				m.failLink("Stacja odrzucila polaczenie")
 				return errors.New("connection rejected (DM)")
 			}
 		case <-time.After(m.t1):
+			m.mu.Lock()
+			m.timerExpired(time.Now(), m.t1)
+			m.retry()
+			m.mu.Unlock()
 			m.setState(AwaitingConnection, fmt.Sprintf("%d/%d", attempt+1, m.n2))
 		case <-ctx.Done():
 			m.failLink("Polaczenie anulowane")
@@ -326,6 +339,9 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 	m.mu.Unlock()
 	m.setState(AwaitingRelease, "Rozlaczanie")
 	f := m.command(ax25.TypeDISC, true, nil, 0, 0)
+	m.mu.Lock()
+	m.startTimer(time.Now(), timerForRelease, n2)
+	m.mu.Unlock()
 	for attempt := 0; attempt < n2; attempt++ {
 		if err := m.sendFrame(ctx, send, f); err != nil {
 			break
@@ -333,10 +349,17 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		select {
 		case event := <-m.control:
 			if (event.type_ == ax25.TypeUA || event.type_ == ax25.TypeDM) && event.response && event.final {
+				m.mu.Lock()
+				m.stopTimer()
+				m.mu.Unlock()
 				m.failLink("Rozlaczono")
 				return nil
 			}
 		case <-time.After(t1):
+			m.mu.Lock()
+			m.timerExpired(time.Now(), t1)
+			m.retry()
+			m.mu.Unlock()
 		case <-ctx.Done():
 			break
 		}
@@ -463,7 +486,8 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 	// V(S) is advanced when the new I frame is sent, not when it is
 	// acknowledged. V(A) remains the oldest unacknowledged sequence number.
 	m.mu.Lock()
-	m.vs = expected
+	m.track(f)
+	m.startTimer(time.Now(), timerForData, n2)
 	m.mu.Unlock()
 	needSend := true
 	pollOnly := false
@@ -494,6 +518,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 			}
 			if m.validNR(ack.nr) && ack.nr == expected && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ {
 				m.mu.Lock()
+				m.stopTimer()
 				m.linkCore.acknowledge(expected, ack.type_)
 				m.mu.Unlock()
 				return nil
@@ -526,6 +551,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 					if ack.nr == expected {
 						stopTimer(timer)
 						m.mu.Lock()
+						m.stopTimer()
 						m.linkCore.acknowledge(expected, ack.type_)
 						m.mu.Unlock()
 						return nil
@@ -538,12 +564,19 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				if m.validNR(ack.nr) && ack.type_ != ax25.TypeREJ && ack.type_ != ax25.TypeSREJ && ack.nr == expected {
 					stopTimer(timer)
 					m.mu.Lock()
+					m.stopTimer()
 					m.linkCore.acknowledge(expected, ack.type_)
 					m.mu.Unlock()
 					return nil
 				}
 				if (ack.type_ == ax25.TypeREJ || ack.type_ == ax25.TypeSREJ) && ack.nr == ns {
 					stopTimer(timer)
+					m.mu.Lock()
+					frames := m.retransmitFrom(ack.nr)
+					m.mu.Unlock()
+					if len(frames) > 0 {
+						f = frames[0]
+					}
 					needSend = true
 					cycleDone = true
 					break
@@ -551,6 +584,10 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 				// A stale RR or piggybacked N(R) does not acknowledge this
 				// frame and must not trigger an immediate retransmission.
 			case <-timer.C:
+				m.mu.Lock()
+				m.timerExpired(time.Now(), t1)
+				m.retry()
+				m.mu.Unlock()
 				ack, err := m.pollAcknowledgement(ctx, send, nr)
 				if isLinkTermination(ack) {
 					return errors.New("AX.25 link terminated by remote station")
@@ -687,6 +724,10 @@ func (m *Manager) waitRemoteReady(ctx context.Context) error {
 					return nil
 				}
 			case <-timer.C:
+				m.mu.Lock()
+				m.timerExpired(time.Now(), t1)
+				m.retry()
+				m.mu.Unlock()
 				goto retry
 			case <-ctx.Done():
 				if !timer.Stop() {
