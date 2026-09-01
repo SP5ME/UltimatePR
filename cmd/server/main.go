@@ -228,13 +228,15 @@ func main() {
 		}
 	}
 	localPort := loopback.New(rx)
-	senders[transport.LocalLoopPortID] = func(ctx context.Context, b []byte) error {
-		if f, err := ax25.Decode(b); err == nil {
-			mon.Add("TX", transport.LocalLoopPortID, f, len(b))
-			events.Publish("frame.tx", map[string]any{"port": transport.LocalLoopPortID, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
+	localSend := session.LocalSender(func(port string) session.Sender {
+		return func(ctx context.Context, b []byte) error {
+			if f, err := ax25.Decode(b); err == nil {
+				mon.Add("TX", port, f, len(b))
+				events.Publish("frame.tx", map[string]any{"port": port, "source": f.Source.String(), "destination": f.Destination.String(), "bytes": len(b)})
+			}
+			return localPort.Send(ctx, transport.Packet{PortID: port, Data: b})
 		}
-		return localPort.Send(ctx, transport.Packet{Data: b})
-	}
+	})
 	var nodeRouter *nodecore.Router
 	services := service.NewRegistry()
 	if nodeEnabled {
@@ -349,11 +351,15 @@ func main() {
 	}
 	outboundSenders := make(map[string]session.Sender, len(senders))
 	for id, sender := range senders {
-		if id == transport.LocalLoopPortID || (runtimes[id] != nil && runtimes[id].enabled) {
+		if runtimes[id] != nil && runtimes[id].enabled {
 			outboundSenders[id] = sender
 		}
 	}
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, outboundSenders)
+	radio.SetLocalDelivery(func(address ax25.Address) bool {
+		_, ok := services.ByCallsign(address.String())
+		return ok
+	}, localSend)
 	radio.Configure(time.Duration(cfg.Application.AX25T1Seconds)*time.Second, cfg.Application.AX25N2, cfg.Application.AX25N1)
 	heard := mheard.New(200)
 	mheardSnapshotPath := *path + ".mheard-snapshot.json"
@@ -595,7 +601,7 @@ func main() {
 		apiHandler = apiServer.Handler()
 		log.Info("public API enabled", "listener", cfg.Web.Listen, "prefix", "/api/v1")
 	}
-	terminalPorts := append(append([]string(nil), portIDs...), transport.LocalLoopPortID)
+	terminalPorts := append([]string(nil), portIDs...)
 	web = webui.New(webui.Config{
 		Listen:             cfg.Web.Listen,
 		Username:           cfg.Web.Username,

@@ -30,6 +30,10 @@ type Event struct {
 }
 type Sender func(context.Context, []byte) error
 
+// LocalSender delivers a frame internally while retaining the selected
+// logical port in the transport packet.
+type LocalSender func(port string) Sender
+
 const (
 	// AX.25 v2.2 default used by this implementation: T1=10 seconds and N2=10.
 	// T1 must cover the transmission and acknowledgement of a maximum N1 frame.
@@ -74,14 +78,17 @@ type xidEvent struct {
 }
 
 type Manager struct {
-	mu          sync.Mutex
-	operation   sync.Mutex
-	local       ax25.Address
-	state       State
-	port        string
-	remote      ax25.Address
-	digipeaters []ax25.Address
-	ports       map[string]Sender
+	mu           sync.Mutex
+	operation    sync.Mutex
+	local        ax25.Address
+	state        State
+	port         string
+	remote       ax25.Address
+	digipeaters  []ax25.Address
+	ports        map[string]Sender
+	localResolve func(ax25.Address) bool
+	localSend    LocalSender
+	send         Sender
 	linkCore
 	control      chan controlEvent
 	ack          chan acknowledgement
@@ -259,12 +266,17 @@ func (m *Manager) Connect(ctx context.Context, port, target string, via ...strin
 	if len(digis) > 8 {
 		return errors.New("AX.25 allows at most 8 digipeaters")
 	}
+	selectedSend := send
+	if m.localResolve != nil && m.localResolve(remote) && m.localSend != nil {
+		selectedSend = m.localSend(port)
+	}
 	m.mu.Lock()
 	if m.state != Disconnected {
 		m.mu.Unlock()
 		return errors.New("session already active")
 	}
 	m.port = port
+	m.send = selectedSend
 	m.remote = remote
 	m.digipeaters = digis
 	m.linkCore.reset()
@@ -347,7 +359,7 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 		m.mu.Unlock()
 		return nil
 	}
-	send := m.ports[m.port]
+	send := m.send
 	t1, n2 := m.t1, m.n2
 	m.drain()
 	m.mu.Unlock()
@@ -483,7 +495,7 @@ func (m *Manager) KeepAlive(ctx context.Context, interval time.Duration) {
 				continue
 			}
 			m.handleEvent(linkEvent{kind: eventT3Expired})
-			send, nr := m.ports[m.port], m.vr
+			send, nr := m.send, m.vr
 			m.mu.Unlock()
 			if err := m.probeLink(ctx, send, nr); err != nil && ctx.Err() == nil {
 				m.failLink("Utrata lacza AX.25")
@@ -507,7 +519,7 @@ func (m *Manager) sendChunkWithPID(ctx context.Context, pid byte, data []byte, t
 		m.mu.Unlock()
 		return errors.New("AX.25 session is not connected")
 	}
-	send := m.ports[m.port]
+	send := m.send
 	ns, nr, expected := m.nextSend()
 	t1, n2 := m.t1, m.n2
 	m.drainAck()
@@ -738,7 +750,7 @@ func (m *Manager) waitRemoteReady(ctx context.Context) error {
 	for attempt := 0; attempt < n2; attempt++ {
 		m.mu.Lock()
 		busy := m.peerBusy
-		send, nr := m.ports[m.port], m.vr
+		send, nr := m.send, m.vr
 		m.mu.Unlock()
 		if !busy {
 			return nil
@@ -812,7 +824,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 	case ax25.TypeTEST:
 		if isCommand(f) {
 			m.mu.Lock()
-			send := m.ports[port]
+			send := m.send
 			remote, local := m.remote, m.local
 			digis := append([]ax25.Address(nil), m.digipeaters...)
 			m.mu.Unlock()
@@ -846,7 +858,7 @@ func (m *Manager) Handle(port string, f ax25.Frame) bool {
 				m.paclen = min(m.configuredN1, offered.ReceiveN1)
 				m.t1 = time.Duration(selected.T1Milliseconds) * time.Millisecond
 				m.n2 = selected.Retries
-				send := m.ports[port]
+				send := m.send
 				remote, local := m.remote, m.local
 				digis := append([]ax25.Address(nil), m.digipeaters...)
 				m.mu.Unlock()
@@ -1035,7 +1047,7 @@ func (m *Manager) command(t ax25.Type, pf bool, pid *byte, ns, nr uint8) ax25.Fr
 }
 func (m *Manager) sendResponse(ctx context.Context, port string, t ax25.Type, pf bool, nr uint8) error {
 	m.mu.Lock()
-	send := m.ports[port]
+	send := m.send
 	remote, local := m.remote, m.local
 	digis := append([]ax25.Address(nil), m.digipeaters...)
 	m.mu.Unlock()

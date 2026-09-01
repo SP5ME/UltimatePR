@@ -10,14 +10,16 @@ import (
 
 // Hub owns independent outgoing AX.25 link state machines sharing one radio.
 type Hub struct {
-	mu       sync.RWMutex
-	local    ax25.Address
-	ports    map[string]Sender
-	sessions map[*Manager]hubSession
-	next     uint64
-	t1       time.Duration
-	n2       int
-	n1       int
+	mu           sync.RWMutex
+	local        ax25.Address
+	ports        map[string]Sender
+	sessions     map[*Manager]hubSession
+	next         uint64
+	t1           time.Duration
+	n2           int
+	n1           int
+	localResolve func(ax25.Address) bool
+	localSend    LocalSender
 }
 type hubSession struct {
 	id      string
@@ -47,9 +49,21 @@ func (h *Hub) Configure(t1 time.Duration, n2, n1 int) {
 	}
 }
 
-func (h *Hub) NewSession() (*Manager, func()) {
-	m := New(h.local, h.ports)
+// SetLocalDelivery configures transparent local AX.25 routing. The resolver
+// is intentionally owned by the session boundary, not by the AX.25 state
+// machine or service implementations.
+func (h *Hub) SetLocalDelivery(resolve func(ax25.Address) bool, send LocalSender) {
 	h.mu.Lock()
+	h.localResolve = resolve
+	h.localSend = send
+	h.mu.Unlock()
+}
+
+func (h *Hub) NewSession() (*Manager, func()) {
+	h.mu.Lock()
+	m := New(h.local, h.ports)
+	m.localResolve = h.localResolve
+	m.localSend = h.localSend
 	h.next++
 	m.Configure(h.t1, h.n2, h.n1)
 	h.sessions[m] = hubSession{id: fmt.Sprintf("session-%d", h.next), created: time.Now().UTC()}

@@ -35,7 +35,9 @@ func (p *Port) Send(ctx context.Context, pkt transport.Packet) error {
 		return errors.New("local AX.25 loopback unavailable")
 	}
 	pkt.InterfaceID = "internal"
-	pkt.PortID = p.id
+	if pkt.PortID == "" {
+		pkt.PortID = p.id
+	}
 	pkt.Channel = 0
 	pkt.Internal = true
 	select {

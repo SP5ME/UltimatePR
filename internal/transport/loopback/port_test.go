@@ -14,7 +14,7 @@ func TestPortInjectsInternalPacketOnLocalLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := <-out
-	if got.InterfaceID != "internal" || got.PortID != transport.LocalLoopPortID || got.Channel != 0 || !got.Internal || string(got.Data) != "frame" {
+	if got.InterfaceID != "internal" || got.PortID != "wrong" || got.Channel != 0 || !got.Internal || string(got.Data) != "frame" {
 		t.Fatalf("packet=%+v", got)
 	}
 }

@@ -14,9 +14,9 @@ import (
 
 func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 	wire := make(chan transport.Packet, 128)
-	port := loopback.New(wire)
+	loop := loopback.New(wire)
 	send := func(ctx context.Context, data []byte) error {
-		return port.Send(ctx, transport.Packet{Data: append([]byte(nil), data...)})
+		return loop.Send(ctx, transport.Packet{PortID: "radio-2m", Data: append([]byte(nil), data...)})
 	}
 
 	local := ax25.Address{Callsign: "LOCAL"}
@@ -40,9 +40,17 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	inbound := NewInboundMux(map[string]Sender{transport.LocalLoopPortID: send}, nil)
+	localSend := LocalSender(func(portID string) Sender {
+		return func(ctx context.Context, data []byte) error {
+			return loop.Send(ctx, transport.Packet{PortID: portID, Data: append([]byte(nil), data...)})
+		}
+	})
+	inbound := NewInboundMux(map[string]Sender{"radio-2m": send}, nil)
 	inbound.SetRegistry(registry)
-	manager := New(local, map[string]Sender{transport.LocalLoopPortID: send})
+	hub := NewHub(local, map[string]Sender{"radio-2m": send})
+	hub.SetLocalDelivery(func(address ax25.Address) bool { _, ok := registry.ByCallsign(address.String()); return ok }, localSend)
+	manager, release := hub.NewSession()
+	defer release()
 	manager.Configure(200*time.Millisecond, 2, 64)
 	events, unsubscribe := manager.Subscribe()
 	defer unsubscribe()
@@ -69,7 +77,7 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 	}()
 
 	connectCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := manager.Connect(connectCtx, transport.LocalLoopPortID, remote.String()); err != nil {
+	if err := manager.Connect(connectCtx, "radio-2m", remote.String()); err != nil {
 		cancel()
 		t.Fatal(err)
 	}
@@ -77,7 +85,7 @@ func TestLocalLoopUsesConnectedAX25PathForGenericService(t *testing.T) {
 
 	select {
 	case ctx := <-serviceStarted:
-		if ctx.PortID != transport.LocalLoopPortID || ctx.EntryType != service.EntryAX25 || ctx.RemoteCall.String() != local.String() || ctx.LocalCall.String() != remote.String() {
+		if ctx.PortID != "radio-2m" || ctx.EntryType != service.EntryAX25 || ctx.RemoteCall.String() != local.String() || ctx.LocalCall.String() != remote.String() {
 			t.Fatalf("service context=%+v", ctx)
 		}
 	case <-time.After(time.Second):
