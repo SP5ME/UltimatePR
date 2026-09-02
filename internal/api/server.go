@@ -337,11 +337,14 @@ var eventsUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool 
 }}
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+	// Subscribe before the websocket handshake completes so a publisher cannot
+	// race the client immediately after Dial returns.
+	ch, cancel := s.cfg.Broker.Subscribe(64)
 	c, err := eventsUpgrader.Upgrade(w, r, nil)
 	if err != nil {
+		cancel()
 		return
 	}
-	ch, cancel := s.cfg.Broker.Subscribe(64)
 	defer cancel()
 	defer c.Close()
 	s.log.Info("API WebSocket connected", "remote", r.RemoteAddr)
