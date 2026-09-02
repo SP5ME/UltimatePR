@@ -98,6 +98,21 @@ func TestSecretGameRenderersHaveTranslationsAndNoFormatErrors(t *testing.T) {
 		if !strings.Contains(hangmanOutput, "Radio") || !strings.Contains(hangmanOutput, "_ A _") || !strings.Contains(hangmanOutput, "SP5ME") {
 			t.Fatalf("hangman %s output=%q", lang, hangmanOutput)
 		}
+		if !strings.Contains(hangmanOutput, "single letter") && lang == "en" {
+			t.Fatalf("missing EN letter instruction: %q", hangmanOutput)
+		}
+		if !strings.Contains(hangmanOutput, "pojedyncza litere") && lang == "pl" {
+			t.Fatalf("missing PL letter instruction: %q", hangmanOutput)
+		}
+		if strings.Contains(hangmanOutput, "H <haslo>") || strings.Contains(hangmanOutput, "H <phrase>") {
+			t.Fatalf("old whole-phrase syntax remains: %q", hangmanOutput)
+		}
+		if !strings.Contains(hangmanOutput, "/haslo <tekst>") && lang == "pl" {
+			t.Fatalf("missing PL whole-phrase command: %q", hangmanOutput)
+		}
+		if !strings.Contains(hangmanOutput, "/answer <text>") && lang == "en" {
+			t.Fatalf("missing EN whole-phrase command: %q", hangmanOutput)
+		}
 	}
 }
 
@@ -123,5 +138,43 @@ func TestWordAndHangmanInputAliases(t *testing.T) {
 	}
 	if err := game.Apply("SP5ME", "H packet radio"); err != nil || !game.Finished() {
 		t.Fatalf("H hangman solve err=%v", err)
+	}
+}
+
+func TestWordLettersHAndQRemainGameMoves(t *testing.T) {
+	g, err := newHangman([]string{"SP5ME"}, PhraseEntry{"Test", "HQ"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	game := g.(*HangmanGame)
+	if err := game.Apply("SP5ME", "H"); err != nil || !game.used['H'] {
+		t.Fatalf("H was not a letter move: %v", err)
+	}
+	if err := game.Apply("SP5ME", "q"); err != nil || !game.used['Q'] || !game.Finished() {
+		t.Fatalf("Q was not a letter move: %v", err)
+	}
+}
+
+func TestWordSystemCommandsUseSlashPrefix(t *testing.T) {
+	h := New(0)
+	var output strings.Builder
+	if err := h.Connect("SP5ME", "pl", &output); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	s, err := h.startSessionLocked(WordGame, []string{"SP5ME"})
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.client("SP5ME")
+	if !h.handleSessionCommand(c, "", nil, "/help") || !strings.Contains(output.String(), "/haslo") {
+		t.Fatalf("slash help output=%q", output.String())
+	}
+	if !h.handleSessionCommand(c, "", nil, "R") {
+		t.Fatal("letter was not handled as game action")
+	}
+	if s == nil {
+		t.Fatal("session missing")
 	}
 }

@@ -1011,34 +1011,18 @@ func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
 }
 
 func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line string) bool {
-	if s := h.sessionByClient(c.player.Callsign); s != nil {
-		if s.GameType == TicTacToe && cmd == "1" {
-			cmd = "BOARD"
-		}
-		if s.GameType == TicTacToe && cmd == "2" {
-			cmd = "HELP"
-		}
-		if s.GameType == TicTacToe && cmd == "3" {
-			cmd = "QUIT"
-		}
-		if s.GameType == ConnectFour && cmd == "8" {
-			cmd = "BOARD"
-		}
-		if s.GameType == ConnectFour && cmd == "9" {
-			cmd = "HELP"
-		}
-		if s.GameType == ConnectFour && cmd == "10" {
-			cmd = "QUIT"
-		}
-		if (s.GameType == Hangman || s.GameType == WordGame) && cmd == "1" {
-			cmd = "HELP"
-		}
-		if (s.GameType == Hangman || s.GameType == WordGame) && cmd == "2" {
-			cmd = "QUIT"
-		}
+	if !strings.HasPrefix(strings.TrimSpace(line), "/") {
+		h.writeError(c, h.Action(c.player.Callsign, line))
+		return true
 	}
+	commandLine := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "/"))
+	commandFields := strings.Fields(commandLine)
+	if len(commandFields) == 0 {
+		return true
+	}
+	cmd = strings.ToUpper(commandFields[0])
 	switch cmd {
-	case "HELP", "H", "?":
+	case "HELP", "H":
 		if s := h.sessionByClient(c.player.Callsign); s != nil && s.GameType == TicTacToe {
 			c.text(language.T(c.lang, "ttt_help"))
 		} else if s != nil && s.GameType == Hangman {
@@ -1049,13 +1033,17 @@ func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line
 			c.text(language.T(c.lang, "game_session_help"))
 		}
 		return true
-	case "BOARD":
+	case "BOARD", "B":
 		if s := h.sessionByClient(c.player.Callsign); s != nil {
 			h.writeSessionState(c, s, false)
 		}
 		return true
 	case "REMATCH", "R":
 		h.writeError(c, h.Rematch(c.player.Callsign))
+		return true
+	case "HASLO", "ANSWER", "SOLVE":
+		guess := strings.TrimSpace(strings.TrimPrefix(commandLine, commandFields[0]))
+		h.writeError(c, h.Action(c.player.Callsign, "H "+guess))
 		return true
 	case "QUIT", "Q", "BACK":
 		h.Close(c.player.Callsign)
@@ -1501,6 +1489,7 @@ func (h *Hall) writeSessionState(c *client, s *GameSession, includeIntro bool) {
 			b.WriteString(fmt.Sprintf(language.T(c.lang, "game_started"), definitionName(def, c.lang)))
 			b.WriteString(language.T(c.lang, "ttt_goal"))
 			b.WriteString(language.T(c.lang, "ttt_move_help"))
+			b.WriteString(language.T(c.lang, "ttt_active_actions"))
 		}
 		b.WriteString(RenderTicTacToe(view))
 		if view.XPlayer != "" {

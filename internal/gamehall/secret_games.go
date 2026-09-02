@@ -234,6 +234,7 @@ func renderHangman(lang string, v HangmanView, intro bool) string {
 	var b strings.Builder
 	if intro {
 		b.WriteString(language.T(lang, "hangman_intro"))
+		b.WriteString(language.T(lang, "hangman_actions"))
 	}
 	b.WriteString(fmt.Sprintf(language.T(lang, "hangman_state"), v.Category, v.Mask, v.Used, v.Errors, v.CurrentPlayer))
 	if v.Finished {
@@ -246,6 +247,7 @@ func renderWordGame(lang string, v WordGameView, intro bool) string {
 	var b strings.Builder
 	if intro {
 		b.WriteString(language.T(lang, "word_intro"))
+		b.WriteString(language.T(lang, "word_actions"))
 	}
 	b.WriteString(fmt.Sprintf(language.T(lang, "word_state"), v.Category, v.Mask, v.Used, v.CurrentPlayer))
 	for call, score := range v.Scores {
