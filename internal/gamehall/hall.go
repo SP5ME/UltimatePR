@@ -18,11 +18,14 @@ import (
 type clientMode string
 
 const (
-	modeLobby   clientMode = "lobby"
-	modeGame    clientMode = "game"
-	modeInvites clientMode = "invites"
-	modeRoom    clientMode = "room"
-	modePlay    clientMode = "play"
+	modeLobby        clientMode = "lobby"
+	modeGames        clientMode = "games"
+	modeGame         clientMode = "game"
+	modeInvites      clientMode = "invites"
+	modePlayers      clientMode = "players"
+	modeRoom         clientMode = "room"
+	modePlay         clientMode = "play"
+	modeInviteTarget clientMode = "invite_target"
 )
 
 type Player struct {
@@ -43,6 +46,7 @@ type client struct {
 	roomID      string
 	sessionID   string
 	pendingGame string
+	returnMode  clientMode
 }
 
 func (c *client) write(format string, args ...any) {
@@ -245,7 +249,7 @@ func (h *Hall) Invite(from, to string, gameType GameType) (*Invitation, error) {
 	if !ok1 || !ok2 || !ok3 || factory == nil || def.JoinMode != JoinModeInvite || from == to {
 		return nil, ErrInvalidAction
 	}
-	if inviter.player.Status != PlayerLobby || invited.player.Status != PlayerLobby {
+	if inviter.player.Status != PlayerLobby || (invited.player.Status != PlayerLobby && invited.player.Status != PlayerWaiting) {
 		return nil, ErrInvalidAction
 	}
 	now := time.Now().UTC()
@@ -278,7 +282,7 @@ func (h *Hall) Accept(call, id string) error {
 		h.mu.Unlock()
 		return ErrInvalidAction
 	}
-	def, ok := h.definitions[inv.GameType]
+	_, ok := h.definitions[inv.GameType]
 	factory := h.factories[inv.GameType]
 	from := h.clients[inv.From]
 	to := h.clients[inv.To]
@@ -296,15 +300,9 @@ func (h *Hall) Accept(call, id string) error {
 	delete(h.invitations, id)
 	h.refreshPlayerLocked(inv.From)
 	h.refreshPlayerLocked(inv.To)
-	fromText := sessionIntroText(def, from.lang, session)
-	toText := sessionIntroText(def, to.lang, session)
 	h.mu.Unlock()
-	if fromText != "" {
-		from.text(fromText)
-	}
-	if toText != "" {
-		to.text(toText)
-	}
+	h.writeSessionState(from, session, true)
+	h.writeSessionState(to, session, true)
 	return nil
 }
 
@@ -428,7 +426,6 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 	}
 	defer h.Disconnect(call)
 	c := h.client(call)
-	c.text(language.T(c.lang, "game_welcome"))
 	h.writeLobby(c)
 	for {
 		c.write("%s> ", h.prompt(c))
@@ -446,6 +443,12 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 			c.text(language.T(c.lang, "game_goodbye"))
 			return
 		}
+		if h.handleInvitationShortcut(c, cmd, fields) {
+			continue
+		}
+		if c.mode == modeInviteTarget && h.handleInviteTarget(c, cmd, line) {
+			continue
+		}
 		switch c.player.Status {
 		case PlayerPlaying:
 			if h.handleSessionCommand(c, cmd, fields, line) {
@@ -457,12 +460,20 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 			}
 		}
 		switch c.mode {
+		case modeGames:
+			if h.handleGamesCommand(c, cmd) {
+				continue
+			}
 		case modeGame:
 			if h.handleGameLobbyCommand(c, cmd, fields) {
 				continue
 			}
 		case modeInvites:
 			if h.handleInviteCommand(c, cmd, fields) {
+				continue
+			}
+		case modePlayers:
+			if h.handlePlayersCommand(c, cmd) {
 				continue
 			}
 		case modeRoom:
@@ -508,8 +519,17 @@ func (h *Hall) prompt(c *client) string {
 			return definitionPrompt(def)
 		}
 		return "GAME"
+	case modeInviteTarget:
+		if def, ok := h.definitions[c.selected]; ok {
+			return definitionPrompt(def)
+		}
+		return "GAME"
+	case modeGames:
+		return "GAMES"
 	case modeInvites:
 		return "INVITES"
+	case modePlayers:
+		return "PLAYERS"
 	case modeRoom:
 		if c.roomID != "" {
 			return "ROOM#" + c.roomID
@@ -521,6 +541,13 @@ func (h *Hall) prompt(c *client) string {
 }
 
 func (h *Hall) writeLobby(c *client) {
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_menu_header"))
+	b.WriteString(language.T(c.lang, "game_menu_footer"))
+	c.text(b.String())
+}
+
+func (h *Hall) writeGames(c *client) {
 	h.mu.RLock()
 	defs := make([]GameDefinition, 0, len(h.order))
 	for _, id := range h.order {
@@ -530,11 +557,13 @@ func (h *Hall) writeLobby(c *client) {
 	}
 	h.mu.RUnlock()
 	var b strings.Builder
-	b.WriteString(language.T(c.lang, "game_menu_header"))
+	b.WriteString(language.T(c.lang, "game_games_header"))
 	for i, def := range defs {
-		b.WriteString(fmt.Sprintf("%d. %s (%s)\r\n", i+1, definitionName(def, c.lang), strings.ToUpper(string(def.JoinMode))))
+		b.WriteString(fmt.Sprintf("%d. %s\r\n", i+1, definitionName(def, c.lang)))
+		b.WriteString(fmt.Sprintf("   %s\r\n", playerCountText(c.lang, def.MinPlayers, def.MaxPlayers)))
 	}
-	b.WriteString(language.T(c.lang, "game_menu_footer"))
+	b.WriteString(language.T(c.lang, "game_games_footer"))
+	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(defs)+1))
 	c.text(b.String())
 }
 
@@ -542,27 +571,29 @@ func (h *Hall) writePlayers(c *client) {
 	players := h.Players()
 	var b strings.Builder
 	b.WriteString(language.T(c.lang, "game_players_header"))
-	for _, p := range players {
-		b.WriteString(fmt.Sprintf("%-10s %s\r\n", p.Callsign, language.T(c.lang, "game_status_"+string(p.Status))))
+	for i, p := range players {
+		b.WriteString(fmt.Sprintf("%d. %-8s %s\r\n", i+1, p.Callsign, language.T(c.lang, "game_status_"+string(p.Status))))
 	}
 	if len(players) == 0 {
 		b.WriteString(language.T(c.lang, "game_no_players"))
 	}
+	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(players)+1))
 	c.text(b.String())
 }
 
 func (h *Hall) writeInvites(c *client) {
 	invites := h.Invitations(c.player.Callsign)
-	if len(invites) == 0 {
-		c.text(language.T(c.lang, "game_no_invites"))
-		return
-	}
 	var b strings.Builder
 	b.WriteString(language.T(c.lang, "game_invites_header"))
-	for i, inv := range invites {
-		b.WriteString(fmt.Sprintf("%d. %s - %s\r\n", i+1, inv.From, inv.GameName))
+	if len(invites) == 0 {
+		b.WriteString(language.T(c.lang, "game_no_invites"))
+	} else {
+		for i, inv := range invites {
+			b.WriteString(fmt.Sprintf("%d. %s - %s\r\n", i+1, inv.From, inv.GameName))
+		}
+		b.WriteString(language.T(c.lang, "game_invites_footer"))
 	}
-	b.WriteString(language.T(c.lang, "game_invites_footer"))
+	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(invites)+1))
 	c.text(b.String())
 }
 
@@ -592,15 +623,15 @@ func (h *Hall) writeGameLobby(c *client) {
 		return
 	}
 	var b strings.Builder
-	b.WriteString(language.T(c.lang, "game_selected_header"))
-	b.WriteString(definitionName(def, c.lang) + "\r\n")
+	heading := definitionName(def, c.lang)
+	if def.ID == TicTacToe {
+		heading = language.T(c.lang, "ttt_heading")
+	}
+	b.WriteString(heading + "\r\n\r\n")
 	switch def.JoinMode {
 	case JoinModeInvite:
-		b.WriteString(language.T(c.lang, "ttt_intro"))
-		b.WriteString(language.T(c.lang, "ttt_controls"))
+		b.WriteString(language.T(c.lang, "ttt_goal"))
 		b.WriteString(language.T(c.lang, "game_game_invite_help"))
-		b.WriteString(language.T(c.lang, "game_game_back"))
-		h.writePlayers(c)
 		c.text(b.String())
 	case JoinModeRoom:
 		b.WriteString(language.T(c.lang, "game_room_intro"))
@@ -614,17 +645,21 @@ func (h *Hall) writeGameLobby(c *client) {
 
 func (h *Hall) handleLobbyCommand(c *client, cmd string, fields []string) bool {
 	switch cmd {
-	case "GAMES", "MENU":
-		h.writeLobby(c)
+	case "GAMES", "MENU", "1":
+		c.mode = modeGames
+		h.writeGames(c)
 		return true
-	case "PLAYERS":
+	case "PLAYERS", "2":
+		c.returnMode = modeLobby
+		c.mode = modePlayers
 		h.writePlayers(c)
 		return true
-	case "INVITES":
+	case "INVITES", "3":
+		c.returnMode = modeLobby
 		c.mode = modeInvites
 		h.writeInvites(c)
 		return true
-	case "HELP", "H", "?":
+	case "HELP", "H", "?", "4":
 		c.text(language.T(c.lang, "game_help"))
 		return true
 	case "QUIT", "Q", "BYE", "5":
@@ -634,7 +669,17 @@ func (h *Hall) handleLobbyCommand(c *client, cmd string, fields []string) bool {
 		h.writeLobby(c)
 		return true
 	}
+	return false
+}
+
+func (h *Hall) handleGamesCommand(c *client, cmd string) bool {
 	if idx, ok := parseMenuIndex(cmd); ok {
+		defs := h.Definitions()
+		if idx == len(defs)+1 {
+			c.mode = modeLobby
+			h.writeLobby(c)
+			return true
+		}
 		if h.selectGame(c, idx-1) {
 			return true
 		}
@@ -642,10 +687,14 @@ func (h *Hall) handleLobbyCommand(c *client, cmd string, fields []string) bool {
 	if h.selectGameByToken(c, cmd) {
 		return true
 	}
-	if strings.EqualFold(cmd, "OPEN") && len(fields) > 1 {
-		if h.selectGameByToken(c, fields[1]) {
-			return true
-		}
+	switch cmd {
+	case "BACK", "Q", "QUIT":
+		c.mode = modeLobby
+		h.writeLobby(c)
+		return true
+	case "HELP", "H", "?":
+		c.text(language.T(c.lang, "game_games_help"))
+		return true
 	}
 	return false
 }
@@ -660,10 +709,17 @@ func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bo
 	switch def.JoinMode {
 	case JoinModeInvite:
 		switch cmd {
-		case "PLAYERS":
+		case "1":
+			c.mode = modeInviteTarget
+			c.text(language.T(c.lang, "game_invite_target"))
+			return true
+		case "PLAYERS", "2":
+			c.returnMode = modeGame
+			c.mode = modePlayers
 			h.writePlayers(c)
 			return true
-		case "INVITES":
+		case "INVITES", "3":
+			c.returnMode = modeGame
 			c.mode = modeInvites
 			h.writeInvites(c)
 			return true
@@ -672,17 +728,21 @@ func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bo
 				c.text(language.T(c.lang, "game_play_usage"))
 				return true
 			}
-			s, err := h.Invite(c.player.Callsign, fields[1], def.ID)
+			_, err := h.Invite(c.player.Callsign, fields[1], def.ID)
 			if err != nil {
 				h.writeError(c, err)
-			} else {
-				c.text(fmt.Sprintf(language.T(c.lang, "game_invite_sent"), s.GameName, normalizeCall(fields[1])))
 			}
 			return true
 		case "HELP", "H", "?":
 			c.text(language.T(c.lang, "game_game_invite_help"))
 			return true
 		case "BACK", "Q", "QUIT":
+			c.mode = modeLobby
+			c.selected = ""
+			h.writeLobby(c)
+			return true
+		}
+		if cmd == "4" {
 			c.mode = modeLobby
 			c.selected = ""
 			h.writeLobby(c)
@@ -766,25 +826,24 @@ func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bo
 }
 
 func (h *Hall) handleInviteCommand(c *client, cmd string, fields []string) bool {
-	invites := h.Invitations(c.player.Callsign)
+	if h.handleInvitationShortcut(c, cmd, fields) {
+		return true
+	}
 	switch cmd {
-	case "A", "ACCEPT":
+	case "ACCEPT", "DECLINE":
+		invites := h.Invitations(c.player.Callsign)
 		if id, ok := resolveInvitationID(invites, fields); ok {
-			h.writeError(c, h.Accept(c.player.Callsign, id))
+			if cmd == "ACCEPT" {
+				h.writeError(c, h.Accept(c.player.Callsign, id))
+			} else {
+				h.writeError(c, h.Decline(c.player.Callsign, id))
+			}
 			return true
 		}
 		c.text(language.T(c.lang, "game_accept_usage"))
 		return true
-	case "D", "DECLINE":
-		if id, ok := resolveInvitationID(invites, fields); ok {
-			h.writeError(c, h.Decline(c.player.Callsign, id))
-			return true
-		}
-		c.text(language.T(c.lang, "game_decline_usage"))
-		return true
 	case "BACK", "Q", "QUIT":
-		c.mode = modeLobby
-		h.writeLobby(c)
+		h.returnFromSubmenu(c)
 		return true
 	case "HELP", "H", "?":
 		c.text(language.T(c.lang, "game_invites_help"))
@@ -796,18 +855,71 @@ func (h *Hall) handleInviteCommand(c *client, cmd string, fields []string) bool 
 		h.writeInvites(c)
 		return true
 	}
-	if len(fields) == 2 {
-		id := fields[1]
-		if strings.EqualFold(cmd, "A") {
-			h.writeError(c, h.Accept(c.player.Callsign, invitationToken(invites, id)))
-			return true
-		}
-		if strings.EqualFold(cmd, "D") {
-			h.writeError(c, h.Decline(c.player.Callsign, invitationToken(invites, id)))
-			return true
-		}
+	return false
+}
+
+func (h *Hall) handlePlayersCommand(c *client, cmd string) bool {
+	if cmd == "BACK" || cmd == "Q" || cmd == "QUIT" {
+		h.returnFromSubmenu(c)
+		return true
+	}
+	if idx, ok := parseMenuIndex(cmd); ok && idx == len(h.Players())+1 {
+		h.returnFromSubmenu(c)
+		return true
 	}
 	return false
+}
+
+func (h *Hall) handleInviteTarget(c *client, cmd, line string) bool {
+	if cmd == "BACK" || cmd == "Q" || cmd == "QUIT" {
+		c.mode = modeGame
+		h.writeGameLobby(c)
+		return true
+	}
+	if _, err := h.Invite(c.player.Callsign, line, c.selected); err != nil {
+		h.writeError(c, err)
+	} else {
+		c.mode = modeGame
+		h.writeGameLobby(c)
+	}
+	return true
+}
+
+func (h *Hall) returnFromSubmenu(c *client) {
+	if c.returnMode == modeGame {
+		c.mode = modeGame
+		h.writeGameLobby(c)
+		return
+	}
+	c.mode = modeLobby
+	h.writeLobby(c)
+}
+
+func (h *Hall) handleInvitationShortcut(c *client, cmd string, fields []string) bool {
+	if cmd != "A" && cmd != "D" {
+		return false
+	}
+	invites := h.Invitations(c.player.Callsign)
+	if len(invites) == 0 {
+		return false
+	}
+	if len(fields) == 1 && len(invites) > 1 {
+		c.mode = modeInvites
+		h.writeInvites(c)
+		return true
+	}
+	id, ok := resolveInvitationID(invites, fields)
+	if !ok {
+		c.mode = modeInvites
+		h.writeInvites(c)
+		return true
+	}
+	if cmd == "A" {
+		h.writeError(c, h.Accept(c.player.Callsign, id))
+	} else {
+		h.writeError(c, h.Decline(c.player.Callsign, id))
+	}
+	return true
 }
 
 func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
@@ -1305,8 +1417,10 @@ func (h *Hall) writeSessionState(c *client, s *GameSession, includeIntro bool) {
 		}
 		var b strings.Builder
 		if includeIntro {
-			b.WriteString(language.T(c.lang, "ttt_intro"))
-			b.WriteString(language.T(c.lang, "ttt_controls"))
+			def := h.definitionMust(s.GameType)
+			b.WriteString(fmt.Sprintf(language.T(c.lang, "game_started"), definitionName(def, c.lang)))
+			b.WriteString(language.T(c.lang, "ttt_goal"))
+			b.WriteString(language.T(c.lang, "ttt_move_help"))
 		}
 		b.WriteString(RenderTicTacToe(view))
 		if view.XPlayer != "" {
@@ -1531,14 +1645,11 @@ func definitionPrompt(def GameDefinition) string {
 	return strings.ToUpper(strings.ReplaceAll(string(def.ID), "-", ""))
 }
 
-func sessionIntroText(def GameDefinition, lang string, session *GameSession) string {
-	if session == nil {
-		return ""
+func playerCountText(lang string, min, max int) string {
+	if min == max {
+		return fmt.Sprintf(language.T(lang, "game_player_count"), min)
 	}
-	if session.GameType == TicTacToe {
-		return fmt.Sprintf(language.T(lang, "game_started"), definitionName(def, lang)) + language.T(lang, "ttt_intro") + language.T(lang, "ttt_controls")
-	}
-	return fmt.Sprintf(language.T(lang, "game_started"), definitionName(def, lang))
+	return fmt.Sprintf(language.T(lang, "game_player_range"), min, max)
 }
 
 func terminalBlock(text string) string {
