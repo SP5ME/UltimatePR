@@ -39,7 +39,7 @@ type passwordRequest struct {
 
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/login.html" || r.URL.Path == "/login.css" || r.URL.Path == "/login.js" || r.URL.Path == "/api/login" {
+		if r.URL.Path == "/login.html" || r.URL.Path == "/login.css" || r.URL.Path == "/theme.css" || r.URL.Path == "/login.js" || r.URL.Path == "/api/login" {
 			next.ServeHTTP(w, r)
 			return
 		}
