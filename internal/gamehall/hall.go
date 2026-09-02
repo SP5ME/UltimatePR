@@ -560,7 +560,6 @@ func (h *Hall) writeGames(c *client) {
 	b.WriteString(language.T(c.lang, "game_games_header"))
 	for i, def := range defs {
 		b.WriteString(fmt.Sprintf("%d. %s\r\n", i+1, definitionName(def, c.lang)))
-		b.WriteString(fmt.Sprintf("   %s\r\n", playerCountText(c.lang, def.MinPlayers, def.MaxPlayers)))
 	}
 	b.WriteString(language.T(c.lang, "game_games_footer"))
 	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(defs)+1))
@@ -571,8 +570,8 @@ func (h *Hall) writePlayers(c *client) {
 	players := h.Players()
 	var b strings.Builder
 	b.WriteString(language.T(c.lang, "game_players_header"))
-	for i, p := range players {
-		b.WriteString(fmt.Sprintf("%d. %-8s %s\r\n", i+1, p.Callsign, language.T(c.lang, "game_status_"+string(p.Status))))
+	for _, p := range players {
+		b.WriteString(fmt.Sprintf("%-10s %s\r\n", p.Callsign, language.T(c.lang, "game_status_"+string(p.Status))))
 	}
 	if len(players) == 0 {
 		b.WriteString(language.T(c.lang, "game_no_players"))
@@ -1643,13 +1642,6 @@ func definitionPrompt(def GameDefinition) string {
 		return def.Prompt
 	}
 	return strings.ToUpper(strings.ReplaceAll(string(def.ID), "-", ""))
-}
-
-func playerCountText(lang string, min, max int) string {
-	if min == max {
-		return fmt.Sprintf(language.T(lang, "game_player_count"), min)
-	}
-	return fmt.Sprintf(language.T(lang, "game_player_range"), min, max)
 }
 
 func terminalBlock(text string) string {

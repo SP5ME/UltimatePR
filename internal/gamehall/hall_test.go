@@ -25,10 +25,10 @@ func TestTerminalLobbyScreens(t *testing.T) {
 	c := h.client("SP5AAA")
 	h.writeLobby(c)
 	lobby := out.String()
-	if strings.Count(lobby, "SALON GIER") != 1 || strings.Contains(lobby, "1. ") || strings.Contains(lobby, "(INVITE)") {
+	if strings.Count(lobby, "SALON GIER") != 1 || strings.Contains(lobby, "GAMES   - gry") || strings.Contains(lobby, "(INVITE)") {
 		t.Fatalf("lobby=%q", lobby)
 	}
-	for _, want := range []string{"GAMES", "PLAYERS", "INVITES", "HELP", "QUIT"} {
+	for _, want := range []string{"1. Gry", "2. Gracze", "3. Zaproszenia", "4. Pomoc", "5. Wyjscie"} {
 		if !strings.Contains(lobby, want) {
 			t.Fatalf("lobby missing %q: %q", want, lobby)
 		}
@@ -37,7 +37,7 @@ func TestTerminalLobbyScreens(t *testing.T) {
 	c.mode = modeGames
 	h.writeGames(c)
 	games := out.String()
-	if !strings.Contains(games, "1. Kolko i krzyzyk") || !strings.Contains(games, "2 graczy") || strings.Contains(games, "(INVITE)") {
+	if !strings.Contains(games, "1. Kolko i krzyzyk") || !strings.Contains(games, "2. Powrot") || strings.Contains(games, "(INVITE)") {
 		t.Fatalf("games=%q", games)
 	}
 	out.Reset()
@@ -45,8 +45,30 @@ func TestTerminalLobbyScreens(t *testing.T) {
 	c.mode = modeGame
 	h.writeGameLobby(c)
 	preGame := out.String()
-	if strings.Contains(preGame, "1 2 3") || strings.Contains(preGame, "Ruch:") || strings.Count(preGame, "BACK") != 1 {
+	if strings.Contains(preGame, "1 2 3") || strings.Contains(preGame, "Ruch:") || strings.Count(preGame, "4. Powrot") != 1 {
 		t.Fatalf("pre-game=%q", preGame)
+	}
+}
+
+func TestPlayersAndInvitesUseOnlyActionNumbers(t *testing.T) {
+	h, out, _ := connectedHall(t)
+	c := h.client("SP5AAA")
+	h.writePlayers(c)
+	players := out.String()
+	if strings.Contains(players, "1. SP5AAA") || !strings.Contains(players, "3. Powrot") {
+		t.Fatalf("players=%q", players)
+	}
+	out.Reset()
+	if _, err := h.Invite("SQ4BBB", "SP5AAA", TicTacToe); err != nil {
+		t.Fatal(err)
+	}
+	h.writeInvites(c)
+	invites := out.String()
+	if !strings.Contains(invites, "1. SQ4BBB - Kolko i krzyzyk") || !strings.Contains(invites, "2. Powrot") {
+		t.Fatalf("invites=%q", invites)
+	}
+	if strings.Contains(invites, "BACK - lobby") {
+		t.Fatalf("invites contains old textual back menu option: %q", invites)
 	}
 }
 
