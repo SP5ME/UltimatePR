@@ -80,3 +80,23 @@ func TestNewGamesAreRegisteredWithExpectedModes(t *testing.T) {
 		t.Fatal("hangman modes incomplete")
 	}
 }
+
+func TestSecretGameRenderersHaveTranslationsAndNoFormatErrors(t *testing.T) {
+	word := WordGameView{Category: "Sprzet", Mask: "_ _ _", Scores: map[string]int{"SP5ME": 0}, CurrentPlayer: "SP5ME"}
+	hangman := HangmanView{Category: "Radio", Mask: "_ A _", Used: "A", Errors: 1, CurrentPlayer: "SP5ME"}
+	for _, lang := range []string{"pl", "en"} {
+		wordOutput := renderWordGame(lang, word, true)
+		hangmanOutput := renderHangman(lang, hangman, true)
+		for name, output := range map[string]string{"word": wordOutput, "hangman": hangmanOutput} {
+			if strings.Contains(output, "word_intro") || strings.Contains(output, "word_state") || strings.Contains(output, "hangman_intro") || strings.Contains(output, "hangman_state") || strings.Contains(output, "%!") || strings.Contains(output, "\r\r\n") {
+				t.Fatalf("%s %s output=%q", lang, name, output)
+			}
+		}
+		if !strings.Contains(wordOutput, "Sprzet") || !strings.Contains(wordOutput, "SP5ME") || !strings.Contains(wordOutput, "_ _ _") {
+			t.Fatalf("word %s output=%q", lang, wordOutput)
+		}
+		if !strings.Contains(hangmanOutput, "Radio") || !strings.Contains(hangmanOutput, "_ A _") || !strings.Contains(hangmanOutput, "SP5ME") {
+			t.Fatalf("hangman %s output=%q", lang, hangmanOutput)
+		}
+	}
+}
