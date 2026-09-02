@@ -18,6 +18,8 @@ type TicTacToeView struct {
 	CurrentPlayer string
 	Winner        string
 	Finished      bool
+	XPlayer       string
+	OPlayer       string
 }
 
 func NewTicTacToe(players []string) (Game, error) {
@@ -37,8 +39,8 @@ func (g *TicTacToeGame) CurrentPlayer() string {
 }
 func (g *TicTacToeGame) Finished() bool { return g.done }
 func (g *TicTacToeGame) Winner() string { return g.winner }
-func (g *TicTacToeGame) View(_ string) any {
-	return TicTacToeView{Board: g.board, CurrentPlayer: g.CurrentPlayer(), Winner: g.winner, Finished: g.done}
+func (g *TicTacToeGame) View(_ string) PlayerView {
+	return TicTacToeView{Board: g.board, CurrentPlayer: g.CurrentPlayer(), Winner: g.winner, Finished: g.done, XPlayer: g.players[0], OPlayer: g.players[1]}
 }
 
 func (g *TicTacToeGame) Apply(player, action string) error {

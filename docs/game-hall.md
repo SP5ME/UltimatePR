@@ -1,70 +1,170 @@
 # Game Hall
 
-Game Hall is an optional UltimatePR service for small multiplayer games over
-AX.25 terminal links. The first release supplies the shared infrastructure and
-one reference game, Tic-Tac-Toe. It deliberately has no rankings, tournaments,
-bots, persistence, word packs or graphical game client.
+Game Hall is an optional UltimatePR service for terminal games over AX.25.
+It is designed first as an ASCII service with CRLF line endings and only then
+as something a GUI can render.
 
-## Architecture
+## Model
 
-`internal/gamehall` has four distinct responsibilities:
+The service is split into small, explicit pieces:
 
-1. `Hall` tracks connected players, invitations and shared sessions.
-2. `GameSession` contains common metadata and lifecycle state (`invited`,
-   `active`, `finished`, `cancelled`, `disconnected`).
-3. A `Game` implementation owns authoritative rules and private server data.
-4. `View(player)` and the terminal renderer expose only player-visible state.
+1. `GameDefinition` registers one game in the lobby.
+2. `Hall` keeps connected players, invitations, rooms and active sessions.
+3. `GameSession` stores authoritative server state for one running game.
+4. `GameRoom` stores the staging area for ROOM-style games.
+5. `Invitation` stores pending INVITE-style challenges.
+6. `Game` owns the rules and the hidden server state.
+7. `PlayerView` is the client-facing view for one player.
+8. `GameAction` is the generic shape for future transport actions.
 
-The distinction between the full `Game` state and its per-player `View` is a
-hard boundary. A future Hangman word, card hand or Battleships layout stays in
-server state and must not be copied automatically to a client view. Shared
-content/word/phrase packs should later be registered as Hall resources rather
-than embedded in one game.
+The boundary between server state and player view is intentional. A game may
+keep secret data only on the server and expose a reduced `PlayerView` instead.
+This is the place for future Hangman words, card hands or Battleships ship
+layouts without leaking them over radio.
 
-Games use generic invitation, action, state, end, rematch and leave operations.
-To add a game, implement `Game`, provide a factory, register its `GameType`, and
-add a compact renderer. The lobby and session lifecycle do not need redesign.
+The current public/server split is:
 
-## Configuration and access
+- `PUBLIC`
+- `SERVER_SECRET`
 
-The service uses the existing `experimental.services` gate and AX.25 inbound
-service multiplexer. Example:
+`PUBLIC` data may be shared with both players. `SERVER_SECRET` stays inside the
+game implementation.
 
-```yaml
-experimental: {services: true}
-game_hall:
-  enabled: true
-  callsign: SP5ME
-  ssid: 14
-  language: pl
-  invite_timeout_seconds: 120
-```
+## Join modes
 
-SSID 14 is only a default and accepts the normal AX.25 range 0..15. Connect
-directly to the resulting address (for example `SP5ME-14`). When NODE is
-enabled, Game Hall is also registered automatically as `GAME`, available as
-`GAME` or `C GAME`.
+Every game declares a join mode:
 
-## Terminal protocol
+- `SOLO` - one player starts immediately.
+- `INVITE` - one player invites a specific opponent.
+- `ROOM` - a host creates a room and other players join it.
 
-All essential interaction is 7-bit ASCII with CRLF line endings. Lobby commands
-are `GAMES`, `PLAYERS`, `INVITES`, `PLAY <call>`, `ACCEPT <id>`,
-`DECLINE <id>`, `HELP`, and `QUIT`. Invitation expiry defaults to two minutes.
+The reference game, Tic-Tac-Toe, uses `INVITE`.
 
-During Tic-Tac-Toe, enter a coordinate such as `B2`. `BOARD` redraws the small
-3x3 board, `HELP` shows the rules, and `QUIT` returns to the lobby without
-disconnecting. After a result, `REMATCH` requests or accepts another game; both
-players must agree. The server validates turn, coordinate, occupancy, win and
-draw. A disconnect interrupts the session, notifies the peer and releases both
-players.
+## Lobby
 
-The complete board is sent after each move because it is smaller and safer than
-a delta protocol here. Future larger games may send actions plus occasional
-public-view synchronization.
+After connecting, the operator lands in the main lobby. The lobby lists all
+registered games from the `Hall` registry. The list is generated from the
+registered definitions, not hardcoded in the terminal loop.
 
-## First-version limits
+Typical commands:
 
-Presence and sessions are in memory and disappear on restart. Only one pending
-invitation or game per player is allowed. There is no spectator mode, Web game
-view, reconnection/resume, persistence, administration UI for content packs, or
-additional game implementation.
+- `GAMES` or a numeric entry - choose a game.
+- `PLAYERS` - show connected players and their status.
+- `INVITES` - show pending invitations.
+- `HELP` - show the lobby commands.
+- `QUIT` - leave the service.
+
+The terminal prompt stays context-aware:
+
+- `GAME>` in the main lobby.
+- `TICTACTOE>` in the selected game lobby.
+- `ROOM#01>` in a room.
+- `INVITES>` in the invitation list.
+
+## Invite flow
+
+`INVITE` games let one player challenge another specific player.
+
+Flow:
+
+1. Select the game.
+2. Use `PLAY <call>` to invite a player.
+3. The recipient gets an immediate readable invitation.
+4. If there is one pending invitation, `A` accepts and `D` declines.
+5. If there are many, the `INVITES` screen shows a numbered list.
+
+Technical `ACCEPT <id>` and `DECLINE <id>` commands remain available for
+compatibility.
+
+## Room flow
+
+`ROOM` games use a shared room rather than a direct one-to-one challenge.
+
+Flow:
+
+1. Select the game.
+2. Use `CREATE` to create a room or `JOIN <id>` to join one.
+3. The host sees the current room state and can start the game.
+4. `START` is allowed only after `min_players` is reached.
+5. `LEAVE` or `BACK` returns the player to the lobby.
+
+The current implementation uses the simpler stable rule that if the host leaves,
+the room closes and all players return to the lobby.
+
+## Tic-Tac-Toe reference game
+
+Tic-Tac-Toe is the reference game used to exercise the framework.
+
+Metadata:
+
+- `min_players = 2`
+- `max_players = 2`
+- `join_mode = INVITE`
+
+Rules:
+
+- two players
+- X and O
+- alternating moves
+- win after 3 marks in a line
+- draw when the board is full
+- the server validates every move
+
+At the start of the game the client gets a short ASCII description and a small
+board. `HELP` is available on demand. After a result, `R` requests a rematch
+and `Q` returns to the lobby.
+
+## ASCII and CRLF
+
+Game Hall uses plain ASCII as the baseline interface:
+
+- 7-bit ASCII as the lowest common denominator
+- no required Unicode
+- no required colors
+- no required ANSI
+- no emoji
+- roughly 80 columns or less
+
+CRLF handling is normalized inside the game hall renderer so the service does
+not produce `\r\r\n` style double conversion. New views may start with a CRLF
+separator when that helps separate them from the previous prompt.
+
+## Phrase packs
+
+Phrase packs are not attached to a specific game. They are a shared Hall
+resource for future word games.
+
+Planned shape:
+
+- `PhrasePack`
+  - `ID`
+  - `name`
+  - `language`
+  - `version`
+  - `entries`
+- `Entry`
+  - `category`
+  - `phrase`
+
+That allows Hangman, word games and similar features to use the same source of
+phrases without duplicating data.
+
+## How to add a new game
+
+1. Implement the `Game` interface.
+2. Keep the authoritative game state inside the implementation.
+3. Expose a compact `PlayerView`.
+4. Register a `GameDefinition` with the correct join mode and player limits.
+5. Add the localized name and the short ASCII instructions.
+6. Add tests for move validation, end state and player flow.
+
+## Current limits
+
+- Session state is in memory.
+- Rooms are in memory.
+- Invitations are in memory.
+- There is no persistence or reconnection.
+- There is no ranking, tournament or bot support.
+- GUI support is secondary to the terminal flow.
+- Future games such as Battleships, Chess and Checkers are only prepared for by
+  the architecture, not implemented now.

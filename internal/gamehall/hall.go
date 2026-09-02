@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,24 +15,34 @@ import (
 	"github.com/packet-radio/ultimatepr/internal/lineinput"
 )
 
-type PlayerStatus string
+type clientMode string
 
 const (
-	PlayerLobby   PlayerStatus = "lobby"
-	PlayerWaiting PlayerStatus = "waiting"
-	PlayerPlaying PlayerStatus = "playing"
+	modeLobby   clientMode = "lobby"
+	modeGame    clientMode = "game"
+	modeInvites clientMode = "invites"
+	modeRoom    clientMode = "room"
+	modePlay    clientMode = "play"
 )
 
 type Player struct {
 	Callsign  string
 	Status    PlayerStatus
+	GameType  GameType
 	SessionID string
+	RoomID    string
 }
+
 type client struct {
-	player  Player
-	lang    string
-	w       io.Writer
-	writeMu sync.Mutex
+	player      Player
+	lang        string
+	w           io.Writer
+	writeMu     sync.Mutex
+	mode        clientMode
+	selected    GameType
+	roomID      string
+	sessionID   string
+	pendingGame string
 }
 
 func (c *client) write(format string, args ...any) {
@@ -39,22 +50,86 @@ func (c *client) write(format string, args ...any) {
 	defer c.writeMu.Unlock()
 	fmt.Fprintf(c.w, format, args...)
 }
-func (c *client) text(value string) { c.write("%s", value) }
+
+func (c *client) text(value string) { c.write("%s", terminalBlock(value)) }
 
 type Hall struct {
 	mu            sync.RWMutex
 	clients       map[string]*client
 	sessions      map[string]*GameSession
+	rooms         map[string]*GameRoom
+	invitations   map[string]*Invitation
+	definitions   map[GameType]GameDefinition
 	factories     map[GameType]Factory
+	order         []GameType
 	inviteTimeout time.Duration
 	next          atomic.Uint64
+	nextRoom      atomic.Uint64
 }
 
 func New(inviteTimeout time.Duration) *Hall {
 	if inviteTimeout <= 0 {
 		inviteTimeout = 2 * time.Minute
 	}
-	return &Hall{clients: map[string]*client{}, sessions: map[string]*GameSession{}, factories: map[GameType]Factory{TicTacToe: NewTicTacToe}, inviteTimeout: inviteTimeout}
+	h := &Hall{
+		clients:       map[string]*client{},
+		sessions:      map[string]*GameSession{},
+		rooms:         map[string]*GameRoom{},
+		invitations:   map[string]*Invitation{},
+		definitions:   map[GameType]GameDefinition{},
+		factories:     map[GameType]Factory{},
+		inviteTimeout: inviteTimeout,
+	}
+	_ = h.RegisterGame(GameDefinition{
+		ID:         TicTacToe,
+		Name:       "Tic-Tac-Toe",
+		NameKey:    "game_tictactoe_name",
+		MinPlayers: 2,
+		MaxPlayers: 2,
+		JoinMode:   JoinModeInvite,
+		Visibility: StatePublic,
+		Prompt:     "TICTACTOE",
+	}, NewTicTacToe)
+	return h
+}
+
+func (h *Hall) RegisterGame(def GameDefinition, factory Factory) error {
+	if h == nil {
+		return ErrInvalidAction
+	}
+	if factory == nil || strings.TrimSpace(string(def.ID)) == "" || def.MinPlayers < 1 || def.MaxPlayers < def.MinPlayers || def.JoinMode == "" {
+		return ErrInvalidAction
+	}
+	if def.Visibility == "" {
+		def.Visibility = StatePublic
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, exists := h.definitions[def.ID]; !exists {
+		h.order = append(h.order, def.ID)
+	}
+	h.definitions[def.ID] = def
+	h.factories[def.ID] = factory
+	return nil
+}
+
+func (h *Hall) Definitions() []GameDefinition {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]GameDefinition, 0, len(h.order))
+	for _, id := range h.order {
+		if def, ok := h.definitions[id]; ok {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
+func (h *Hall) Definition(id GameType) (GameDefinition, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	def, ok := h.definitions[id]
+	return def, ok
 }
 
 func (h *Hall) Players() []Player {
@@ -80,6 +155,59 @@ func (h *Hall) Session(id string) (GameSession, bool) {
 	return copy, true
 }
 
+func (h *Hall) Room(id string) (GameRoom, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	room, ok := h.rooms[id]
+	if !ok {
+		return GameRoom{}, false
+	}
+	copy := *room
+	copy.Players = append([]string(nil), room.Players...)
+	return copy, true
+}
+
+func (h *Hall) Rooms(gameType GameType) []GameRoom {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]GameRoom, 0, len(h.rooms))
+	for _, room := range h.rooms {
+		if room.State != RoomOpen {
+			continue
+		}
+		if gameType != "" && room.GameType != gameType {
+			continue
+		}
+		copy := *room
+		copy.Players = append([]string(nil), room.Players...)
+		out = append(out, copy)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
+}
+
+func (h *Hall) Invitations(call string) []Invitation {
+	call = normalizeCall(call)
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	now := time.Now().UTC()
+	out := make([]Invitation, 0)
+	for _, inv := range h.invitations {
+		if inv.State != InvitationPending || inv.To != call || !inv.ExpiresAt.After(now) {
+			continue
+		}
+		copy := *inv
+		out = append(out, copy)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
 func (h *Hall) Connect(call, lang string, w io.Writer) error {
 	call = normalizeCall(call)
 	if call == "" {
@@ -90,75 +218,130 @@ func (h *Hall) Connect(call, lang string, w io.Writer) error {
 		h.mu.Unlock()
 		return fmt.Errorf("player already connected")
 	}
-	c := &client{player: Player{Callsign: call, Status: PlayerLobby}, lang: language.Normalize(lang), w: w}
+	c := &client{player: Player{Callsign: call, Status: PlayerLobby}, lang: language.Normalize(lang), w: w, mode: modeLobby}
 	h.clients[call] = c
 	h.mu.Unlock()
 	return nil
 }
 
 func (h *Hall) Disconnect(call string) {
-	h.leave(normalizeCall(call), SessionDisconnected)
+	call = normalizeCall(call)
+	h.leaveSession(call, SessionDisconnected)
+	h.leaveRoom(call, true)
+	h.cancelInvitationsFor(call, true)
 	h.mu.Lock()
-	delete(h.clients, normalizeCall(call))
+	delete(h.clients, call)
 	h.mu.Unlock()
 }
 
-func (h *Hall) Invite(from, to string, gameType GameType) (*GameSession, error) {
+func (h *Hall) Invite(from, to string, gameType GameType) (*Invitation, error) {
 	from, to = normalizeCall(from), normalizeCall(to)
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	inviter, ok1 := h.clients[from]
 	invited, ok2 := h.clients[to]
+	def, ok3 := h.definitions[gameType]
 	factory := h.factories[gameType]
-	if !ok1 || !ok2 || factory == nil || from == to || inviter.player.Status != PlayerLobby || invited.player.Status != PlayerLobby {
-		h.mu.Unlock()
+	if !ok1 || !ok2 || !ok3 || factory == nil || def.JoinMode != JoinModeInvite || from == to {
+		return nil, ErrInvalidAction
+	}
+	if inviter.player.Status != PlayerLobby || invited.player.Status != PlayerLobby {
 		return nil, ErrInvalidAction
 	}
 	now := time.Now().UTC()
-	id := fmt.Sprintf("G%06d", h.next.Add(1))
-	s := &GameSession{ID: id, GameType: gameType, Players: []string{from, to}, State: SessionInvited, CreatedAt: now, LastActivity: now}
-	h.sessions[id] = s
-	inviter.player.Status, inviter.player.SessionID = PlayerWaiting, id
-	invited.player.Status, invited.player.SessionID = PlayerWaiting, id
-	h.mu.Unlock()
-	invited.write(language.T(invited.lang, "game_invited"), from, id, id, id)
-	time.AfterFunc(h.inviteTimeout, func() { h.expire(id) })
-	return s, nil
+	id := h.newIDLocked("I")
+	inv := &Invitation{
+		ID:           id,
+		GameType:     gameType,
+		GameName:     definitionName(def, invited.lang),
+		From:         from,
+		To:           to,
+		State:        InvitationPending,
+		CreatedAt:    now,
+		LastActivity: now,
+		ExpiresAt:    now.Add(h.inviteTimeout),
+	}
+	h.invitations[id] = inv
+	h.refreshPlayerLocked(from)
+	h.refreshPlayerLocked(to)
+	go h.expireInvitation(id, inv.ExpiresAt)
+	go inviter.text(fmt.Sprintf(language.T(inviter.lang, "game_invite_sent"), inv.GameName, to))
+	go invited.text(fmt.Sprintf(language.T(invited.lang, "game_invited"), from, inv.GameName))
+	return inv, nil
 }
 
 func (h *Hall) Accept(call, id string) error {
 	call = normalizeCall(call)
 	h.mu.Lock()
-	s := h.sessions[id]
-	if s == nil || s.State != SessionInvited || len(s.Players) != 2 || s.Players[1] != call {
+	inv := h.invitations[id]
+	if inv == nil || inv.State != InvitationPending || inv.To != call || inv.ExpiresAt.Before(time.Now().UTC()) {
 		h.mu.Unlock()
 		return ErrInvalidAction
 	}
-	g, err := h.factories[s.GameType](s.Players)
+	def, ok := h.definitions[inv.GameType]
+	factory := h.factories[inv.GameType]
+	from := h.clients[inv.From]
+	to := h.clients[inv.To]
+	if !ok || factory == nil || from == nil || to == nil {
+		h.mu.Unlock()
+		return ErrInvalidAction
+	}
+	session, err := h.startSessionLocked(inv.GameType, []string{inv.From, inv.To})
 	if err != nil {
 		h.mu.Unlock()
 		return err
 	}
-	s.GameData, s.State, s.CurrentPlayer, s.LastActivity = g, SessionActive, g.CurrentPlayer(), time.Now().UTC()
-	clients := []*client{h.clients[s.Players[0]], h.clients[s.Players[1]]}
-	for _, c := range clients {
-		if c != nil {
-			c.player.Status = PlayerPlaying
-		}
-	}
+	inv.State = InvitationAccepted
+	inv.LastActivity = time.Now().UTC()
+	delete(h.invitations, id)
+	h.refreshPlayerLocked(inv.From)
+	h.refreshPlayerLocked(inv.To)
+	fromText := sessionIntroText(def, from.lang, session)
+	toText := sessionIntroText(def, to.lang, session)
 	h.mu.Unlock()
-	for _, c := range clients {
-		if c != nil {
-			c.write(language.T(c.lang, "game_started"), id)
-			h.writeState(c, s)
-		}
+	if fromText != "" {
+		from.text(fromText)
+	}
+	if toText != "" {
+		to.text(toText)
 	}
 	return nil
 }
 
 func (h *Hall) Decline(call, id string) error {
-	return h.finishInvite(normalizeCall(call), id, SessionCancelled, "game_declined")
+	call = normalizeCall(call)
+	h.mu.Lock()
+	inv := h.invitations[id]
+	if inv == nil || inv.State != InvitationPending || inv.To != call {
+		h.mu.Unlock()
+		return ErrInvalidAction
+	}
+	from := h.clients[inv.From]
+	to := h.clients[inv.To]
+	inv.State = InvitationDeclined
+	inv.LastActivity = time.Now().UTC()
+	delete(h.invitations, id)
+	h.refreshPlayerLocked(inv.From)
+	h.refreshPlayerLocked(inv.To)
+	h.mu.Unlock()
+	if from != nil {
+		from.text(fmt.Sprintf(language.T(from.lang, "game_declined"), inv.GameName))
+	}
+	if to != nil {
+		to.text(fmt.Sprintf(language.T(to.lang, "game_declined_self"), inv.GameName))
+	}
+	return nil
 }
-func (h *Hall) Close(call string) { h.leave(normalizeCall(call), SessionCancelled) }
+
+func (h *Hall) Close(call string) {
+	call = normalizeCall(call)
+	if h.leaveSession(call, SessionCancelled) {
+		return
+	}
+	if h.leaveRoom(call, true) {
+		return
+	}
+}
 
 func (h *Hall) Action(call, action string) error {
 	call = normalizeCall(call)
@@ -182,9 +365,10 @@ func (h *Hall) Action(call, action string) error {
 		s.State = SessionFinished
 	}
 	clients := h.sessionClientsLocked(s)
+	viewState := s.State
 	h.mu.Unlock()
 	for _, x := range clients {
-		h.writeState(x, s)
+		h.writeSessionState(x, s, viewState == SessionActive)
 	}
 	return nil
 }
@@ -207,7 +391,7 @@ func (h *Hall) Rematch(call string) error {
 		other := h.otherClientLocked(s, call)
 		h.mu.Unlock()
 		if other != nil {
-			other.write(language.T(other.lang, "game_rematch_request"), call)
+			other.text(fmt.Sprintf(language.T(other.lang, "game_rematch_request"), call))
 		}
 		return nil
 	}
@@ -215,9 +399,13 @@ func (h *Hall) Rematch(call string) error {
 		h.mu.Unlock()
 		return ErrInvalidAction
 	}
-	// Swap starting order on each accepted rematch.
 	s.Players[0], s.Players[1] = s.Players[1], s.Players[0]
-	g, err := h.factories[s.GameType](s.Players)
+	factory := h.factories[s.GameType]
+	if factory == nil {
+		h.mu.Unlock()
+		return ErrInvalidAction
+	}
+	g, err := factory(s.Players)
 	if err != nil {
 		h.mu.Unlock()
 		return err
@@ -227,7 +415,7 @@ func (h *Hall) Rematch(call string) error {
 	h.mu.Unlock()
 	for _, x := range clients {
 		x.text(language.T(x.lang, "game_rematch_started"))
-		h.writeState(x, s)
+		h.writeSessionState(x, s, true)
 	}
 	return nil
 }
@@ -235,7 +423,7 @@ func (h *Hall) Rematch(call string) error {
 func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 	call = normalizeCall(call)
 	if err := h.Connect(call, lang, w); err != nil {
-		fmt.Fprint(w, language.T(lang, "game_connect_error"))
+		fmt.Fprint(w, terminalBlock(language.T(lang, "game_connect_error")))
 		return
 	}
 	defer h.Disconnect(call)
@@ -243,7 +431,7 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 	c.text(language.T(c.lang, "game_welcome"))
 	h.writeLobby(c)
 	for {
-		c.write("GAME> ")
+		c.write("%s> ", h.prompt(c))
 		if !in.Scan() {
 			return
 		}
@@ -253,66 +441,39 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 		}
 		fields := strings.Fields(line)
 		cmd := strings.ToUpper(fields[0])
-		current := h.client(call)
-		if current == nil {
+		h.refreshClientLocked(c)
+		if c.mode == modeLobby && (cmd == "QUIT" || cmd == "Q" || cmd == "BYE" || cmd == "5") {
+			c.text(language.T(c.lang, "game_goodbye"))
 			return
 		}
-		playing := current.player.Status == PlayerPlaying
-		if playing {
-			switch cmd {
-			case "HELP", "H", "?":
-				current.text(language.T(current.lang, "ttt_help"))
-			case "BOARD":
-				h.writeCurrentState(current)
-			case "REMATCH":
-				h.writeError(current, h.Rematch(call))
-			case "QUIT", "Q":
-				h.Close(call)
-				current.text(language.T(current.lang, "game_back_lobby"))
-				h.writeLobby(current)
-			default:
-				h.writeError(current, h.Action(call, line))
+		switch c.player.Status {
+		case PlayerPlaying:
+			if h.handleSessionCommand(c, cmd, fields, line) {
+				continue
 			}
+		case PlayerInRoom:
+			if h.handleRoomCommand(c, cmd, fields) {
+				continue
+			}
+		}
+		switch c.mode {
+		case modeGame:
+			if h.handleGameLobbyCommand(c, cmd, fields) {
+				continue
+			}
+		case modeInvites:
+			if h.handleInviteCommand(c, cmd, fields) {
+				continue
+			}
+		case modeRoom:
+			if h.handleRoomCommand(c, cmd, fields) {
+				continue
+			}
+		}
+		if h.handleLobbyCommand(c, cmd, fields) {
 			continue
 		}
-		switch cmd {
-		case "1", "GAMES":
-			current.text(language.T(current.lang, "game_games"))
-		case "2", "PLAYERS":
-			h.writePlayers(current)
-		case "3", "INVITES":
-			h.writeInvites(current)
-		case "4", "HELP", "H", "?":
-			current.text(language.T(current.lang, "game_help"))
-		case "PLAY", "TTT":
-			if len(fields) < 2 {
-				current.text(language.T(current.lang, "game_play_usage"))
-				continue
-			}
-			s, err := h.Invite(call, fields[1], TicTacToe)
-			if err != nil {
-				h.writeError(current, err)
-			} else {
-				current.write(language.T(current.lang, "game_invite_sent"), s.ID, normalizeCall(fields[1]))
-			}
-		case "ACCEPT":
-			if len(fields) < 2 {
-				current.text(language.T(current.lang, "game_accept_usage"))
-				continue
-			}
-			h.writeError(current, h.Accept(call, strings.ToUpper(fields[1])))
-		case "DECLINE":
-			if len(fields) < 2 {
-				current.text(language.T(current.lang, "game_decline_usage"))
-				continue
-			}
-			h.writeError(current, h.Decline(call, strings.ToUpper(fields[1])))
-		case "5", "QUIT", "Q", "BYE":
-			current.text(language.T(current.lang, "game_goodbye"))
-			return
-		default:
-			current.text(language.T(current.lang, "game_unknown"))
-		}
+		c.text(language.T(c.lang, "game_unknown"))
 	}
 }
 
@@ -321,64 +482,872 @@ func (h *Hall) ServeAX25(call, lang string, r io.Reader, w io.Writer) {
 	scanner.Buffer(make([]byte, 1024), 64*1024)
 	h.Serve(call, lang, scanner, w)
 }
+
 func (h *Hall) client(call string) *client {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.clients[call]
 }
-func (h *Hall) writeLobby(c *client) { c.text(language.T(c.lang, "game_lobby")) }
-func (h *Hall) writePlayers(c *client) {
-	players := h.Players()
-	c.text(language.T(c.lang, "game_players_header"))
-	for _, p := range players {
-		c.write("%-10s %s\r\n", p.Callsign, language.T(c.lang, "game_status_"+string(p.Status)))
+
+func (h *Hall) prompt(c *client) string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	switch c.player.Status {
+	case PlayerPlaying:
+		if s := h.sessions[c.player.SessionID]; s != nil {
+			return h.sessionPromptLocked(s)
+		}
+	case PlayerInRoom:
+		if room := h.rooms[c.player.RoomID]; room != nil {
+			return "ROOM#" + room.ID
+		}
+	}
+	switch c.mode {
+	case modeGame:
+		if def, ok := h.definitions[c.selected]; ok {
+			return definitionPrompt(def)
+		}
+		return "GAME"
+	case modeInvites:
+		return "INVITES"
+	case modeRoom:
+		if c.roomID != "" {
+			return "ROOM#" + c.roomID
+		}
+		return "ROOM"
+	default:
+		return "GAME"
 	}
 }
-func (h *Hall) writeInvites(c *client) {
+
+func (h *Hall) writeLobby(c *client) {
 	h.mu.RLock()
-	var ids []string
-	for id, s := range h.sessions {
-		if s.State == SessionInvited && len(s.Players) == 2 && s.Players[1] == c.player.Callsign {
-			ids = append(ids, id+" "+s.Players[0])
+	defs := make([]GameDefinition, 0, len(h.order))
+	for _, id := range h.order {
+		if def, ok := h.definitions[id]; ok {
+			defs = append(defs, def)
 		}
 	}
 	h.mu.RUnlock()
-	sort.Strings(ids)
-	if len(ids) == 0 {
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_menu_header"))
+	for i, def := range defs {
+		b.WriteString(fmt.Sprintf("%d. %s (%s)\r\n", i+1, definitionName(def, c.lang), strings.ToUpper(string(def.JoinMode))))
+	}
+	b.WriteString(language.T(c.lang, "game_menu_footer"))
+	c.text(b.String())
+}
+
+func (h *Hall) writePlayers(c *client) {
+	players := h.Players()
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_players_header"))
+	for _, p := range players {
+		b.WriteString(fmt.Sprintf("%-10s %s\r\n", p.Callsign, language.T(c.lang, "game_status_"+string(p.Status))))
+	}
+	if len(players) == 0 {
+		b.WriteString(language.T(c.lang, "game_no_players"))
+	}
+	c.text(b.String())
+}
+
+func (h *Hall) writeInvites(c *client) {
+	invites := h.Invitations(c.player.Callsign)
+	if len(invites) == 0 {
 		c.text(language.T(c.lang, "game_no_invites"))
 		return
 	}
-	for _, v := range ids {
-		c.write("%s TIC-TAC-TOE\r\n", v)
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_invites_header"))
+	for i, inv := range invites {
+		b.WriteString(fmt.Sprintf("%d. %s - %s\r\n", i+1, inv.From, inv.GameName))
+	}
+	b.WriteString(language.T(c.lang, "game_invites_footer"))
+	c.text(b.String())
+}
+
+func (h *Hall) writeRooms(c *client, gameType GameType) {
+	rooms := h.Rooms(gameType)
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_rooms_header"))
+	if len(rooms) == 0 {
+		b.WriteString(language.T(c.lang, "game_no_rooms"))
+		c.text(b.String())
+		return
+	}
+	b.WriteString(language.T(c.lang, "game_rooms_columns"))
+	for _, room := range rooms {
+		b.WriteString(fmt.Sprintf("%-4s %-8s %d/%d\r\n", room.ID, room.Host, len(room.Players), h.roomLimit(room.GameType)))
+	}
+	b.WriteString(language.T(c.lang, "game_rooms_footer"))
+	c.text(b.String())
+}
+
+func (h *Hall) writeGameLobby(c *client) {
+	h.mu.RLock()
+	def, ok := h.definitions[c.selected]
+	h.mu.RUnlock()
+	if !ok {
+		h.writeLobby(c)
+		return
+	}
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_selected_header"))
+	b.WriteString(definitionName(def, c.lang) + "\r\n")
+	switch def.JoinMode {
+	case JoinModeInvite:
+		b.WriteString(language.T(c.lang, "ttt_intro"))
+		b.WriteString(language.T(c.lang, "ttt_controls"))
+		b.WriteString(language.T(c.lang, "game_game_invite_help"))
+		b.WriteString(language.T(c.lang, "game_game_back"))
+		h.writePlayers(c)
+		c.text(b.String())
+	case JoinModeRoom:
+		b.WriteString(language.T(c.lang, "game_room_intro"))
+		c.text(b.String())
+		h.writeRooms(c, def.ID)
+	default:
+		b.WriteString(language.T(c.lang, "game_game_solo_help"))
+		c.text(b.String())
 	}
 }
-func (h *Hall) writeCurrentState(c *client) {
-	h.mu.RLock()
-	s := h.sessions[c.player.SessionID]
-	h.mu.RUnlock()
-	if s != nil {
-		h.writeState(c, s)
+
+func (h *Hall) handleLobbyCommand(c *client, cmd string, fields []string) bool {
+	switch cmd {
+	case "GAMES", "MENU":
+		h.writeLobby(c)
+		return true
+	case "PLAYERS":
+		h.writePlayers(c)
+		return true
+	case "INVITES":
+		c.mode = modeInvites
+		h.writeInvites(c)
+		return true
+	case "HELP", "H", "?":
+		c.text(language.T(c.lang, "game_help"))
+		return true
+	case "QUIT", "Q", "BYE", "5":
+		c.text(language.T(c.lang, "game_goodbye"))
+		return true
+	case "BACK":
+		h.writeLobby(c)
+		return true
 	}
+	if idx, ok := parseMenuIndex(cmd); ok {
+		if h.selectGame(c, idx-1) {
+			return true
+		}
+	}
+	if h.selectGameByToken(c, cmd) {
+		return true
+	}
+	if strings.EqualFold(cmd, "OPEN") && len(fields) > 1 {
+		if h.selectGameByToken(c, fields[1]) {
+			return true
+		}
+	}
+	return false
 }
-func (h *Hall) writeState(c *client, s *GameSession) {
-	h.mu.RLock()
-	view, typ, state := s.GameData.View(c.player.Callsign), s.GameType, s.State
-	h.mu.RUnlock()
-	if typ == TicTacToe {
-		v := view.(TicTacToeView)
-		c.write("%s", RenderTicTacToe(v))
-		if state == SessionFinished {
-			if v.Winner == "" {
-				c.text(language.T(c.lang, "game_draw"))
-			} else {
-				c.write(language.T(c.lang, "game_winner"), v.Winner)
+
+func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bool {
+	def, ok := h.definition(c.selected)
+	if !ok {
+		c.mode = modeLobby
+		h.writeLobby(c)
+		return true
+	}
+	switch def.JoinMode {
+	case JoinModeInvite:
+		switch cmd {
+		case "PLAYERS":
+			h.writePlayers(c)
+			return true
+		case "INVITES":
+			c.mode = modeInvites
+			h.writeInvites(c)
+			return true
+		case "PLAY":
+			if len(fields) < 2 {
+				c.text(language.T(c.lang, "game_play_usage"))
+				return true
 			}
-			c.text(language.T(c.lang, "game_finished_help"))
+			s, err := h.Invite(c.player.Callsign, fields[1], def.ID)
+			if err != nil {
+				h.writeError(c, err)
+			} else {
+				c.text(fmt.Sprintf(language.T(c.lang, "game_invite_sent"), s.GameName, normalizeCall(fields[1])))
+			}
+			return true
+		case "HELP", "H", "?":
+			c.text(language.T(c.lang, "game_game_invite_help"))
+			return true
+		case "BACK", "Q", "QUIT":
+			c.mode = modeLobby
+			c.selected = ""
+			h.writeLobby(c)
+			return true
+		}
+	case JoinModeRoom:
+		switch cmd {
+		case "CREATE":
+			room, err := h.CreateRoom(c.player.Callsign, def.ID)
+			if err != nil {
+				h.writeError(c, err)
+				return true
+			}
+			c.mode = modeRoom
+			c.roomID = room.ID
+			c.text(fmt.Sprintf(language.T(c.lang, "game_room_created"), room.ID))
+			h.writeRoomState(c, room)
+			return true
+		case "JOIN":
+			if len(fields) < 2 {
+				c.text(language.T(c.lang, "game_room_join_usage"))
+				return true
+			}
+			room, err := h.JoinRoom(c.player.Callsign, fields[1])
+			if err != nil {
+				h.writeError(c, err)
+				return true
+			}
+			c.mode = modeRoom
+			c.roomID = room.ID
+			h.writeRoomState(c, room)
+			return true
+		case "HELP", "H", "?":
+			c.text(language.T(c.lang, "game_room_help"))
+			return true
+		case "BACK", "Q", "QUIT":
+			c.mode = modeLobby
+			c.selected = ""
+			h.writeLobby(c)
+			return true
+		}
+	case JoinModeSolo:
+		switch cmd {
+		case "START", "PLAY":
+			session, err := h.startSoloSession(c.player.Callsign, def.ID)
+			if err != nil {
+				h.writeError(c, err)
+				return true
+			}
+			c.mode = modePlay
+			c.sessionID = session.ID
+			h.writeSessionState(c, session, true)
+			return true
+		case "BACK", "Q", "QUIT":
+			c.mode = modeLobby
+			c.selected = ""
+			h.writeLobby(c)
+			return true
+		}
+	}
+	if cmd == "PLAYERS" {
+		h.writePlayers(c)
+		return true
+	}
+	if cmd == "INVITES" {
+		c.mode = modeInvites
+		h.writeInvites(c)
+		return true
+	}
+	if cmd == "BACK" {
+		c.mode = modeLobby
+		c.selected = ""
+		h.writeLobby(c)
+		return true
+	}
+	if cmd == "HELP" || cmd == "H" || cmd == "?" {
+		c.text(language.T(c.lang, "game_help"))
+		return true
+	}
+	return false
+}
+
+func (h *Hall) handleInviteCommand(c *client, cmd string, fields []string) bool {
+	invites := h.Invitations(c.player.Callsign)
+	switch cmd {
+	case "A", "ACCEPT":
+		if id, ok := resolveInvitationID(invites, fields); ok {
+			h.writeError(c, h.Accept(c.player.Callsign, id))
+			return true
+		}
+		c.text(language.T(c.lang, "game_accept_usage"))
+		return true
+	case "D", "DECLINE":
+		if id, ok := resolveInvitationID(invites, fields); ok {
+			h.writeError(c, h.Decline(c.player.Callsign, id))
+			return true
+		}
+		c.text(language.T(c.lang, "game_decline_usage"))
+		return true
+	case "BACK", "Q", "QUIT":
+		c.mode = modeLobby
+		h.writeLobby(c)
+		return true
+	case "HELP", "H", "?":
+		c.text(language.T(c.lang, "game_invites_help"))
+		return true
+	case "PLAYERS":
+		h.writePlayers(c)
+		return true
+	case "INVITES":
+		h.writeInvites(c)
+		return true
+	}
+	if len(fields) == 2 {
+		id := fields[1]
+		if strings.EqualFold(cmd, "A") {
+			h.writeError(c, h.Accept(c.player.Callsign, invitationToken(invites, id)))
+			return true
+		}
+		if strings.EqualFold(cmd, "D") {
+			h.writeError(c, h.Decline(c.player.Callsign, invitationToken(invites, id)))
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
+	room, ok := h.Room(c.roomID)
+	if !ok {
+		c.mode = modeLobby
+		c.roomID = ""
+		h.writeLobby(c)
+		return true
+	}
+	switch cmd {
+	case "START":
+		if c.player.Callsign != room.Host {
+			h.writeError(c, ErrInvalidAction)
+			return true
+		}
+		session, err := h.StartRoom(c.player.Callsign, room.ID)
+		if err != nil {
+			h.writeError(c, err)
+			return true
+		}
+		c.mode = modePlay
+		c.sessionID = session.ID
+		c.roomID = ""
+		h.writeSessionState(c, session, true)
+		return true
+	case "LEAVE", "Q", "QUIT", "BACK":
+		h.leaveRoom(c.player.Callsign, true)
+		c.mode = modeLobby
+		c.roomID = ""
+		c.selected = ""
+		h.writeLobby(c)
+		return true
+	case "HELP", "H", "?":
+		c.text(language.T(c.lang, "game_room_active_help"))
+		return true
+	}
+	return false
+}
+
+func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line string) bool {
+	switch cmd {
+	case "HELP", "H", "?":
+		if s := h.sessionByClient(c.player.Callsign); s != nil && s.GameType == TicTacToe {
+			c.text(language.T(c.lang, "ttt_help"))
 		} else {
-			c.write(language.T(c.lang, "game_turn"), v.CurrentPlayer)
+			c.text(language.T(c.lang, "game_session_help"))
+		}
+		return true
+	case "BOARD":
+		if s := h.sessionByClient(c.player.Callsign); s != nil {
+			h.writeSessionState(c, s, false)
+		}
+		return true
+	case "REMATCH", "R":
+		h.writeError(c, h.Rematch(c.player.Callsign))
+		return true
+	case "QUIT", "Q", "BACK":
+		h.Close(c.player.Callsign)
+		c.mode = modeLobby
+		c.selected = ""
+		c.sessionID = ""
+		h.writeLobby(c)
+		return true
+	default:
+		h.writeError(c, h.Action(c.player.Callsign, line))
+		return true
+	}
+}
+
+func (h *Hall) selectGame(c *client, index int) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if index < 0 || index >= len(h.order) {
+		return false
+	}
+	id := h.order[index]
+	if _, ok := h.definitions[id]; !ok {
+		return false
+	}
+	c.selected = id
+	c.mode = modeGame
+	h.writeGameLobby(c)
+	return true
+}
+
+func (h *Hall) selectGameByToken(c *client, token string) bool {
+	token = strings.ToUpper(strings.TrimSpace(token))
+	if token == "" {
+		return false
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, id := range h.order {
+		def, ok := h.definitions[id]
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(string(def.ID), token) || strings.EqualFold(def.Prompt, token) {
+			c.selected = def.ID
+			c.mode = modeGame
+			h.writeGameLobby(c)
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hall) sessionByClient(call string) *GameSession {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.sessionByClientLocked(call)
+}
+
+func (h *Hall) roomByClient(call string) *GameRoom {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.roomByClientLocked(call)
+}
+
+func (h *Hall) sessionByClientLocked(call string) *GameSession {
+	call = normalizeCall(call)
+	for _, s := range h.sessions {
+		for _, p := range s.Players {
+			if p == call {
+				return s
+			}
+		}
+	}
+	return nil
+}
+
+func (h *Hall) roomByClientLocked(call string) *GameRoom {
+	call = normalizeCall(call)
+	for _, room := range h.rooms {
+		for _, p := range room.Players {
+			if p == call {
+				return room
+			}
+		}
+	}
+	return nil
+}
+
+func (h *Hall) refreshClientLocked(c *client) {
+	if c == nil {
+		return
+	}
+	if s := h.sessionByClientLocked(c.player.Callsign); s != nil && (s.State == SessionActive || s.State == SessionFinished) {
+		c.player.Status = PlayerPlaying
+		c.player.SessionID = s.ID
+		c.player.RoomID = ""
+		c.player.GameType = s.GameType
+		c.mode = modePlay
+		c.sessionID = s.ID
+		c.roomID = ""
+		return
+	}
+	if room := h.roomByClientLocked(c.player.Callsign); room != nil {
+		c.player.Status = PlayerInRoom
+		c.player.RoomID = room.ID
+		c.player.SessionID = ""
+		c.player.GameType = room.GameType
+		c.mode = modeRoom
+		c.roomID = room.ID
+		c.sessionID = ""
+		return
+	}
+	if h.hasPendingInvitationLocked(c.player.Callsign) {
+		c.player.Status = PlayerWaiting
+		c.player.SessionID = ""
+		c.player.RoomID = ""
+		c.player.GameType = ""
+		if c.mode == "" {
+			c.mode = modeLobby
+		}
+		return
+	}
+	c.player.Status = PlayerLobby
+	c.player.SessionID = ""
+	c.player.RoomID = ""
+	c.player.GameType = ""
+	if c.mode == "" || c.mode == modePlay || c.mode == modeRoom || c.mode == modeInvites {
+		c.mode = modeLobby
+		c.selected = ""
+		c.sessionID = ""
+		c.roomID = ""
+	}
+}
+
+func (h *Hall) hasPendingInvitationLocked(call string) bool {
+	call = normalizeCall(call)
+	now := time.Now().UTC()
+	for _, inv := range h.invitations {
+		if inv.State == InvitationPending && inv.To == call && inv.ExpiresAt.After(now) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hall) refreshPlayerLocked(call string) {
+	if c := h.clients[normalizeCall(call)]; c != nil {
+		h.refreshClientLocked(c)
+	}
+}
+
+func (h *Hall) startSoloSession(call string, gameType GameType) (*GameSession, error) {
+	return h.startSessionLocked(gameType, []string{normalizeCall(call)})
+}
+
+func (h *Hall) startSessionLocked(gameType GameType, players []string) (*GameSession, error) {
+	def, ok := h.definitions[gameType]
+	factory := h.factories[gameType]
+	if !ok || factory == nil {
+		return nil, ErrInvalidAction
+	}
+	if len(players) < def.MinPlayers || len(players) > def.MaxPlayers {
+		return nil, ErrInvalidAction
+	}
+	now := time.Now().UTC()
+	id := h.newIDLocked("S")
+	g, err := factory(players)
+	if err != nil {
+		return nil, err
+	}
+	s := &GameSession{ID: id, GameType: gameType, Players: append([]string(nil), players...), State: SessionActive, CreatedAt: now, LastActivity: now, GameData: g, CurrentPlayer: g.CurrentPlayer()}
+	h.sessions[id] = s
+	for _, p := range players {
+		if c := h.clients[p]; c != nil {
+			c.player.Status = PlayerPlaying
+			c.player.SessionID = id
+			c.player.RoomID = ""
+			c.player.GameType = gameType
+			c.mode = modePlay
+			c.sessionID = id
+			c.roomID = ""
+		}
+	}
+	return s, nil
+}
+
+func (h *Hall) CreateRoom(host string, gameType GameType) (*GameRoom, error) {
+	host = normalizeCall(host)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	def, ok := h.definitions[gameType]
+	if !ok || def.JoinMode != JoinModeRoom {
+		return nil, ErrInvalidAction
+	}
+	c := h.clients[host]
+	if c == nil || c.player.Status != PlayerLobby {
+		return nil, ErrInvalidAction
+	}
+	now := time.Now().UTC()
+	id := h.newRoomIDLocked()
+	room := &GameRoom{ID: id, GameType: gameType, Host: host, Players: []string{host}, State: RoomOpen, CreatedAt: now, LastActivity: now}
+	h.rooms[id] = room
+	c.player.Status = PlayerInRoom
+	c.player.RoomID = id
+	c.player.GameType = gameType
+	c.player.SessionID = ""
+	c.mode = modeRoom
+	c.roomID = id
+	return room, nil
+}
+
+func (h *Hall) JoinRoom(call, id string) (*GameRoom, error) {
+	call = normalizeCall(call)
+	id = strings.TrimSpace(id)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	room := h.rooms[id]
+	if room == nil || room.State != RoomOpen {
+		return nil, ErrInvalidAction
+	}
+	def, ok := h.definitions[room.GameType]
+	if !ok || len(room.Players) >= def.MaxPlayers {
+		return nil, ErrInvalidAction
+	}
+	c := h.clients[call]
+	if c == nil || c.player.Status != PlayerLobby || call == room.Host {
+		return nil, ErrInvalidAction
+	}
+	for _, p := range room.Players {
+		if p == call {
+			return nil, ErrInvalidAction
+		}
+	}
+	room.Players = append(room.Players, call)
+	room.LastActivity = time.Now().UTC()
+	for _, p := range room.Players {
+		if x := h.clients[p]; x != nil {
+			x.player.Status = PlayerInRoom
+			x.player.RoomID = room.ID
+			x.player.GameType = room.GameType
+			x.player.SessionID = ""
+			x.mode = modeRoom
+			x.roomID = room.ID
+		}
+	}
+	c.mode = modeRoom
+	c.roomID = room.ID
+	return cloneRoom(room), nil
+}
+
+func (h *Hall) StartRoom(call, id string) (*GameSession, error) {
+	call = normalizeCall(call)
+	id = strings.TrimSpace(id)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	room := h.rooms[id]
+	if room == nil || room.State != RoomOpen || room.Host != call {
+		return nil, ErrInvalidAction
+	}
+	def, ok := h.definitions[room.GameType]
+	if !ok || len(room.Players) < def.MinPlayers {
+		return nil, ErrInvalidAction
+	}
+	players := append([]string(nil), room.Players...)
+	delete(h.rooms, id)
+	session, err := h.startSessionLocked(room.GameType, players)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range players {
+		if c := h.clients[p]; c != nil {
+			c.roomID = ""
+		}
+	}
+	return session, nil
+}
+
+func (h *Hall) leaveRoom(call string, force bool) bool {
+	call = normalizeCall(call)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	room := h.roomByClientLocked(call)
+	if room == nil {
+		return false
+	}
+	if room.Host == call || force {
+		delete(h.rooms, room.ID)
+		for _, p := range room.Players {
+			if c := h.clients[p]; c != nil {
+				if c.player.Status == PlayerInRoom {
+					c.player.Status = PlayerLobby
+					c.player.RoomID = ""
+					c.player.GameType = ""
+					c.player.SessionID = ""
+					c.mode = modeLobby
+					c.roomID = ""
+				}
+			}
+		}
+		return true
+	}
+	players := room.Players[:0]
+	for _, p := range room.Players {
+		if p != call {
+			players = append(players, p)
+		}
+	}
+	room.Players = append([]string(nil), players...)
+	room.LastActivity = time.Now().UTC()
+	if c := h.clients[call]; c != nil {
+		c.player.Status = PlayerLobby
+		c.player.RoomID = ""
+		c.player.GameType = ""
+		c.player.SessionID = ""
+		c.mode = modeLobby
+		c.roomID = ""
+	}
+	return true
+}
+
+func (h *Hall) leaveSession(call string, state SessionState) bool {
+	call = normalizeCall(call)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	c := h.clients[call]
+	if c == nil || c.player.SessionID == "" {
+		return false
+	}
+	s := h.sessions[c.player.SessionID]
+	if s == nil {
+		c.player.Status = PlayerLobby
+		c.player.SessionID = ""
+		c.player.GameType = ""
+		c.mode = modeLobby
+		return true
+	}
+	s.State = state
+	s.LastActivity = time.Now().UTC()
+	other := h.otherClientLocked(s, call)
+	for _, p := range s.Players {
+		if x := h.clients[p]; x != nil {
+			x.player.Status = PlayerLobby
+			x.player.SessionID = ""
+			x.player.GameType = ""
+			x.mode = modeLobby
+			x.sessionID = ""
+		}
+	}
+	if other != nil {
+		key := "game_left"
+		if state == SessionDisconnected {
+			key = "game_disconnected"
+		}
+		other.text(fmt.Sprintf(language.T(other.lang, key), call))
+	}
+	return true
+}
+
+func (h *Hall) cancelInvitationsFor(call string, notify bool) {
+	call = normalizeCall(call)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, inv := range h.invitations {
+		if inv.To != call && inv.From != call {
+			continue
+		}
+		delete(h.invitations, id)
+		if notify {
+			if from := h.clients[inv.From]; from != nil && inv.From != call {
+				from.text(fmt.Sprintf(language.T(from.lang, "game_invite_cancelled"), inv.GameName, call))
+			}
+			if to := h.clients[inv.To]; to != nil && inv.To != call {
+				to.text(fmt.Sprintf(language.T(to.lang, "game_invite_cancelled"), inv.GameName, call))
+			}
 		}
 	}
 }
+
+func (h *Hall) expireInvitation(id string, expiresAt time.Time) {
+	timer := time.NewTimer(time.Until(expiresAt))
+	defer timer.Stop()
+	<-timer.C
+	h.mu.Lock()
+	inv := h.invitations[id]
+	if inv == nil || inv.State != InvitationPending {
+		h.mu.Unlock()
+		return
+	}
+	if time.Now().UTC().Before(inv.ExpiresAt) {
+		h.mu.Unlock()
+		return
+	}
+	inv.State = InvitationExpired
+	delete(h.invitations, id)
+	from := h.clients[inv.From]
+	to := h.clients[inv.To]
+	h.refreshPlayerLocked(inv.From)
+	h.refreshPlayerLocked(inv.To)
+	h.mu.Unlock()
+	if from != nil {
+		from.text(fmt.Sprintf(language.T(from.lang, "game_invite_expired"), inv.GameName))
+	}
+	if to != nil {
+		to.text(fmt.Sprintf(language.T(to.lang, "game_invite_expired"), inv.GameName))
+	}
+}
+
+func (h *Hall) expire(id string) {
+	h.mu.Lock()
+	inv := h.invitations[id]
+	if inv == nil || inv.State != InvitationPending {
+		h.mu.Unlock()
+		return
+	}
+	inv.State = InvitationExpired
+	delete(h.invitations, id)
+	from := h.clients[inv.From]
+	to := h.clients[inv.To]
+	h.refreshPlayerLocked(inv.From)
+	h.refreshPlayerLocked(inv.To)
+	h.mu.Unlock()
+	if from != nil {
+		from.text(fmt.Sprintf(language.T(from.lang, "game_invite_expired"), inv.GameName))
+	}
+	if to != nil {
+		to.text(fmt.Sprintf(language.T(to.lang, "game_invite_expired"), inv.GameName))
+	}
+}
+
+func (h *Hall) writeSessionState(c *client, s *GameSession, includeIntro bool) {
+	if c == nil || s == nil || s.GameData == nil {
+		return
+	}
+	switch s.GameType {
+	case TicTacToe:
+		view, ok := s.GameData.View(c.player.Callsign).(TicTacToeView)
+		if !ok {
+			return
+		}
+		var b strings.Builder
+		if includeIntro {
+			b.WriteString(language.T(c.lang, "ttt_intro"))
+			b.WriteString(language.T(c.lang, "ttt_controls"))
+		}
+		b.WriteString(RenderTicTacToe(view))
+		if view.XPlayer != "" {
+			b.WriteString(fmt.Sprintf("X: %s\r\n", view.XPlayer))
+		}
+		if view.OPlayer != "" {
+			b.WriteString(fmt.Sprintf("O: %s\r\n", view.OPlayer))
+		}
+		if s.State == SessionFinished {
+			if view.Winner == "" {
+				b.WriteString(language.T(c.lang, "game_draw"))
+			} else {
+				b.WriteString(fmt.Sprintf(language.T(c.lang, "game_winner"), view.Winner))
+			}
+			b.WriteString(language.T(c.lang, "game_finished_help"))
+		} else {
+			b.WriteString(fmt.Sprintf(language.T(c.lang, "game_turn"), view.CurrentPlayer))
+		}
+		c.text(b.String())
+	default:
+		c.text(fmt.Sprint(s.GameData.View(c.player.Callsign)))
+	}
+}
+
+func (h *Hall) writeRoomState(c *client, room *GameRoom) {
+	if c == nil || room == nil {
+		return
+	}
+	def := h.definitionMust(room.GameType)
+	var b strings.Builder
+	b.WriteString(language.T(c.lang, "game_room_state_header"))
+	b.WriteString(fmt.Sprintf("%s #%s\r\n", definitionName(def, c.lang), room.ID))
+	b.WriteString(fmt.Sprintf("%s: %s\r\n", language.T(c.lang, "game_room_host"), room.Host))
+	b.WriteString(fmt.Sprintf("%s: %d/%d\r\n", language.T(c.lang, "game_room_players"), len(room.Players), h.roomLimit(room.GameType)))
+	for i, p := range room.Players {
+		b.WriteString(fmt.Sprintf("%d. %s\r\n", i+1, p))
+	}
+	b.WriteString(language.T(c.lang, "game_room_active_help"))
+	c.text(b.String())
+}
+
 func (h *Hall) writeError(c *client, err error) {
 	if err == nil {
 		return
@@ -394,6 +1363,7 @@ func (h *Hall) writeError(c *client, err error) {
 	}
 	c.text(language.T(c.lang, key))
 }
+
 func (h *Hall) sessionClientsLocked(s *GameSession) []*client {
 	var out []*client
 	for _, p := range s.Players {
@@ -403,6 +1373,7 @@ func (h *Hall) sessionClientsLocked(s *GameSession) []*client {
 	}
 	return out
 }
+
 func (h *Hall) otherClientLocked(s *GameSession, call string) *client {
 	for _, p := range s.Players {
 		if p != call {
@@ -411,72 +1382,180 @@ func (h *Hall) otherClientLocked(s *GameSession, call string) *client {
 	}
 	return nil
 }
-func (h *Hall) finishInvite(call, id string, state SessionState, key string) error {
-	h.mu.Lock()
-	s := h.sessions[id]
-	if s == nil || s.State != SessionInvited || len(s.Players) != 2 || s.Players[1] != call {
-		h.mu.Unlock()
-		return ErrInvalidAction
-	}
-	s.State = state
-	s.LastActivity = time.Now().UTC()
-	clients := h.sessionClientsLocked(s)
-	for _, c := range clients {
-		c.player.Status = PlayerLobby
-		c.player.SessionID = ""
-	}
-	h.mu.Unlock()
-	for _, c := range clients {
-		c.write(language.T(c.lang, key), id)
-	}
-	return nil
+
+func (h *Hall) definition(id GameType) (GameDefinition, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	def, ok := h.definitions[id]
+	return def, ok
 }
-func (h *Hall) expire(id string) {
-	h.mu.Lock()
-	s := h.sessions[id]
-	if s == nil || s.State != SessionInvited {
-		h.mu.Unlock()
-		return
-	}
-	s.State = SessionCancelled
-	s.LastActivity = time.Now().UTC()
-	clients := h.sessionClientsLocked(s)
-	for _, c := range clients {
-		c.player.Status = PlayerLobby
-		c.player.SessionID = ""
-	}
-	h.mu.Unlock()
-	for _, c := range clients {
-		c.write(language.T(c.lang, "game_invite_expired"), id)
-	}
+
+func (h *Hall) definitionMust(id GameType) GameDefinition {
+	def, _ := h.definition(id)
+	return def
 }
-func (h *Hall) leave(call string, state SessionState) {
-	h.mu.Lock()
-	c := h.clients[call]
-	if c == nil || c.player.SessionID == "" {
-		h.mu.Unlock()
-		return
-	}
-	s := h.sessions[c.player.SessionID]
-	if s == nil {
-		c.player.Status = PlayerLobby
-		c.player.SessionID = ""
-		h.mu.Unlock()
-		return
-	}
-	s.State = state
-	s.LastActivity = time.Now().UTC()
-	other := h.otherClientLocked(s, call)
-	for _, x := range h.sessionClientsLocked(s) {
-		x.player.Status = PlayerLobby
-		x.player.SessionID = ""
-	}
-	h.mu.Unlock()
-	if other != nil {
-		key := "game_left"
-		if state == SessionDisconnected {
-			key = "game_disconnected"
+
+func (h *Hall) sessionPromptLocked(s *GameSession) string {
+	if def, ok := h.definitions[s.GameType]; ok {
+		if strings.TrimSpace(def.Prompt) != "" {
+			return def.Prompt
 		}
-		other.write(language.T(other.lang, key), call)
 	}
+	return strings.ToUpper(strings.ReplaceAll(string(s.GameType), "-", ""))
+}
+
+func (h *Hall) roomLimit(gameType GameType) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if def, ok := h.definitions[gameType]; ok {
+		return def.MaxPlayers
+	}
+	return 0
+}
+
+func (h *Hall) newIDLocked(prefix string) string {
+	return fmt.Sprintf("%s%06d", prefix, h.next.Add(1))
+}
+
+func (h *Hall) newRoomIDLocked() string {
+	return fmt.Sprintf("%02d", h.nextRoom.Add(1))
+}
+
+func (h *Hall) handlePendingInvitationByNumber(invites []Invitation, token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	if idx, err := strconv.Atoi(token); err == nil && idx >= 1 && idx <= len(invites) {
+		return invites[idx-1].ID
+	}
+	for _, inv := range invites {
+		if strings.EqualFold(inv.ID, token) {
+			return inv.ID
+		}
+	}
+	return ""
+}
+
+func (h *Hall) handleInviteSelection(c *client, cmd string, fields []string, invites []Invitation) bool {
+	if len(fields) < 2 {
+		return false
+	}
+	id := h.handlePendingInvitationByNumber(invites, fields[1])
+	if id == "" {
+		return false
+	}
+	switch cmd {
+	case "A":
+		h.writeError(c, h.Accept(c.player.Callsign, id))
+	case "D":
+		h.writeError(c, h.Decline(c.player.Callsign, id))
+	}
+	return true
+}
+
+func parseMenuIndex(cmd string) (int, bool) {
+	idx, err := strconv.Atoi(strings.TrimSpace(cmd))
+	if err != nil {
+		return 0, false
+	}
+	return idx, true
+}
+
+func resolveInvitationID(invites []Invitation, fields []string) (string, bool) {
+	if len(fields) < 2 {
+		if len(invites) == 1 {
+			return invites[0].ID, true
+		}
+		return "", false
+	}
+	token := strings.TrimSpace(fields[1])
+	if token == "" {
+		return "", false
+	}
+	if idx, err := strconv.Atoi(token); err == nil && idx >= 1 && idx <= len(invites) {
+		return invites[idx-1].ID, true
+	}
+	for _, inv := range invites {
+		if strings.EqualFold(inv.ID, token) {
+			return inv.ID, true
+		}
+	}
+	return "", false
+}
+
+func invitationToken(invites []Invitation, token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		if len(invites) == 1 {
+			return invites[0].ID
+		}
+		return ""
+	}
+	if idx, err := strconv.Atoi(token); err == nil && idx >= 1 && idx <= len(invites) {
+		return invites[idx-1].ID
+	}
+	for _, inv := range invites {
+		if strings.EqualFold(inv.ID, token) {
+			return inv.ID
+		}
+	}
+	return ""
+}
+
+func cloneRoom(room *GameRoom) *GameRoom {
+	if room == nil {
+		return nil
+	}
+	copy := *room
+	copy.Players = append([]string(nil), room.Players...)
+	return &copy
+}
+
+func definitionName(def GameDefinition, lang string) string {
+	if def.NameKey != "" {
+		if v := language.T(lang, def.NameKey); strings.TrimSpace(v) != "" && v != def.NameKey {
+			return v
+		}
+	}
+	if strings.TrimSpace(def.Name) != "" {
+		return def.Name
+	}
+	return strings.ToUpper(strings.ReplaceAll(string(def.ID), "-", ""))
+}
+
+func definitionPrompt(def GameDefinition) string {
+	if strings.TrimSpace(def.Prompt) != "" {
+		return def.Prompt
+	}
+	return strings.ToUpper(strings.ReplaceAll(string(def.ID), "-", ""))
+}
+
+func sessionIntroText(def GameDefinition, lang string, session *GameSession) string {
+	if session == nil {
+		return ""
+	}
+	if session.GameType == TicTacToe {
+		return fmt.Sprintf(language.T(lang, "game_started"), definitionName(def, lang)) + language.T(lang, "ttt_intro") + language.T(lang, "ttt_controls")
+	}
+	return fmt.Sprintf(language.T(lang, "game_started"), definitionName(def, lang))
+}
+
+func terminalBlock(text string) string {
+	if text == "" {
+		return ""
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	if text == "" {
+		return ""
+	}
+	text = strings.ReplaceAll(text, "\n", "\r\n")
+	if !strings.HasPrefix(text, "\r\n") {
+		text = "\r\n" + text
+	}
+	if !strings.HasSuffix(text, "\r\n") {
+		text += "\r\n"
+	}
+	return text
 }
