@@ -1030,11 +1030,21 @@ func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line
 		if s.GameType == ConnectFour && cmd == "10" {
 			cmd = "QUIT"
 		}
+		if (s.GameType == Hangman || s.GameType == WordGame) && cmd == "1" {
+			cmd = "HELP"
+		}
+		if (s.GameType == Hangman || s.GameType == WordGame) && cmd == "2" {
+			cmd = "QUIT"
+		}
 	}
 	switch cmd {
 	case "HELP", "H", "?":
 		if s := h.sessionByClient(c.player.Callsign); s != nil && s.GameType == TicTacToe {
 			c.text(language.T(c.lang, "ttt_help"))
+		} else if s != nil && s.GameType == Hangman {
+			c.text(language.T(c.lang, "hangman_help"))
+		} else if s != nil && s.GameType == WordGame {
+			c.text(language.T(c.lang, "word_help"))
 		} else {
 			c.text(language.T(c.lang, "game_session_help"))
 		}

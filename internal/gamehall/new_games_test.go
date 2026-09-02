@@ -100,3 +100,28 @@ func TestSecretGameRenderersHaveTranslationsAndNoFormatErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestWordAndHangmanInputAliases(t *testing.T) {
+	word := &WordGameState{phrase: "RADIO", players: []string{"SP5ME"}, used: map[byte]bool{}, scores: map[string]int{}, pending: 100}
+	if err := word.Apply("SP5ME", "r"); err != nil || !word.used['R'] {
+		t.Fatalf("lowercase letter err=%v", err)
+	}
+	if err := word.Apply("SP5ME", "L A"); err != nil || !word.used['A'] {
+		t.Fatalf("L alias err=%v", err)
+	}
+	if err := word.Apply("SP5ME", "LETTER D"); err != nil || !word.used['D'] {
+		t.Fatalf("LETTER alias err=%v", err)
+	}
+	if err := word.Apply("SP5ME", "h radio"); err != nil || !word.Finished() {
+		t.Fatalf("H solve err=%v", err)
+	}
+
+	hang, _ := newHangman([]string{"SP5ME"}, PhraseEntry{"Radio", "PACKET RADIO"})
+	game := hang.(*HangmanGame)
+	if err := game.Apply("SP5ME", "a"); err != nil {
+		t.Fatalf("lowercase hangman letter err=%v", err)
+	}
+	if err := game.Apply("SP5ME", "H packet radio"); err != nil || !game.Finished() {
+		t.Fatalf("H hangman solve err=%v", err)
+	}
+}

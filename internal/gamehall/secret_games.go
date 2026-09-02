@@ -60,6 +60,9 @@ func (g *HangmanGame) View(_ string) PlayerView {
 	for r := range g.used {
 		used += string(r)
 	}
+	if used == "" {
+		used = "-"
+	}
 	return HangmanView{g.category, strings.TrimSpace(mask), used, g.errors, g.CurrentPlayer(), g.winner, g.done}
 }
 func (g *HangmanGame) Apply(player, action string) error {
@@ -86,6 +89,19 @@ func (g *HangmanGame) Apply(player, action string) error {
 			g.done = true
 		}
 		return nil
+	}
+	if strings.HasPrefix(a, "H ") || strings.HasPrefix(a, "SOLVE ") {
+		guess := strings.TrimSpace(a[2:])
+		if strings.HasPrefix(a, "SOLVE ") {
+			guess = strings.TrimSpace(a[6:])
+		}
+		if guess == g.phrase {
+			g.done = true
+			g.winner = player
+			return nil
+		}
+		g.turn = (g.turn + 1) % len(g.players)
+		return ErrInvalidAction
 	}
 	if strings.TrimSpace(a) == g.phrase {
 		g.done = true
@@ -152,6 +168,9 @@ func (g *WordGameState) View(_ string) PlayerView {
 	for r := range g.used {
 		u += string(r)
 	}
+	if u == "" {
+		u = "-"
+	}
 	return WordGameView{strings.TrimSpace(mask), g.category, u, g.scores, g.CurrentPlayer(), g.winner, g.done}
 }
 func (g *WordGameState) Apply(player, action string) error {
@@ -161,9 +180,13 @@ func (g *WordGameState) Apply(player, action string) error {
 	if normalizeCall(player) != g.CurrentPlayer() {
 		return ErrNotYourTurn
 	}
-	a := strings.TrimSpace(strings.ToUpper(strings.TrimPrefix(action, "LETTER ")))
-	if strings.HasPrefix(strings.ToUpper(action), "SOLVE ") {
-		a = strings.TrimSpace(action[6:])
+	a := strings.TrimSpace(strings.ToUpper(action))
+	if strings.HasPrefix(a, "H ") || strings.HasPrefix(a, "SOLVE ") {
+		if strings.HasPrefix(a, "H ") {
+			a = strings.TrimSpace(a[2:])
+		} else {
+			a = strings.TrimSpace(a[6:])
+		}
 		if a == g.phrase {
 			g.done = true
 			g.winner = player
@@ -171,6 +194,12 @@ func (g *WordGameState) Apply(player, action string) error {
 		}
 		g.turn = (g.turn + 1) % len(g.players)
 		return ErrInvalidAction
+	}
+	if strings.HasPrefix(a, "L ") {
+		a = strings.TrimSpace(a[2:])
+	}
+	if strings.HasPrefix(a, "LETTER ") {
+		a = strings.TrimSpace(a[7:])
 	}
 	if len(a) != 1 || a[0] < 'A' || a[0] > 'Z' {
 		return ErrInvalidAction
