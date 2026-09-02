@@ -76,6 +76,7 @@ type Experimental struct {
 	AI   bool `yaml:"ai,omitempty"`
 }
 type AI struct {
+	ServiceID         string `yaml:"service_id"`
 	Enabled           bool   `yaml:"enabled"`
 	Callsign          string `yaml:"callsign"`
 	SSID              uint8  `yaml:"ssid"`
@@ -93,6 +94,7 @@ type AI struct {
 	GoodbyeMessage    string `yaml:"goodbye_message"`
 }
 type GameHall struct {
+	ServiceID            string `yaml:"service_id"`
 	Enabled              bool   `yaml:"enabled"`
 	Callsign             string `yaml:"callsign"`
 	SSID                 uint8  `yaml:"ssid"`
@@ -109,6 +111,7 @@ type History struct {
 	RetentionDays         int    `yaml:"retention_days"`
 }
 type BBS struct {
+	ServiceID      string          `yaml:"service_id"`
 	Enabled        bool            `yaml:"enabled"`
 	Listen         string          `yaml:"listen"`
 	ForwardListen  string          `yaml:"forward_listen"`
@@ -145,6 +148,7 @@ type BBSForwarding struct {
 }
 type BBSPeer struct {
 	ID                 string   `yaml:"id"`
+	EndpointID         string   `yaml:"endpoint_id,omitempty"`
 	Callsign           string   `yaml:"callsign"`
 	SSID               uint8    `yaml:"ssid"`
 	Address            string   `yaml:"hierarchical_address"`
@@ -155,6 +159,8 @@ type BBSPeer struct {
 	Host               string   `yaml:"host"`      // legacy TCP host
 	Port               uint16   `yaml:"port"`      // legacy TCP port
 	ViaNode            string   `yaml:"via_node"`  // legacy node route
+	FallbackToRF       bool     `yaml:"fallback_to_rf,omitempty"`
+	RFPort             string   `yaml:"rf_port,omitempty"`
 	Schedule           []string `yaml:"schedule"`
 	PrivateRoutes      []string `yaml:"private_routes"`
 	BulletinScopes     []string `yaml:"bulletin_scopes"`
@@ -162,7 +168,23 @@ type BBSPeer struct {
 	AtCalls            []string `yaml:"at_calls"`
 	HierarchicalRoutes []string `yaml:"hierarchical_routes"`
 }
+
+// RemoteEndpoint describes a configured non-local destination. The runtime
+// uses the transport when it is supported; endpoint IDs are stable references
+// from BBS peers and future service clients.
+type RemoteEndpoint struct {
+	ID           string `yaml:"id"`
+	Callsign     string `yaml:"callsign"`
+	Transport    string `yaml:"transport"` // ax25, node, or tcp
+	Host         string `yaml:"host,omitempty"`
+	Port         uint16 `yaml:"port,omitempty"`
+	ViaNode      string `yaml:"via_node,omitempty"`
+	Enabled      bool   `yaml:"enabled"`
+	FallbackToRF bool   `yaml:"fallback_to_rf,omitempty"`
+	RFPort       string `yaml:"rf_port,omitempty"`
+}
 type Node struct {
+	ServiceID             string         `yaml:"service_id"`
 	Enabled               bool           `yaml:"enabled"`
 	Alias                 string         `yaml:"alias"`
 	Listen                string         `yaml:"listen"`
@@ -225,20 +247,21 @@ type Port struct {
 	AllowFrom        []string         `yaml:"allow_from"`
 }
 type Config struct {
-	Application  Application  `yaml:"application"`
-	Server       Station      `yaml:"server"`
-	Web          Web          `yaml:"web"`
-	API          API          `yaml:"api"`
-	Ports        []Port       `yaml:"ports"`
-	Terminal     Station      `yaml:"terminal"`
-	Beacon       Beacon       `yaml:"beacon"`
-	UPRD         UPRD         `yaml:"uprd"`
-	Experimental Experimental `yaml:"experimental"`
-	History      History      `yaml:"history"`
-	BBS          BBS          `yaml:"bbs"`
-	Node         Node         `yaml:"node"`
-	AI           AI           `yaml:"ai"`
-	GameHall     GameHall     `yaml:"game_hall"`
+	Application     Application      `yaml:"application"`
+	Server          Station          `yaml:"server"`
+	Web             Web              `yaml:"web"`
+	API             API              `yaml:"api"`
+	Ports           []Port           `yaml:"ports"`
+	Terminal        Station          `yaml:"terminal"`
+	Beacon          Beacon           `yaml:"beacon"`
+	UPRD            UPRD             `yaml:"uprd"`
+	Experimental    Experimental     `yaml:"experimental"`
+	History         History          `yaml:"history"`
+	BBS             BBS              `yaml:"bbs"`
+	Node            Node             `yaml:"node"`
+	AI              AI               `yaml:"ai"`
+	GameHall        GameHall         `yaml:"game_hall"`
+	RemoteEndpoints []RemoteEndpoint `yaml:"remote_endpoints,omitempty"`
 }
 
 func Load(path string) (Config, error) {
@@ -345,8 +368,14 @@ func (c *Config) applyDefaults(hasExperimental, hasGameHallSSID bool) {
 	if strings.TrimSpace(c.AI.Callsign) == "" {
 		c.AI.Callsign = c.Terminal.Callsign
 	}
+	if strings.TrimSpace(c.AI.ServiceID) == "" {
+		c.AI.ServiceID = "chat-main"
+	}
 	if strings.TrimSpace(c.GameHall.Callsign) == "" {
 		c.GameHall.Callsign = c.Terminal.Callsign
+	}
+	if strings.TrimSpace(c.GameHall.ServiceID) == "" {
+		c.GameHall.ServiceID = "game-main"
 	}
 	if !hasGameHallSSID {
 		c.GameHall.SSID = 14
@@ -387,8 +416,14 @@ func (c *Config) applyDefaults(hasExperimental, hasGameHallSSID bool) {
 	if strings.TrimSpace(c.Node.WelcomeMessage) == "" {
 		c.Node.WelcomeMessage = "Witaj {REMOTE} w NODE {CALL}.\r\nDostepne funkcje: NODES, ROUTES, PORTS, SERVICES, BBS, AI, CONNECT i HELP."
 	}
+	if strings.TrimSpace(c.Node.ServiceID) == "" {
+		c.Node.ServiceID = "node-main"
+	}
 	if strings.TrimSpace(c.Node.GoodbyeMessage) == "" {
 		c.Node.GoodbyeMessage = "73 {REMOTE}, NODE {CALL}."
+	}
+	if strings.TrimSpace(c.BBS.ServiceID) == "" {
+		c.BBS.ServiceID = "bbs-main"
 	}
 	if strings.TrimSpace(c.BBS.WelcomeMessage) == "" {
 		c.BBS.WelcomeMessage = "Witaj {REMOTE} w BBS {CALL}.\r\nTutaj mozesz czytac, wysylac i przekazywac wiadomosci packet radio. Wpisz H, aby zobaczyc pomoc."
@@ -462,6 +497,16 @@ func SaveModel(path string, c Config) error {
 }
 
 func (c Config) Validate() error {
+	// service identifiers are validated below
+	if err := validateServiceIDs(c); err != nil {
+		return err
+	}
+	if err := validateRemoteEndpoints(c); err != nil {
+		return err
+	}
+	if err := validateForwardingRFPorts(c); err != nil {
+		return err
+	}
 	if c.Application.Mode != "station" && c.Application.Mode != "station-node-bbs" {
 		return fmt.Errorf("application.mode must be station or station-node-bbs")
 	}
@@ -765,25 +810,51 @@ func (c Config) Validate() error {
 		peerIDs := map[string]bool{}
 		peerStations := map[string]bool{}
 		for i, p := range c.BBS.Forwarding.Peers {
-			if p.ID == "" || p.Callsign == "" {
+			var endpoint *RemoteEndpoint
+			if strings.TrimSpace(p.EndpointID) != "" {
+				for j := range c.RemoteEndpoints {
+					if strings.EqualFold(c.RemoteEndpoints[j].ID, p.EndpointID) {
+						endpoint = &c.RemoteEndpoints[j]
+						break
+					}
+				}
+				if endpoint == nil {
+					return fmt.Errorf("bbs.forwarding.peers[%d].endpoint_id: endpoint does not exist", i)
+				}
+			}
+			if p.ID == "" || (p.Callsign == "" && endpoint == nil) {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: id and callsign required", i)
 			}
 			if peerIDs[strings.ToUpper(p.ID)] {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: duplicate id", i)
 			}
 			peerIDs[strings.ToUpper(p.ID)] = true
-			if err := validStation(Station{Callsign: p.Callsign, SSID: p.SSID}); err != nil {
+			callsign, ssid := p.Callsign, p.SSID
+			if endpoint != nil {
+				if callsign == "" {
+					station, err := parseStationText(endpoint.Callsign)
+					if err != nil {
+						return fmt.Errorf("bbs.forwarding.peers[%d]: endpoint callsign: %w", i, err)
+					}
+					callsign, ssid = station.Callsign, station.SSID
+				}
+			}
+			if err := validStation(Station{Callsign: callsign, SSID: ssid}); err != nil {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: %w", i, err)
 			}
-			station := strings.ToUpper(p.Callsign) + "-" + strconv.Itoa(int(p.SSID))
+			station := strings.ToUpper(callsign) + "-" + strconv.Itoa(int(ssid))
 			if peerStations[station] {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: duplicate BBS station", i)
 			}
 			peerStations[station] = true
-			if p.Transport != "telnet" && p.Transport != "node" {
-				return fmt.Errorf("bbs.forwarding.peers[%d]: transport must be telnet or node", i)
+			transport := p.Transport
+			if endpoint != nil {
+				transport = endpoint.Transport
 			}
-			if p.Transport == "telnet" && (p.Host == "" || p.Port == 0) {
+			if transport != "telnet" && transport != "tcp" && transport != "node" && transport != "ax25" {
+				return fmt.Errorf("bbs.forwarding.peers[%d]: transport must be telnet, tcp, ax25 or node", i)
+			}
+			if transport == "telnet" && endpoint == nil && (p.Host == "" || p.Port == 0) {
 				return fmt.Errorf("bbs.forwarding.peers[%d]: host and port required", i)
 			}
 			for j, scope := range p.BulletinScopes {

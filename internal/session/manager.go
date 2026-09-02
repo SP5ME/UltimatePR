@@ -398,7 +398,8 @@ func (m *Manager) Disconnect(ctx context.Context) error {
 				break
 			}
 		case <-ctx.Done():
-			break
+			m.failLink("Rozlaczanie anulowane")
+			return ctx.Err()
 		}
 	}
 	m.failLink("Sesja zamknieta lokalnie")

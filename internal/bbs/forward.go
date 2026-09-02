@@ -9,6 +9,8 @@ import (
 
 type ForwardPeer struct {
 	ID, Callsign, Transport, Host, ViaNode string
+	FallbackToRF                           bool
+	RFPort                                 string
 	Port                                   uint16
 	PrivateRoutes, BulletinScopes          []string
 	ToCalls, AtCalls, HierarchicalRoutes   []string

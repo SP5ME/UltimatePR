@@ -84,6 +84,9 @@ type Config struct {
 	RequestRestart     func()
 	Version            string
 	PublicAPI          http.Handler
+	ServiceRegistry    func() any
+	RemoteEndpoints    func() any
+	ExplainRoute       func(string) any
 }
 
 type Server struct {
@@ -308,6 +311,9 @@ func (s *Server) Run(ctx context.Context) error {
 	ui.HandleFunc("DELETE /api/application/api-tokens/{name}", s.apiTokenDelete)
 	ui.Handle("GET /", http.FileServer(http.FS(staticFS)))
 	ui.HandleFunc("GET /api/status", s.status)
+	ui.HandleFunc("GET /api/service-registry", s.serviceRegistry)
+	ui.HandleFunc("GET /api/remote-endpoints", s.remoteEndpoints)
+	ui.HandleFunc("GET /api/service-router/explain", s.explainRoute)
 	ui.HandleFunc("GET /api/mheard", s.mheard)
 	ui.HandleFunc("GET /api/history", s.historyList)
 	ui.HandleFunc("DELETE /api/history", s.historyClear)
@@ -359,6 +365,38 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+func (s *Server) serviceRegistry(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.ServiceRegistry == nil {
+		http.Error(w, "service registry diagnostics unavailable", http.StatusNotImplemented)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.cfg.ServiceRegistry())
+}
+
+func (s *Server) remoteEndpoints(w http.ResponseWriter, _ *http.Request) {
+	if s.cfg.RemoteEndpoints == nil {
+		http.Error(w, "remote endpoint diagnostics unavailable", http.StatusNotImplemented)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.cfg.RemoteEndpoints())
+}
+
+func (s *Server) explainRoute(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.ExplainRoute == nil {
+		http.Error(w, "route diagnostics unavailable", http.StatusNotImplemented)
+		return
+	}
+	target := strings.TrimSpace(r.URL.Query().Get("target"))
+	if target == "" {
+		http.Error(w, "target is required", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(s.cfg.ExplainRoute(target))
 }
 
 func (s *Server) aiModels(w http.ResponseWriter, r *http.Request) {

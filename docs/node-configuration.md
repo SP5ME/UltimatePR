@@ -37,6 +37,19 @@ UPRdirect. Pole `Port` w starym YAML jest prezentowane jako `Interface`.
 ten licznik przy starzeniu i usuwa wpis po wygasnieciu. Trasy skonfigurowane
 statycznie pozostaja w tabeli.
 
+## Service Registry / lokalne uslugi
+
+NODE rejestruje sie w runtime pod `node.service_id` i jest potem rozpoznawany
+przez wspolny Service Registry razem z BBS, AI i innymi lokalnymi uslugami.
+
+- `service_id` jest wewnetrznym identyfikatorem uslugi w UltimatePR.
+- `callsign` i `ssid` pozostaja adresem AX.25 i nie zastepuja `service_id`.
+- Lokalny resolver preferuje aktywna usluge lokalna przed wyslaniem ruchu na RF.
+- Gdy NODE jest wylaczony, `node-main` nie jest traktowany jako aktywna trasa i
+  routing zwraca kontrolowany blad `service unavailable`.
+- Zmiana callsign lub SSID nie wymaga przebudowy zaleznosci wewnetrznych, o ile
+  pozostaje ten sam `service_id`.
+
 ## Przyklad prostego noda VHF
 
 ```text

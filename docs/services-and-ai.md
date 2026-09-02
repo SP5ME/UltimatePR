@@ -17,6 +17,18 @@ Service Registry
 
 `SERVICES` lists only registered, enabled services. From NODE use `BBS`, `AI`, or `C BBS` / `C AI`. Direct RF connections to the configured BBS or AI callsign reach the same backend objects. DIGI remains infrastructure and has no dedicated SSID.
 
+## Service Registry / lokalne uslugi
+
+UltimatePR keeps a shared Service Registry for local services. The registry
+matches internal dependencies by `service_id`, while callsign and SSID remain
+the external AX.25 address.
+
+- `node-main`, `bbs-main`, `chat-main`, and `game-main` are the default service IDs.
+- An enabled local service registers itself after startup and unregisters on stop.
+- If a local service is disabled or stopping, the resolver returns `service unavailable` instead of falling through to RF.
+- The registry exposes service state and capabilities so NODE and BBS can ask
+  what a service can do instead of checking whether it is a specific module.
+
 ## Ollama
 
 UltimatePR does not run a model. It calls the remote Ollama `/api/chat` HTTP endpoint:
@@ -60,3 +72,8 @@ ai:
 ```
 
 Each RF/NODE connection owns its conversation context. Context is discarded on disconnect. Calls are bounded by timeout and concurrency; responses have Markdown reduced, a character limit, and RF pages controlled with `M` or `Q`.
+
+Outbound service sessions use the existing AX.25 Hub and Manager through a
+common `Connect`, `Read`, `Write`, `Close`, and `Status` contract. The BBS
+forwarder can use `transport: node` without a parallel AX.25 stack; incoming
+frames return through the normal Dispatcher and internal return path.

@@ -86,6 +86,53 @@ UltimatePR. Poniższa tabela zbiera pola `bbs.*`, `bbs.forwarding.*` oraz
 - `max_body_bytes` jest sprawdzany przed zapisem; zbyt duży payload forwardingowy
   kończy sesję błędem i nie jest zapisywany jako poprawna wiadomość.
 
+## Service Registry / lokalne uslugi
+
+BBS rejestruje sie w runtime pod `bbs.service_id` i jest potem rozpoznawany
+przez wspolny Service Registry, zamiast byc wiazany wylacznie po callsign.
+
+- `service_id` jest wewnetrznym identyfikatorem uslugi i pozostaje stabilny.
+- `callsign` + `ssid` sa adresem AX.25 widocznym dla uzytkownika i sieci.
+- Gdy BBS jest aktywny lokalnie, resolver wybiera lokalny endpoint i nie wysyla
+  ruchu na RF tylko dlatego, ze adres wyglada tak samo.
+- Gdy BBS jest wylaczony, routing zwraca `service unavailable` zamiast
+  probowac niejawnego fallbacku na radio.
+- Duplikat `service_id` lub kolizja adresu z inna aktywna usluga jest bledem
+  konfiguracji.
+
+`transport: node` otwiera sesje przez lokalny `node-main` i istniejący Hub.
+`via_node` pozostaje konkretnym zewnętrznym NODE/hopem. Wspólne wpisy
+`remote_endpoints` można wskazywać przez `endpoint_id`; obsługiwane typy to
+`ax25`, `node` i `tcp`. RF fallback wymaga jawnego `fallback_to_rf: true`.
+
+Przykład endpointu NODE i peera wskazującego go bez powielania trasy:
+
+```yaml
+remote_endpoints:
+  - id: sr5bbs
+    callsign: SR5BBS-8
+    transport: node
+    via_node: SR5NODE-7
+    enabled: true
+bbs:
+  forwarding:
+    peers:
+      - id: sr5bbs
+        endpoint_id: sr5bbs
+        enabled: true
+```
+
+Jawny fallback wymaga istniejącego portu radiowego:
+
+```yaml
+fallback_to_rf: true
+rf_port: radio1
+```
+
+Panel WWW udostępnia odczytowe endpointy `/api/service-registry`,
+`/api/remote-endpoints` oraz `/api/service-router/explain?target=...`.
+Wyjaśnienie trasy nie zestawia połączenia.
+
 ## Reverse forwarding
 
 Po zakończeniu części master wymiany strona inicjująca wysyła `F>`, a druga

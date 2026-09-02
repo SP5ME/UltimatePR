@@ -114,6 +114,7 @@
     c.Terminal.SSID = number('terminalSSID');
     c.Server.Callsign = byId('nodeCallsign')?.value.trim().toUpperCase() || '';
     c.Server.SSID = number('nodeSSID');
+    c.Node.ServiceID = byId('nodeServiceID')?.value.trim() || c.Node.ServiceID;
 	c.Node.Enabled = byId('nodeEnabled')?.checked === true;
     c.Node.Alias = byId('nodeAlias')?.value.trim().toUpperCase() || '';
     c.Node.Listen = byId('nodeListen')?.value.trim() || '';
@@ -130,6 +131,7 @@
     if (typeof collectRows === 'function') c.Node.Routes = collectRows('nodeRouteRows', 'route');
     c.BBS.Callsign = byId('bbsCallsign')?.value.trim().toUpperCase() || '';
     c.BBS.SSID = number('bbsSSID');
+    c.BBS.ServiceID = byId('bbsServiceID')?.value.trim() || c.BBS.ServiceID;
 	if (byId('servicesBBSCallsign')) { c.BBS.Callsign = byId('servicesBBSCallsign').value.trim().toUpperCase(); c.BBS.SSID = number('servicesBSSID', 8); }
 	c.BBS.Enabled = byId('bbsServiceEnabled')?.checked === true;
     c.BBS.Title = byId('bbsTitle')?.value.trim() || '';
@@ -177,8 +179,8 @@
       };
     }
 	c.Experimental = {UPRD:byId('uprdirectExperimental')?.checked===true,Map:byId('mapExperimental')?.checked===true,Services:byId('servicesExperimental')?.checked===true,Node:false,BBS:false,AI:false};
-	c.AI = {...(c.AI||{}),Enabled:byId('aiServiceEnabled')?.checked===true,Callsign:byId('aiCallsign')?.value.trim().toUpperCase()||'',SSID:number('aiSSID',12),Provider:'ollama',URL:byId('aiURL')?.value.trim()||'',Model:byId('aiModel')?.value.trim()||'',TimeoutSeconds:number('aiTimeout',120),MaxResponseChars:number('aiMaxResponse',2000),MaxContext:number('aiMaxContext',20),SystemPrompt:byId('aiSystemPrompt')?.value||'',QueueSize:number('aiQueueSize',8),Concurrency:number('aiConcurrency',1)};
-	c.GameHall = {...(c.GameHall||{}),Enabled:byId('gameHallServiceEnabled')?.checked===true,Callsign:byId('gameHallCallsign')?.value.trim().toUpperCase()||'',SSID:Number(byId('gameHallSSID')?.value)||0,Language:byId('gameHallLanguage')?.value||'pl',InviteTimeoutSeconds:number('gameHallInviteTimeout',120)};
+	c.AI = {...(c.AI||{}),ServiceID:byId('aiServiceID')?.value.trim()||c.AI?.ServiceID||'',Enabled:byId('aiServiceEnabled')?.checked===true,Callsign:byId('aiCallsign')?.value.trim().toUpperCase()||'',SSID:number('aiSSID',12),Provider:'ollama',URL:byId('aiURL')?.value.trim()||'',Model:byId('aiModel')?.value.trim()||'',TimeoutSeconds:number('aiTimeout',120),MaxResponseChars:number('aiMaxResponse',2000),MaxContext:number('aiMaxContext',20),SystemPrompt:byId('aiSystemPrompt')?.value||'',QueueSize:number('aiQueueSize',8),Concurrency:number('aiConcurrency',1)};
+	c.GameHall = {...(c.GameHall||{}),ServiceID:byId('gameHallServiceID')?.value.trim()||c.GameHall?.ServiceID||'',Enabled:byId('gameHallServiceEnabled')?.checked===true,Callsign:byId('gameHallCallsign')?.value.trim().toUpperCase()||'',SSID:Number(byId('gameHallSSID')?.value)||0,Language:byId('gameHallLanguage')?.value||'pl',InviteTimeoutSeconds:number('gameHallInviteTimeout',120)};
     return c;
   }
 

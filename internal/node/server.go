@@ -199,10 +199,7 @@ func (s *Server) runService(command, call, lang string, stream io.Reader, parent
 	if s.Registry == nil {
 		return false
 	}
-	registration, ok := s.Registry.ByAlias(command)
-	if !ok {
-		registration, ok = s.Registry.ByID(command)
-	}
+	registration, ok := s.Registry.Resolve(command)
 	if !ok || !registration.NodeVisible {
 		return false
 	}
@@ -243,6 +240,10 @@ func (s *Server) services(w io.Writer) {
 		return
 	}
 	for _, registration := range s.Registry.ListNodeVisible() {
-		fmt.Fprintf(w, "%-8s %-10s %s\r\n", strings.Join(registration.Aliases, ","), registration.Callsign.String(), registration.Service.ID())
+		caps := strings.Join(registration.Capabilities, ",")
+		if caps == "" {
+			caps = "-"
+		}
+		fmt.Fprintf(w, "%-12s %-10s %-11s %s\r\n", registration.Service.ID(), registration.Callsign.String(), registration.State, caps)
 	}
 }

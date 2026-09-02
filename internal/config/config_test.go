@@ -89,6 +89,34 @@ func TestExampleConfiguration(t *testing.T) {
 	}
 }
 
+func TestFallbackToRFRequiresConfiguredPort(t *testing.T) {
+	_, err := Parse([]byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+remote_endpoints:
+  - {id: remote-bbs, callsign: SP5RMT, transport: ax25, enabled: true, fallback_to_rf: true, rf_port: missing}
+`))
+	if err == nil || !strings.Contains(err.Error(), "rf_port") {
+		t.Fatalf("error = %v, want rf_port validation", err)
+	}
+}
+
+func TestFallbackToRFAcceptsEnabledAX25Port(t *testing.T) {
+	_, err := Parse([]byte(`
+server: {callsign: SP5ME}
+terminal: {callsign: SP5ME}
+web: {listen: 127.0.0.1:8080}
+ports:
+  - {id: vhf, type: kiss-tcp, host: 127.0.0.1, port: 8001, max_frame_bytes: 4096, reconnect_seconds: 5}
+remote_endpoints:
+  - {id: remote-bbs, callsign: SP5RMT, transport: ax25, enabled: true, fallback_to_rf: true, rf_port: vhf}
+`))
+	if err != nil {
+		t.Fatalf("valid RF fallback rejected: %v", err)
+	}
+}
+
 func TestBBSDefaultsAndPeerDirectionCompatibility(t *testing.T) {
 	c, err := Parse([]byte(`
 server: {callsign: SP5ME}

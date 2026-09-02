@@ -356,6 +356,16 @@ func main() {
 		}
 	}
 	radio := session.NewHub(ax25.Address{Callsign: cfg.Terminal.Callsign, SSID: cfg.Terminal.SSID}, outboundSenders)
+	serviceRouter := &session.Router{Hub: radio, Node: nodeRouter, Registry: services, NodeEnabled: nodeEnabled}
+	if !cfg.BBS.Enabled {
+		serviceRouter.UnavailableTargets = append(serviceRouter.UnavailableTargets, ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String())
+	}
+	if !aiEnabled {
+		serviceRouter.UnavailableTargets = append(serviceRouter.UnavailableTargets, ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
+	}
+	if !gameHallEnabled {
+		serviceRouter.UnavailableTargets = append(serviceRouter.UnavailableTargets, ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String())
+	}
 	radio.SetLocalDelivery(func(address ax25.Address) bool {
 		_, ok := services.ByCallsign(address.String())
 		return ok
@@ -632,6 +642,48 @@ func main() {
 		Ports:              terminalPorts,
 		NodeEnabled:        nodeEnabled,
 		NodeListen:         cfg.Node.Listen,
+		ServiceRegistry: func() any {
+			items := make([]map[string]any, 0)
+			for _, reg := range services.Snapshot() {
+				typ := "service"
+				switch strings.ToLower(reg.Service.ID()) {
+				case strings.ToLower(cfg.Node.ServiceID):
+					 typ = "node"
+				case strings.ToLower(cfg.BBS.ServiceID):
+					 typ = "bbs"
+				case strings.ToLower(cfg.AI.ServiceID):
+					 typ = "chat"
+				case strings.ToLower(cfg.GameHall.ServiceID):
+					 typ = "game"
+				}
+				items = append(items, map[string]any{"service_id": reg.Service.ID(), "address": reg.Callsign.String(), "type": typ, "state": reg.State, "enabled": reg.Enabled, "capabilities": reg.Capabilities, "aliases": reg.Aliases})
+			}
+			return items
+		},
+		RemoteEndpoints: func() any {
+			items := make([]map[string]any, 0, len(cfg.RemoteEndpoints))
+			for _, endpoint := range cfg.RemoteEndpoints {
+				items = append(items, map[string]any{"endpoint_id": endpoint.ID, "callsign": endpoint.Callsign, "transport": endpoint.Transport, "host": endpoint.Host, "port": endpoint.Port, "via_node": endpoint.ViaNode, "enabled": endpoint.Enabled, "fallback_to_rf": endpoint.FallbackToRF, "rf_port": endpoint.RFPort})
+			}
+			return items
+		},
+		ExplainRoute: func(target string) any {
+			for _, endpoint := range cfg.RemoteEndpoints {
+				if strings.EqualFold(endpoint.ID, target) {
+					result := serviceRouter.ExplainRoute(endpoint.Callsign)
+					result.Target = target
+					result.Resolution = "remote endpoint"
+					result.Transport = endpoint.Transport
+					result.Via = endpoint.ViaNode
+					result.Destination = endpoint.Callsign
+					if endpoint.Transport == "tcp" {
+						result.Resolution = "remote endpoint (configured TCP)"
+					}
+					return result
+				}
+			}
+			return serviceRouter.ExplainRoute(target)
+		},
 		PortStatus: func() []transport.Status {
 			result := make([]transport.Status, 0, len(ports))
 			for _, p := range ports {
@@ -701,6 +753,15 @@ func main() {
 		if cfg.BBS.Forwarding.Enabled {
 			peers := make([]bbs.ForwardPeer, 0, len(cfg.BBS.Forwarding.Peers))
 			for _, p := range cfg.BBS.Forwarding.Peers {
+				for _, endpoint := range cfg.RemoteEndpoints {
+					if strings.EqualFold(endpoint.ID, p.EndpointID) {
+						p.Callsign = endpoint.Callsign
+						p.Transport = endpoint.Transport
+						p.Host, p.Port, p.ViaNode = endpoint.Host, endpoint.Port, endpoint.ViaNode
+						p.FallbackToRF = endpoint.FallbackToRF
+						p.RFPort = endpoint.RFPort
+					}
+				}
 				send, receive := true, true
 				if p.Send != nil {
 					send = *p.Send
@@ -708,13 +769,13 @@ func main() {
 				if p.Receive != nil {
 					receive = *p.Receive
 				}
-				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, Schedule: p.Schedule, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, ToCalls: p.ToCalls, AtCalls: p.AtCalls, HierarchicalRoutes: p.HierarchicalRoutes, Enabled: p.Enabled, Send: send, Receive: receive, SendConfigured: p.Send != nil, ReceiveConfigured: p.Receive != nil})
+				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, FallbackToRF: p.FallbackToRF, RFPort: p.RFPort, Schedule: p.Schedule, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, ToCalls: p.ToCalls, AtCalls: p.AtCalls, HierarchicalRoutes: p.HierarchicalRoutes, Enabled: p.Enabled, Send: send, Receive: receive, SendConfigured: p.Send != nil, ReceiveConfigured: p.Receive != nil})
 			}
 			planner := &bbs.QueuePlanner{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, MaxPerPeer: cfg.BBS.Forwarding.MaxMessages, Log: log}
 			go planner.Run(ctx)
 			bbsServer.ForwardPeers = peers
 			bbsServer.MaxForwardMessages = cfg.BBS.Forwarding.MaxMessages
-			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, MaxBodyBytes: cfg.BBS.Forwarding.MaxBodyBytes, LocalCall: bbsServer.Node, LocalAddress: bbsServer.Address, Log: log}
+			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, MaxBodyBytes: cfg.BBS.Forwarding.MaxBodyBytes, LocalCall: bbsServer.Node, LocalAddress: bbsServer.Address, Log: log, SessionDialer: serviceRouter}
 			bbsServer.OnMessage = forwarder.Trigger
 			go forwarder.Run(ctx)
 			go func() {
@@ -733,27 +794,27 @@ func main() {
 			}
 		}()
 		log.Info("BBS service started", "listen", cfg.BBS.Listen, "database", cfg.BBS.Database)
-		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "bbs", Handler: func(ctx service.ServiceContext) error {
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: cfg.BBS.ServiceID, Handler: func(ctx service.ServiceContext) error {
 			bbsServer.ServeAX25(ctx.RemoteCall.String(), ctx.Reader, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, Aliases: []string{"BBS"}, Enabled: true, NodeVisible: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}, Aliases: []string{"BBS"}, Capabilities: []string{"interactive", "messaging", "forwarding"}, Enabled: true, NodeVisible: true})
 	}
 	if aiEnabled {
 		provider := &aiservice.Ollama{URL: cfg.AI.URL, Model: cfg.AI.Model, Client: &http.Client{}}
 		aiServer = aiservice.New(provider, aiservice.Config{Timeout: time.Duration(cfg.AI.TimeoutSeconds) * time.Second, MaxContext: cfg.AI.MaxContext, MaxResponseChars: cfg.AI.MaxResponseChars, SystemPrompt: cfg.AI.SystemPrompt, QueueSize: cfg.AI.QueueSize, WelcomeMessage: cfg.AI.WelcomeMessage, ProcessingMessage: cfg.AI.ProcessingMessage, GoodbyeMessage: cfg.AI.GoodbyeMessage, LocalCall: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String()}, cfg.AI.Concurrency)
-		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "ai", Handler: func(ctx service.ServiceContext) error {
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: cfg.AI.ServiceID, Handler: func(ctx service.ServiceContext) error {
 			scanner := lineinput.NewScanner(ctx.Reader)
 			aiServer.ServeSession(ctx.RemoteCall.String(), cfg.Application.Language, scanner, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, Aliases: []string{"AI"}, Enabled: true, NodeVisible: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}, Aliases: []string{"AI"}, Capabilities: []string{"interactive"}, Enabled: true, NodeVisible: true})
 		log.Info("AI service enabled", "provider", cfg.AI.Provider, "model", cfg.AI.Model, "callsign", ax25.Address{Callsign: cfg.AI.Callsign, SSID: cfg.AI.SSID}.String())
 	}
 	if gameHallEnabled {
 		gameHall = gamehall.New(time.Duration(cfg.GameHall.InviteTimeoutSeconds) * time.Second)
-		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "gamehall", Handler: func(ctx service.ServiceContext) error {
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: cfg.GameHall.ServiceID, Handler: func(ctx service.ServiceContext) error {
 			gameHall.ServeAX25(ctx.RemoteCall.String(), cfg.GameHall.Language, ctx.Reader, ctx.Writer)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, Aliases: []string{"GAME", "GAMES", "GRY"}, Enabled: true, NodeVisible: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}, Aliases: []string{"GAME", "GAMES", "GRY"}, Capabilities: []string{"interactive"}, Enabled: true, NodeVisible: true})
 		log.Info("game hall service enabled", "callsign", ax25.Address{Callsign: cfg.GameHall.Callsign, SSID: cfg.GameHall.SSID}.String())
 	}
 	if nodeEnabled {
@@ -826,10 +887,10 @@ func main() {
 				}
 			}
 		}
-		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: "node", Handler: func(ctx service.ServiceContext) error {
+		registerService(service.ServiceRegistration{Service: service.Func{ServiceID: cfg.Node.ServiceID, Handler: func(ctx service.ServiceContext) error {
 			nodeServer.ServeContext(ctx)
 			return nil
-		}}, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, Aliases: []string{cfg.Node.Alias}, Enabled: true})
+		}}, Callsign: ax25.Address{Callsign: cfg.Server.Callsign, SSID: cfg.Server.SSID}, Aliases: []string{cfg.Node.Alias}, Capabilities: []string{"connect", "routing", "interactive-stream"}, Enabled: true})
 		go func() {
 			if err := nodeServer.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Error("node server stopped", "error", err)
