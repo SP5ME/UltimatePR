@@ -37,7 +37,7 @@ func TestTerminalLobbyScreens(t *testing.T) {
 	c.mode = modeGames
 	h.writeGames(c)
 	games := out.String()
-	if !strings.Contains(games, "1. Kolko i krzyzyk") || !strings.Contains(games, "2. Powrot") || strings.Contains(games, "(INVITE)") {
+	if !strings.Contains(games, "1. Kolko i krzyzyk") || !strings.Contains(games, "5. Powrot") || strings.Contains(games, "(INVITE)") {
 		t.Fatalf("games=%q", games)
 	}
 	out.Reset()
@@ -111,7 +111,7 @@ func TestNumberedMenuRouting(t *testing.T) {
 	if !h.handleLobbyCommand(c, strings.ToUpper("games"), []string{"games"}) || c.mode != modeGames {
 		t.Fatal("textual command was not preserved")
 	}
-	if !h.handleGamesCommand(c, "2") || c.mode != modeLobby {
+	if !h.handleGamesCommand(c, "5") || c.mode != modeLobby {
 		t.Fatal("GAMES back number did not return to lobby")
 	}
 }

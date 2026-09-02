@@ -94,7 +94,22 @@ func New(inviteTimeout time.Duration) *Hall {
 		Visibility: StatePublic,
 		Prompt:     "TICTACTOE",
 	}, NewTicTacToe)
+	_ = h.RegisterGame(GameDefinition{ID: ConnectFour, Name: "Connect Four", MinPlayers: 2, MaxPlayers: 2, JoinMode: JoinModeInvite, Visibility: StatePublic, Prompt: "CONNECT4"}, NewConnectFour)
+	_ = h.RegisterGame(GameDefinition{ID: Hangman, NameKey: "game_hangman_name", MinPlayers: 1, MaxPlayers: 6, JoinMode: JoinModeRoom, JoinModes: []JoinMode{JoinModeSolo, JoinModeRoom}, Visibility: StateServerSecret, Prompt: "HANGMAN"}, NewHangman)
+	_ = h.RegisterGame(GameDefinition{ID: WordGame, NameKey: "game_word_name", MinPlayers: 1, MaxPlayers: 6, JoinMode: JoinModeRoom, JoinModes: []JoinMode{JoinModeSolo, JoinModeRoom}, Visibility: StateServerSecret, Prompt: "WORDGAME"}, NewWordGame)
 	return h
+}
+
+func supportsJoinMode(def GameDefinition, mode JoinMode) bool {
+	if def.JoinMode == mode {
+		return true
+	}
+	for _, candidate := range def.JoinModes {
+		if candidate == mode {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Hall) RegisterGame(def GameDefinition, factory Factory) error {
@@ -560,6 +575,7 @@ func (h *Hall) writeGames(c *client) {
 	b.WriteString(language.T(c.lang, "game_games_header"))
 	for i, def := range defs {
 		b.WriteString(fmt.Sprintf("%d. %s\r\n", i+1, definitionName(def, c.lang)))
+		b.WriteString(fmt.Sprintf("   %s\r\n", playerCountText(c.lang, def.MinPlayers, def.MaxPlayers)))
 	}
 	b.WriteString(language.T(c.lang, "game_games_footer"))
 	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(defs)+1))
@@ -627,6 +643,12 @@ func (h *Hall) writeGameLobby(c *client) {
 		heading = language.T(c.lang, "ttt_heading")
 	}
 	b.WriteString(heading + "\r\n\r\n")
+	if supportsJoinMode(def, JoinModeSolo) && supportsJoinMode(def, JoinModeRoom) {
+		b.WriteString(language.T(c.lang, "game_secret_intro"))
+		b.WriteString(language.T(c.lang, "game_secret_help"))
+		c.text(b.String())
+		return
+	}
 	switch def.JoinMode {
 	case JoinModeInvite:
 		b.WriteString(language.T(c.lang, "ttt_goal"))
@@ -704,6 +726,35 @@ func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bo
 		c.mode = modeLobby
 		h.writeLobby(c)
 		return true
+	}
+	if supportsJoinMode(def, JoinModeSolo) && supportsJoinMode(def, JoinModeRoom) {
+		switch cmd {
+		case "1", "START", "PLAY":
+			session, err := h.startSoloSession(c.player.Callsign, def.ID)
+			if err != nil {
+				h.writeError(c, err)
+				return true
+			}
+			c.mode, c.sessionID = modePlay, session.ID
+			h.writeSessionState(c, session, true)
+			return true
+		case "2", "CREATE":
+			room, err := h.CreateRoom(c.player.Callsign, def.ID)
+			if err != nil {
+				h.writeError(c, err)
+				return true
+			}
+			c.mode, c.roomID = modeRoom, room.ID
+			h.writeRoomState(c, room)
+			return true
+		case "3", "ROOMS", "OPEN":
+			h.writeRooms(c, def.ID)
+			return true
+		case "4", "BACK", "Q", "QUIT":
+			c.mode, c.selected = modeLobby, ""
+			h.writeLobby(c)
+			return true
+		}
 	}
 	switch def.JoinMode {
 	case JoinModeInvite:
@@ -960,6 +1011,26 @@ func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
 }
 
 func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line string) bool {
+	if s := h.sessionByClient(c.player.Callsign); s != nil {
+		if s.GameType == TicTacToe && cmd == "1" {
+			cmd = "BOARD"
+		}
+		if s.GameType == TicTacToe && cmd == "2" {
+			cmd = "HELP"
+		}
+		if s.GameType == TicTacToe && cmd == "3" {
+			cmd = "QUIT"
+		}
+		if s.GameType == ConnectFour && cmd == "8" {
+			cmd = "BOARD"
+		}
+		if s.GameType == ConnectFour && cmd == "9" {
+			cmd = "HELP"
+		}
+		if s.GameType == ConnectFour && cmd == "10" {
+			cmd = "QUIT"
+		}
+	}
 	switch cmd {
 	case "HELP", "H", "?":
 		if s := h.sessionByClient(c.player.Callsign); s != nil && s.GameType == TicTacToe {
@@ -1166,7 +1237,7 @@ func (h *Hall) CreateRoom(host string, gameType GameType) (*GameRoom, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	def, ok := h.definitions[gameType]
-	if !ok || def.JoinMode != JoinModeRoom {
+	if !ok || !supportsJoinMode(def, JoinModeRoom) {
 		return nil, ErrInvalidAction
 	}
 	c := h.clients[host]
@@ -1439,6 +1510,38 @@ func (h *Hall) writeSessionState(c *client, s *GameSession, includeIntro bool) {
 			b.WriteString(fmt.Sprintf(language.T(c.lang, "game_turn"), view.CurrentPlayer))
 		}
 		c.text(b.String())
+	case ConnectFour:
+		view, ok := s.GameData.View(c.player.Callsign).(ConnectFourView)
+		if !ok {
+			return
+		}
+		var b strings.Builder
+		if includeIntro {
+			b.WriteString(language.T(c.lang, "connect4_intro"))
+		}
+		b.WriteString(RenderConnectFour(view))
+		if view.Finished {
+			if view.Winner == "" {
+				b.WriteString(language.T(c.lang, "game_draw"))
+			} else {
+				b.WriteString(fmt.Sprintf(language.T(c.lang, "game_winner"), view.Winner))
+			}
+		} else {
+			b.WriteString(fmt.Sprintf(language.T(c.lang, "game_turn"), view.CurrentPlayer))
+		}
+		c.text(b.String())
+	case Hangman:
+		view, ok := s.GameData.View(c.player.Callsign).(HangmanView)
+		if !ok {
+			return
+		}
+		c.text(renderHangman(c.lang, view, includeIntro))
+	case WordGame:
+		view, ok := s.GameData.View(c.player.Callsign).(WordGameView)
+		if !ok {
+			return
+		}
+		c.text(renderWordGame(c.lang, view, includeIntro))
 	default:
 		c.text(fmt.Sprint(s.GameData.View(c.player.Callsign)))
 	}
@@ -1642,6 +1745,13 @@ func definitionPrompt(def GameDefinition) string {
 		return def.Prompt
 	}
 	return strings.ToUpper(strings.ReplaceAll(string(def.ID), "-", ""))
+}
+
+func playerCountText(lang string, min, max int) string {
+	if min == max {
+		return fmt.Sprintf(language.T(lang, "game_player_count"), min)
+	}
+	return fmt.Sprintf(language.T(lang, "game_player_range"), min, max)
 }
 
 func terminalBlock(text string) string {

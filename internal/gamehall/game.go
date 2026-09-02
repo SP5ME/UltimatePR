@@ -24,7 +24,7 @@ const (
 	JoinModeRoom   JoinMode = "room"
 
 	StatePublic       StateVisibility = "public"
-	StateServerSecret  StateVisibility = "server_secret"
+	StateServerSecret StateVisibility = "server_secret"
 
 	SessionInvited      SessionState = "invited"
 	SessionActive       SessionState = "active"
@@ -35,7 +35,7 @@ const (
 	RoomOpen   RoomState = "open"
 	RoomClosed RoomState = "closed"
 
-	InvitationPending InvitationState = "pending"
+	InvitationPending  InvitationState = "pending"
 	InvitationDeclined InvitationState = "declined"
 	InvitationExpired  InvitationState = "expired"
 	InvitationAccepted InvitationState = "accepted"
@@ -78,6 +78,7 @@ type GameDefinition struct {
 	MinPlayers int
 	MaxPlayers int
 	JoinMode   JoinMode
+	JoinModes  []JoinMode
 	Visibility StateVisibility
 	Prompt     string
 }
