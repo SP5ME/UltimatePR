@@ -380,6 +380,27 @@ func TestCleanFirstRunModes(t *testing.T) {
 	}
 }
 
+func TestNodeValidationChecksInterfacesAndNETROM(t *testing.T) {
+	c := New(ModeStation, "N0CALL", "AA00AA", "Example", "en", 0, 7, 8)
+	c.Node.Enabled = true
+	c.Ports = []Port{{ID: "radio", Type: "kiss-tcp", Host: "127.0.0.1", Port: 8001, MaxFrameBytes: 4096, ReconnectSeconds: 5}}
+	c.Node.Neighbors = []NodeNeighbor{{ID: "n1", Enabled: true, Callsign: "SP5ABC-5", Port: "missing", Quality: 200}}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "does not exist or is disabled") {
+		t.Fatalf("missing interface was not rejected clearly: %v", err)
+	}
+	c.Node.Neighbors[0].Port = "radio"
+	c.Node.Routes = []NodeRoute{{Enabled: true, Destination: "KRK01", Via: "n1", Quality: 256}}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "node.routes[0].quality must be 0..255") {
+		t.Fatalf("invalid route quality was not rejected: %v", err)
+	}
+	c.Node.Routes[0].Quality = 180
+	c.Node.NetROMEnabled = true
+	c.Node.NetROMInterval = 0
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "netrom_interval_seconds") {
+		t.Fatalf("invalid NET/ROM interval was not rejected: %v", err)
+	}
+}
+
 func TestInvalidLocatorRejected(t *testing.T) {
 	for _, locator := range []string{"INVALID", "AA00AA00", "KO02A", "KO02A1", "KO02JD1"} {
 		c := New(ModeStation, "N0CALL", locator, "Example", "en", 0, 7, 8)

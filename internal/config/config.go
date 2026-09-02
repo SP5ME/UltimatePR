@@ -661,12 +661,44 @@ func (c Config) Validate() error {
 		if _, _, err := net.SplitHostPort(c.Node.Listen); err != nil {
 			return fmt.Errorf("node.listen: %w", err)
 		}
+		if c.Node.NetROMEnabled {
+			if c.Node.NetROMInterval < 1 || c.Node.NetROMInterval > 86400 {
+				return fmt.Errorf("node.netrom_interval_seconds must be 1..86400 seconds")
+			}
+			if c.Node.NetROMObsolescence < 1 {
+				return fmt.Errorf("node.netrom_obsolescence must be 1..255 routing ticks")
+			}
+			if c.Node.NetROMMinQuality < 1 {
+				return fmt.Errorf("node.netrom_min_quality must be 1..255")
+			}
+			if c.Node.NetROMMaxDestinations < 1 || c.Node.NetROMMaxDestinations > 255 {
+				return fmt.Errorf("node.netrom_max_destinations must be 1..255")
+			}
+		}
+		availableInterfaces := map[string]bool{}
+		for _, p := range c.Ports {
+			if p.Enabled != nil && !*p.Enabled {
+				continue
+			}
+			availableInterfaces[p.ID] = true
+			for _, logicalID := range p.Channels {
+				availableInterfaces[logicalID] = true
+			}
+		}
+		seenNeighbors := map[string]bool{}
 		for i, n := range c.Node.Neighbors {
 			if !n.Enabled {
 				continue
 			}
-			if n.ID == "" || n.Port == "" || n.Quality < 0 || n.Quality > 255 {
-				return fmt.Errorf("node.neighbors[%d]: invalid id, port or quality", i)
+			if n.ID == "" || seenNeighbors[n.ID] {
+				return fmt.Errorf("node.neighbors[%d].id: value is required and must be unique", i)
+			}
+			seenNeighbors[n.ID] = true
+			if n.Port == "" || !availableInterfaces[n.Port] {
+				return fmt.Errorf("node.neighbors[%d].port: interface %q does not exist or is disabled", i, n.Port)
+			}
+			if n.Quality < 0 || n.Quality > 255 {
+				return fmt.Errorf("node.neighbors[%d].quality must be 0..255", i)
 			}
 			if _, err := parseStationText(n.Callsign); err != nil {
 				return fmt.Errorf("node.neighbors[%d]: %w", i, err)
@@ -679,8 +711,17 @@ func (c Config) Validate() error {
 			}
 		}
 		for i, r := range c.Node.Routes {
-			if r.Enabled && !active[r.Via] {
-				return fmt.Errorf("node.routes[%d]: unknown or disabled neighbor %q", i, r.Via)
+			if !r.Enabled {
+				continue
+			}
+			if strings.TrimSpace(r.Destination) == "" {
+				return fmt.Errorf("node.routes[%d].destination: destination is required", i)
+			}
+			if !active[r.Via] {
+				return fmt.Errorf("node.routes[%d].via: neighbor %q does not exist or is disabled", i, r.Via)
+			}
+			if r.Quality < 0 || r.Quality > 255 {
+				return fmt.Errorf("node.routes[%d].quality must be 0..255", i)
 			}
 		}
 	}

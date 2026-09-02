@@ -68,6 +68,7 @@ type Config struct {
 	Ports              []string
 	PortStatus         func() []transport.Status
 	NodeEnabled        bool
+	NodeListen         string
 	Radio              *session.Hub
 	MHeard             *mheard.Store
 	History            *history.Store
@@ -1292,8 +1293,12 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 			selectedCodec, _ := terminalcodec.New(terminalcodec.Default)
 			terminalCodec = selectedCodec
 			terminalTXCodec, _ = terminalcodec.New(terminalcodec.Default)
-			if m.Mode != "tnc" && m.Mode != "incoming" {
+			if m.Mode != "tnc" && m.Mode != "node" && m.Mode != "incoming" {
 				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Wybierz port AX.25."})
+				continue
+			}
+			if m.Mode == "node" && !s.cfg.NodeEnabled {
+				_ = out.write(serverMessage{Type: "state", State: "error", Error: "Lokalny NODE jest wyłączony."})
 				continue
 			}
 			if m.Mode == "tnc" && strings.TrimSpace(m.Target) == "" {
@@ -1398,6 +1403,34 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request) {
 						_ = out.write(serverMessage{Type: "state", State: "error", Error: err.Error()})
 					}
 				}()
+				continue
+			}
+			if m.Mode == "node" {
+				if strings.TrimSpace(s.cfg.NodeListen) == "" {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Adres lokalnego NODE nie jest skonfigurowany."})
+					continue
+				}
+				dialCtx, dialCancel := context.WithTimeout(r.Context(), 10*time.Second)
+				conn, err := (&net.Dialer{KeepAlive: 30 * time.Second}).DialContext(dialCtx, "tcp", s.cfg.NodeListen)
+				dialCancel()
+				if err != nil {
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Nie można połączyć z lokalnym NODE: " + err.Error()})
+					continue
+				}
+				remote = conn
+				historyStation, historyPort, historyDigi, historyConnected = "Lokalny NODE", s.cfg.NodeListen, "", true
+				if s.cfg.History != nil {
+					historySession = s.cfg.History.Connected("node", historyStation, historyPort, "")
+				}
+				if _, err := io.WriteString(conn, callsign(s.cfg.TerminalCallsign, s.cfg.TerminalSSID)+"\r"); err != nil {
+					closeRemote()
+					_ = out.write(serverMessage{Type: "state", State: "error", Error: "Nie można rozpocząć sesji lokalnego NODE: " + err.Error()})
+					continue
+				}
+				remoteDone = make(chan struct{})
+				done := remoteDone
+				_ = out.write(serverMessage{Type: "state", State: "connected", Data: "Połączono lokalnie z NODE\r\n"})
+				go s.copyTelnetToWS(out, conn, done, "node", historyStation, historyPort, historySession)
 				continue
 			}
 		case "data":
