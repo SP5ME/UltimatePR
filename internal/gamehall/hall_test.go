@@ -347,3 +347,74 @@ func TestRoomHostCloseReturnsPlayersToLobby(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectFourUsesSharedInvitationFlow(t *testing.T) {
+	h, _, _ := connectedHall(t)
+	inv, err := h.Invite("SP5AAA", "SQ4BBB", ConnectFour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Accept("SQ4BBB", inv.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.Invitations("SQ4BBB")) != 0 {
+		t.Fatal("invitation was not removed")
+	}
+	if len(h.sessions) != 1 {
+		t.Fatalf("sessions=%d", len(h.sessions))
+	}
+	for _, p := range h.Players() {
+		if p.Status != PlayerPlaying || p.GameType != ConnectFour {
+			t.Fatalf("player=%+v", p)
+		}
+	}
+}
+
+func TestConnectFourColumnIsNotMenuCommand(t *testing.T) {
+	h := New(0)
+	if err := h.Connect("SP5AAA", "pl", new(bytes.Buffer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Connect("SQ4BBB", "pl", new(bytes.Buffer)); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	session, err := h.startSessionLocked(ConnectFour, []string{"SP5AAA", "SQ4BBB"})
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Action("SP5AAA", "4"); err != nil {
+		t.Fatalf("column 4 was intercepted: %v", err)
+	}
+	if session.GameData.View("SP5AAA").(ConnectFourView).Board[38] != 'X' {
+		t.Fatal("piece did not fall into column 4")
+	}
+}
+
+func TestActiveSystemCommandsRequireSlash(t *testing.T) {
+	h := New(0)
+	var out bytes.Buffer
+	if err := h.Connect("SP5AAA", "pl", &out); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Connect("SQ4BBB", "pl", new(bytes.Buffer)); err != nil {
+		t.Fatal(err)
+	}
+	h.mu.Lock()
+	_, err := h.startSessionLocked(TicTacToe, []string{"SP5AAA", "SQ4BBB"})
+	h.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.client("SP5AAA")
+	if !h.handleSessionCommand(c, "", nil, "/help") || !bytes.Contains(out.Bytes(), []byte("/board")) {
+		t.Fatal("slash help not handled")
+	}
+	if !h.handleSessionCommand(c, "", nil, "/quit") {
+		t.Fatal("slash quit not handled")
+	}
+	if got := h.sessionByClient("SP5AAA"); got == nil || got.State != SessionCancelled {
+		t.Fatal("session was not cancelled")
+	}
+}

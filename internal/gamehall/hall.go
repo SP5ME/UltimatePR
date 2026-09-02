@@ -23,6 +23,7 @@ const (
 	modeGame         clientMode = "game"
 	modeInvites      clientMode = "invites"
 	modePlayers      clientMode = "players"
+	modeRooms        clientMode = "rooms"
 	modeRoom         clientMode = "room"
 	modePlay         clientMode = "play"
 	modeInviteTarget clientMode = "invite_target"
@@ -491,6 +492,10 @@ func (h *Hall) Serve(call, lang string, in *bufio.Scanner, w io.Writer) {
 			if h.handlePlayersCommand(c, cmd) {
 				continue
 			}
+		case modeRooms:
+			if h.handleRoomListCommand(c, cmd, fields) {
+				continue
+			}
 		case modeRoom:
 			if h.handleRoomCommand(c, cmd, fields) {
 				continue
@@ -545,6 +550,8 @@ func (h *Hall) prompt(c *client) string {
 		return "INVITES"
 	case modePlayers:
 		return "PLAYERS"
+	case modeRooms:
+		return "ROOMS"
 	case modeRoom:
 		if c.roomID != "" {
 			return "ROOM#" + c.roomID
@@ -622,10 +629,11 @@ func (h *Hall) writeRooms(c *client, gameType GameType) {
 		return
 	}
 	b.WriteString(language.T(c.lang, "game_rooms_columns"))
-	for _, room := range rooms {
-		b.WriteString(fmt.Sprintf("%-4s %-8s %d/%d\r\n", room.ID, room.Host, len(room.Players), h.roomLimit(room.GameType)))
+	for i, room := range rooms {
+		b.WriteString(fmt.Sprintf("%d. #%s %-8s %d/%d\r\n", i+1, room.ID, room.Host, len(room.Players), h.roomLimit(room.GameType)))
 	}
 	b.WriteString(language.T(c.lang, "game_rooms_footer"))
+	b.WriteString(fmt.Sprintf(language.T(c.lang, "game_back_option"), len(rooms)+1))
 	c.text(b.String())
 }
 
@@ -748,6 +756,7 @@ func (h *Hall) handleGameLobbyCommand(c *client, cmd string, fields []string) bo
 			h.writeRoomState(c, room)
 			return true
 		case "3", "ROOMS", "OPEN":
+			c.mode = modeRooms
 			h.writeRooms(c, def.ID)
 			return true
 		case "4", "BACK", "Q", "QUIT":
@@ -973,6 +982,16 @@ func (h *Hall) handleInvitationShortcut(c *client, cmd string, fields []string) 
 }
 
 func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
+	if c.player.Status == PlayerInRoom {
+		switch cmd {
+		case "1":
+			cmd = "START"
+		case "2":
+			cmd = "LEAVE"
+		case "3":
+			cmd = "BACK"
+		}
+	}
 	room, ok := h.Room(c.roomID)
 	if !ok {
 		c.mode = modeLobby
@@ -1010,6 +1029,49 @@ func (h *Hall) handleRoomCommand(c *client, cmd string, fields []string) bool {
 	return false
 }
 
+func (h *Hall) handleRoomListCommand(c *client, cmd string, fields []string) bool {
+	if cmd == "BACK" || cmd == "Q" || cmd == "QUIT" {
+		c.mode = modeGame
+		h.writeGameLobby(c)
+		return true
+	}
+	rooms := h.Rooms(c.selected)
+	if cmd == "JOIN" {
+		if len(fields) != 2 {
+			c.text(language.T(c.lang, "game_room_join_usage"))
+			return true
+		}
+		room, err := h.JoinRoom(c.player.Callsign, fields[1])
+		if err != nil {
+			h.writeError(c, err)
+			return true
+		}
+		c.mode, c.roomID = modeRoom, room.ID
+		h.writeRoomState(c, room)
+		return true
+	}
+	idx, ok := parseMenuIndex(cmd)
+	if !ok {
+		return false
+	}
+	if idx == len(rooms)+1 {
+		c.mode = modeGame
+		h.writeGameLobby(c)
+		return true
+	}
+	if idx < 1 || idx > len(rooms) {
+		return false
+	}
+	room, err := h.JoinRoom(c.player.Callsign, rooms[idx-1].ID)
+	if err != nil {
+		h.writeError(c, err)
+		return true
+	}
+	c.mode, c.roomID = modeRoom, room.ID
+	h.writeRoomState(c, room)
+	return true
+}
+
 func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line string) bool {
 	if !strings.HasPrefix(strings.TrimSpace(line), "/") {
 		h.writeError(c, h.Action(c.player.Callsign, line))
@@ -1029,6 +1091,8 @@ func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line
 			c.text(language.T(c.lang, "hangman_help"))
 		} else if s != nil && s.GameType == WordGame {
 			c.text(language.T(c.lang, "word_help"))
+		} else if s != nil && s.GameType == ConnectFour {
+			c.text(language.T(c.lang, "connect4_help"))
 		} else {
 			c.text(language.T(c.lang, "game_session_help"))
 		}
@@ -1045,7 +1109,7 @@ func (h *Hall) handleSessionCommand(c *client, cmd string, fields []string, line
 		guess := strings.TrimSpace(strings.TrimPrefix(commandLine, commandFields[0]))
 		h.writeError(c, h.Action(c.player.Callsign, "H "+guess))
 		return true
-	case "QUIT", "Q", "BACK":
+	case "QUIT", "Q":
 		h.Close(c.player.Callsign)
 		c.mode = modeLobby
 		c.selected = ""
@@ -1517,6 +1581,7 @@ func (h *Hall) writeSessionState(c *client, s *GameSession, includeIntro bool) {
 		var b strings.Builder
 		if includeIntro {
 			b.WriteString(language.T(c.lang, "connect4_intro"))
+			b.WriteString(language.T(c.lang, "connect4_active_actions"))
 		}
 		b.WriteString(RenderConnectFour(view))
 		if view.Finished {
@@ -1556,8 +1621,8 @@ func (h *Hall) writeRoomState(c *client, room *GameRoom) {
 	b.WriteString(fmt.Sprintf("%s #%s\r\n", definitionName(def, c.lang), room.ID))
 	b.WriteString(fmt.Sprintf("%s: %s\r\n", language.T(c.lang, "game_room_host"), room.Host))
 	b.WriteString(fmt.Sprintf("%s: %d/%d\r\n", language.T(c.lang, "game_room_players"), len(room.Players), h.roomLimit(room.GameType)))
-	for i, p := range room.Players {
-		b.WriteString(fmt.Sprintf("%d. %s\r\n", i+1, p))
+	for _, p := range room.Players {
+		b.WriteString(fmt.Sprintf("%s\r\n", p))
 	}
 	b.WriteString(language.T(c.lang, "game_room_active_help"))
 	c.text(b.String())
