@@ -55,10 +55,10 @@ type UserProfile struct {
 // separate from the local profile: a profile is operator-supplied state, while
 // White Pages may later be learned from a BBS exchange.
 type WhitePageEntry struct {
-	Callsign    string    `json:"callsign"`
-	HomeBBS     string    `json:"home_bbs"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Source      string    `json:"source"`
+	Callsign  string    `json:"callsign"`
+	HomeBBS   string    `json:"home_bbs"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Source    string    `json:"source"`
 }
 
 type dataFile struct {
@@ -72,13 +72,14 @@ type dataFile struct {
 }
 
 type Store struct {
-	mu   sync.RWMutex
-	path string
-	data dataFile
+	mu           sync.RWMutex
+	path         string
+	data         dataFile
+	maxBodyBytes int
 }
 
 func Open(path string) (*Store, error) {
-	s := &Store{path: path, data: dataFile{SchemaVersion: 3, NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}, WhitePages: map[string]WhitePageEntry{}}}
+	s := &Store{path: path, maxBodyBytes: 131072, data: dataFile{SchemaVersion: 3, NextID: 1, Users: map[string]string{}, Languages: map[string]string{}, Profiles: map[string]UserProfile{}, WhitePages: map[string]WhitePageEntry{}}}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -110,6 +111,16 @@ func Open(path string) (*Store, error) {
 		}
 	}
 	return s, nil
+}
+
+// SetMaxBodyBytes applies the configured storage guard to newly stored mail.
+// A non-positive value keeps the safe default.
+func (s *Store) SetMaxBodyBytes(limit int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit > 0 {
+		s.maxBodyBytes = limit
+	}
 }
 
 func (s *Store) migrateTAPRIdentifiers() bool {
@@ -314,6 +325,10 @@ func (s *Store) Send(kind, from, to, subject, body string) (Message, error) {
 	if len(language.ASCII(strings.TrimSpace(subject))) < 1 || len(language.ASCII(strings.TrimSpace(subject))) > 79 {
 		return Message{}, errors.New("subject length must be 1..79 ASCII characters")
 	}
+	body = language.ASCII(body)
+	if len(body) > s.bodyLimitBytes() {
+		return Message{}, fmt.Errorf("message body exceeds max_body_bytes (%d)", s.bodyLimitBytes())
+	}
 	if (kind == "P" || kind == "T") && at != "" {
 		if _, err := ParseHierarchicalAddress(at); err != nil {
 			return Message{}, fmt.Errorf("invalid hierarchical BBS address: %w", err)
@@ -343,7 +358,7 @@ func (s *Store) Send(kind, from, to, subject, body string) (Message, error) {
 	if kind == "B" {
 		bid = mid
 	}
-	m := Message{ID: id, Type: kind, From: from, To: to, At: at, Distribution: distribution, MID: mid, BID: bid, Subject: language.ASCII(strings.TrimSpace(subject)), Body: language.ASCII(body), CreatedAt: now}
+	m := Message{ID: id, Type: kind, From: from, To: to, At: at, Distribution: distribution, MID: mid, BID: bid, Subject: language.ASCII(strings.TrimSpace(subject)), Body: body, CreatedAt: now}
 	s.data.NextID++
 	s.data.Messages = append(s.data.Messages, m)
 	return m, s.saveLocked()
@@ -419,6 +434,10 @@ func (s *Store) Import(m Message) (Message, bool, error) {
 	if len(language.ASCII(strings.TrimSpace(m.Subject))) < 1 || len(language.ASCII(strings.TrimSpace(m.Subject))) > 79 {
 		return Message{}, false, errors.New("subject length must be 1..79 ASCII characters")
 	}
+	m.Body = language.ASCII(m.Body)
+	if len(m.Body) > s.bodyLimitBytes() {
+		return Message{}, false, fmt.Errorf("message body exceeds max_body_bytes (%d)", s.bodyLimitBytes())
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if m.MID == "" {
@@ -441,6 +460,57 @@ func (s *Store) Import(m Message) (Message, bool, error) {
 	}
 	s.data.Messages = append(s.data.Messages, m)
 	return m, false, s.saveLocked()
+}
+
+func (s *Store) bodyLimitBytes() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.maxBodyBytes < 1 {
+		return 131072
+	}
+	return s.maxBodyBytes
+}
+
+// RemoveExpired removes old bulletins and personal/traffic mail. Messages
+// with any undelivered forwarding state are retained until delivery succeeds.
+func (s *Store) RemoveExpired(now time.Time, bulletinDays, personalDays int) (bulletins, personal int, err error) {
+	if bulletinDays < 1 || personalDays < 1 {
+		return 0, 0, nil
+	}
+	cutB, cutP := now.Add(-time.Duration(bulletinDays)*24*time.Hour), now.Add(-time.Duration(personalDays)*24*time.Hour)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.data.Messages[:0]
+	for _, m := range s.data.Messages {
+		cutoff := cutP
+		if m.Type == "B" {
+			cutoff = cutB
+		}
+		expired := !m.CreatedAt.IsZero() && m.CreatedAt.Before(cutoff)
+		if expired && (m.Type == "B" || m.Type == "P" || m.Type == "T") && !hasUndeliveredForward(m.Forward) {
+			if m.Type == "B" {
+				bulletins++
+			} else {
+				personal++
+			}
+			continue
+		}
+		kept = append(kept, m)
+	}
+	if bulletins == 0 && personal == 0 {
+		return 0, 0, nil
+	}
+	s.data.Messages = kept
+	return bulletins, personal, s.saveLocked()
+}
+
+func hasUndeliveredForward(states map[string]ForwardState) bool {
+	for _, state := range states {
+		if state.Status != "delivered" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Message) IsRead(call string) bool {

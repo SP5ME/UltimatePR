@@ -51,6 +51,7 @@ type Forwarder struct {
 	Peers                                    []ForwardPeer
 	Interval, ConnectTimeout, SessionTimeout time.Duration
 	MaxMessages                              int
+	MaxBodyBytes                             int
 	LocalCall                                string
 	LocalAddress                             string
 	Log                                      *slog.Logger
@@ -97,6 +98,12 @@ func (f *Forwarder) Run(ctx context.Context) {
 }
 
 func (f *Forwarder) forwardPeer(ctx context.Context, p ForwardPeer) error {
+	if !peerInSchedule(p, time.Now()) {
+		if f.Log != nil {
+			f.Log.Info("BBS forwarding peer outside schedule window", "peer", p.ID)
+		}
+		return nil
+	}
 	if !p.CanSend() {
 		return nil
 	}
@@ -118,12 +125,25 @@ func (f *Forwarder) forwardPeer(ctx context.Context, p ForwardPeer) error {
 	return f.exchangeTAPRMaster(c, p.ID, q)
 }
 
-func readUntilTAPREOM(r *bufio.Reader) ([]byte, error) {
-	b, err := r.ReadBytes(0x1a)
-	if err != nil {
-		return nil, err
+func readUntilTAPREOM(r *bufio.Reader, maxBodyBytes int) ([]byte, error) {
+	maxPayload := maxBodyBytes + 64*1024
+	if maxPayload < 64*1024 {
+		maxPayload = 64 * 1024
 	}
-	b = b[:len(b)-1]
+	b := make([]byte, 0, minInt(maxPayload, 4096))
+	for {
+		value, err := r.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		if value == 0x1a {
+			break
+		}
+		if len(b) >= maxPayload {
+			return nil, fmt.Errorf("message payload exceeds max_body_bytes (%d)", maxBodyBytes)
+		}
+		b = append(b, value)
+	}
 	next, err := r.ReadByte()
 	if err != nil {
 		return nil, err
@@ -138,6 +158,23 @@ func readUntilTAPREOM(r *bufio.Reader) ([]byte, error) {
 		}
 	}
 	return b, nil
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (f *Forwarder) bodyLimitBytes() int {
+	if f.MaxBodyBytes > 0 {
+		return f.MaxBodyBytes
+	}
+	if f.Store != nil {
+		return f.Store.bodyLimitBytes()
+	}
+	return 131072
 }
 
 func readTAPRLine(r *bufio.Reader) (string, error) {

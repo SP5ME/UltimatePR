@@ -24,6 +24,7 @@ type Server struct {
 	NewUserMessage, InfoMessage, Prompt    string
 	SysopCallsign                          string
 	MaxSessions                            int
+	MaxBodyBytes                           int
 	ForwardPeers                           []ForwardPeer
 	MaxForwardMessages                     int
 	Store                                  *Store
@@ -74,8 +75,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) Serve(r io.Reader, w io.Writer) {
-	in := lineinput.NewScanner(r)
-	in.Buffer(make([]byte, 1024), 64*1024)
+	in := newScanner(r, s.bodyLimitBytes())
 	lang := language.Normalize(s.Language)
 	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n%s", s.Title, s.Node, BuildVersion, language.T(lang, "callsign"))
 	if !in.Scan() {
@@ -101,8 +101,7 @@ func (s *Server) ServeAX25(call string, r io.Reader, w io.Writer) {
 		return
 	}
 	defer s.releaseSession()
-	in := lineinput.NewScanner(r)
-	in.Buffer(make([]byte, 1024), 64*1024)
+	in := newScanner(r, s.bodyLimitBytes())
 	lang := language.Normalize(s.Language)
 	fmt.Fprintf(w, "\r\n%s [%s] UltimatePR %s\r\n", s.Title, s.Node, BuildVersion)
 	s.ServeSessionLanguage(call, lang, in, w)
@@ -521,14 +520,12 @@ func (s *Server) compose(in *bufio.Scanner, w io.Writer, from, kind, to, lang st
 	}
 	sub := strings.TrimSpace(in.Text())
 	fmt.Fprint(w, language.T(lang, "body"))
-	var lines []string
-	for in.Scan() {
-		if strings.EqualFold(strings.TrimSpace(in.Text()), "/EX") {
-			break
-		}
-		lines = append(lines, in.Text())
+	body, ok := scanBody(in, s.bodyLimitBytes())
+	if !ok {
+		fmt.Fprintf(w, language.T(lang, "error"), fmt.Errorf("message body exceeds max_body_bytes (%d)", s.bodyLimitBytes()))
+		return
 	}
-	m, e := s.Store.Send(kind, from, to, sub, strings.Join(lines, "\r\n"))
+	m, e := s.Store.Send(kind, from, to, sub, body)
 	if e != nil {
 		fmt.Fprintf(w, language.T(lang, "error"), e)
 		return
@@ -542,14 +539,12 @@ func (s *Server) compose(in *bufio.Scanner, w io.Writer, from, kind, to, lang st
 func (s *Server) composePreset(in *bufio.Scanner, w io.Writer, from, to, subject, lang string) {
 	fmt.Fprintf(w, "%s%s\r\n", language.T(lang, "subject"), subject)
 	fmt.Fprint(w, language.T(lang, "body"))
-	var lines []string
-	for in.Scan() {
-		if strings.EqualFold(strings.TrimSpace(in.Text()), "/EX") {
-			break
-		}
-		lines = append(lines, in.Text())
+	body, ok := scanBody(in, s.bodyLimitBytes())
+	if !ok {
+		fmt.Fprintf(w, language.T(lang, "error"), fmt.Errorf("message body exceeds max_body_bytes (%d)", s.bodyLimitBytes()))
+		return
 	}
-	m, e := s.Store.Send("P", from, to, subject, strings.Join(lines, "\r\n"))
+	m, e := s.Store.Send("P", from, to, subject, body)
 	if e != nil {
 		fmt.Fprintf(w, language.T(lang, "error"), e)
 		return
@@ -558,4 +553,49 @@ func (s *Server) composePreset(in *bufio.Scanner, w io.Writer, from, to, subject
 		s.OnMessage()
 	}
 	fmt.Fprintf(w, language.T(lang, "saved"), m.ID)
+}
+
+func (s *Server) bodyLimitBytes() int {
+	if s.MaxBodyBytes > 0 {
+		return s.MaxBodyBytes
+	}
+	if s.Store != nil {
+		return s.Store.bodyLimitBytes()
+	}
+	return 131072
+}
+
+func newScanner(r io.Reader, bodyLimit int) *bufio.Scanner {
+	in := lineinput.NewScanner(r)
+	max := bodyLimit + 1024
+	if max < 64*1024 {
+		max = 64 * 1024
+	}
+	in.Buffer(make([]byte, 1024), max)
+	return in
+}
+
+func scanBody(in *bufio.Scanner, limit int) (string, bool) {
+	var lines []string
+	used := 0
+	valid := true
+	for in.Scan() {
+		line := in.Text()
+		if strings.EqualFold(strings.TrimSpace(line), "/EX") {
+			return strings.Join(lines, "\r\n"), valid
+		}
+		if valid {
+			used += len(line)
+			if len(lines) > 0 {
+				used += 2
+			}
+			if used > limit {
+				valid = false
+				lines = nil
+			} else {
+				lines = append(lines, line)
+			}
+		}
+	}
+	return strings.Join(lines, "\r\n"), false
 }

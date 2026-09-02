@@ -417,6 +417,9 @@ func (c *Config) applyDefaults(hasExperimental, hasGameHallSSID bool) {
 	if c.BBS.Housekeeping.LogRetentionDays == 0 {
 		c.BBS.Housekeeping.LogRetentionDays = 30
 	}
+	if c.BBS.Forwarding.MaxBodyBytes == 0 {
+		c.BBS.Forwarding.MaxBodyBytes = 131072
+	}
 	if strings.TrimSpace(c.BBS.GoodbyeMessage) == "" {
 		c.BBS.GoodbyeMessage = "73 {REMOTE}, BBS {CALL}."
 	}
@@ -737,6 +740,9 @@ func (c Config) Validate() error {
 		}
 		if c.BBS.Housekeeping.BulletinRetentionDays < 1 || c.BBS.Housekeeping.PersonalRetentionDays < 1 || c.BBS.Housekeeping.LogRetentionDays < 1 {
 			return fmt.Errorf("bbs.housekeeping retention values must be positive")
+		}
+		if c.BBS.Forwarding.MaxBodyBytes < 1 || c.BBS.Forwarding.MaxBodyBytes > 16*1024*1024 {
+			return fmt.Errorf("bbs.forwarding.max_body_bytes must be 1..16777216")
 		}
 		if c.BBS.Forwarding.Enabled {
 			if _, _, err := net.SplitHostPort(c.BBS.ForwardListen); err != nil {

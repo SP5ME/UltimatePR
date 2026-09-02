@@ -695,7 +695,9 @@ func main() {
 			os.Exit(2)
 		}
 		bbsStore = store
-		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, NewUserMessage: cfg.BBS.NewUserMessage, InfoMessage: cfg.BBS.InfoMessage, Prompt: cfg.BBS.Prompt, SysopCallsign: cfg.BBS.SysopCallsign, MaxSessions: cfg.BBS.MaxSessions, Store: store, Log: log}
+		go bbs.RunHousekeeping(ctx, store, cfg.BBS.Housekeeping.BulletinRetentionDays, cfg.BBS.Housekeeping.PersonalRetentionDays, log)
+		store.SetMaxBodyBytes(cfg.BBS.Forwarding.MaxBodyBytes)
+		bbsServer = &bbs.Server{Listen: cfg.BBS.Listen, Title: cfg.BBS.Title, Node: ax25.Address{Callsign: cfg.BBS.Callsign, SSID: cfg.BBS.SSID}.String(), Address: cfg.BBS.Address, Language: cfg.BBS.Language, WelcomeMessage: cfg.BBS.WelcomeMessage, GoodbyeMessage: cfg.BBS.GoodbyeMessage, NewUserMessage: cfg.BBS.NewUserMessage, InfoMessage: cfg.BBS.InfoMessage, Prompt: cfg.BBS.Prompt, SysopCallsign: cfg.BBS.SysopCallsign, MaxSessions: cfg.BBS.MaxSessions, MaxBodyBytes: cfg.BBS.Forwarding.MaxBodyBytes, Store: store, Log: log}
 		if cfg.BBS.Forwarding.Enabled {
 			peers := make([]bbs.ForwardPeer, 0, len(cfg.BBS.Forwarding.Peers))
 			for _, p := range cfg.BBS.Forwarding.Peers {
@@ -706,13 +708,13 @@ func main() {
 				if p.Receive != nil {
 					receive = *p.Receive
 				}
-				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, ToCalls: p.ToCalls, AtCalls: p.AtCalls, HierarchicalRoutes: p.HierarchicalRoutes, Enabled: p.Enabled, Send: send, Receive: receive, SendConfigured: p.Send != nil, ReceiveConfigured: p.Receive != nil})
+				peers = append(peers, bbs.ForwardPeer{ID: p.ID, Callsign: p.Callsign, Transport: p.Transport, Host: p.Host, Port: p.Port, ViaNode: p.ViaNode, Schedule: p.Schedule, PrivateRoutes: p.PrivateRoutes, BulletinScopes: p.BulletinScopes, ToCalls: p.ToCalls, AtCalls: p.AtCalls, HierarchicalRoutes: p.HierarchicalRoutes, Enabled: p.Enabled, Send: send, Receive: receive, SendConfigured: p.Send != nil, ReceiveConfigured: p.Receive != nil})
 			}
 			planner := &bbs.QueuePlanner{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, MaxPerPeer: cfg.BBS.Forwarding.MaxMessages, Log: log}
 			go planner.Run(ctx)
 			bbsServer.ForwardPeers = peers
 			bbsServer.MaxForwardMessages = cfg.BBS.Forwarding.MaxMessages
-			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, LocalCall: bbsServer.Node, LocalAddress: bbsServer.Address, Log: log}
+			forwarder := &bbs.Forwarder{Store: store, Peers: peers, Interval: time.Duration(cfg.BBS.Forwarding.IntervalMinutes) * time.Minute, ConnectTimeout: time.Duration(cfg.BBS.Forwarding.ConnectTimeoutSeconds) * time.Second, SessionTimeout: time.Duration(cfg.BBS.Forwarding.SessionTimeoutSeconds) * time.Second, MaxMessages: cfg.BBS.Forwarding.MaxMessages, MaxBodyBytes: cfg.BBS.Forwarding.MaxBodyBytes, LocalCall: bbsServer.Node, LocalAddress: bbsServer.Address, Log: log}
 			bbsServer.OnMessage = forwarder.Trigger
 			go forwarder.Run(ctx)
 			go func() {

@@ -178,6 +178,34 @@ func TestNodeConfigurationHasDedicatedPanel(t *testing.T) {
 	}
 }
 
+func TestBBSManualHasDedicatedPanelAndShortcut(t *testing.T) {
+	markup, err := assets.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	appJS, err := assets.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bbsManual, err := assets.ReadFile("static/bbs-manual.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"id=\"infoBBSManualTab\"", "id=\"infoBBSManualPanel\"", "id=\"bbsManualContent\"", "id=\"openBBSManual\"", "bbs-manual.js"} {
+		if !bytes.Contains(markup, []byte(required)) && !bytes.Contains(appJS, []byte(required)) && !bytes.Contains(bbsManual, []byte(required)) {
+			t.Fatalf("BBS manual assets do not contain %q", required)
+		}
+	}
+	for _, required := range []string{"showInfoPart('bbs')", "renderBBSManual", "infoBBSManualTab", "infoBBSManualPanel", "bbsManualContent", "openBBSManual"} {
+		if !bytes.Contains(appJS, []byte(required)) && !bytes.Contains(markup, []byte(required)) && !bytes.Contains(bbsManual, []byte(required)) {
+			t.Fatalf("BBS manual wiring does not contain %q", required)
+		}
+	}
+	if !bytes.Contains(markup, []byte("id=\"infoNodeManualTab\"")) || !bytes.Contains(markup, []byte("id=\"infoNodeManualPanel\"")) {
+		t.Fatal("NODE manual entries disappeared from the info view")
+	}
+}
+
 func TestStatusReportsDirectAIService(t *testing.T) {
 	s := New(Config{AICallsign: "SP5ME", AISSID: 12, AIEnabled: true}, nil)
 	recorder := httptest.NewRecorder()

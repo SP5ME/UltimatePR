@@ -154,7 +154,7 @@ func (s *Server) serveTAPRForward(conn io.ReadWriter) error {
 		if err != nil {
 			return err
 		}
-		raw, err := readUntilTAPREOM(r)
+	raw, err := readUntilTAPREOM(r, s.bodyLimitBytes())
 		if err != nil {
 			return err
 		}
@@ -281,7 +281,7 @@ func (f *Forwarder) receiveTAPRReverse(conn io.ReadWriter, r *bufio.Reader, peer
 		if err != nil {
 			return err
 		}
-		raw, err := readUntilTAPREOM(r)
+	raw, err := readUntilTAPREOM(r, f.bodyLimitBytes())
 		if err != nil {
 			return err
 		}

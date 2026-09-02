@@ -12,6 +12,7 @@ type ForwardPeer struct {
 	Port                                   uint16
 	PrivateRoutes, BulletinScopes          []string
 	ToCalls, AtCalls, HierarchicalRoutes   []string
+	Schedule                               []string
 	Enabled, Send, Receive                 bool
 	SendConfigured, ReceiveConfigured      bool
 }
@@ -118,4 +119,40 @@ func matches(value string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// peerInSchedule treats an empty schedule as always enabled. Existing peer
+// configuration stores windows as HH:MM-HH:MM strings and uses host local time.
+func peerInSchedule(p ForwardPeer, now time.Time) bool {
+	if len(p.Schedule) == 0 {
+		return true
+	}
+	minute := now.Hour()*60 + now.Minute()
+	for _, raw := range p.Schedule {
+		window := strings.TrimSpace(raw)
+		if strings.EqualFold(window, "off") || strings.EqualFold(window, "disabled") {
+			continue
+		}
+		parts := strings.Split(window, "-")
+		if len(parts) != 2 {
+			continue
+		}
+		from, okFrom := scheduleMinute(parts[0])
+		to, okTo := scheduleMinute(parts[1])
+		if !okFrom || !okTo {
+			continue
+		}
+		if from == to || (from < to && minute >= from && minute < to) || (from > to && (minute >= from || minute < to)) {
+			return true
+		}
+	}
+	return false
+}
+
+func scheduleMinute(value string) (int, bool) {
+	t, err := time.Parse("15:04", strings.TrimSpace(value))
+	if err != nil {
+		return 0, false
+	}
+	return t.Hour()*60 + t.Minute(), true
 }
