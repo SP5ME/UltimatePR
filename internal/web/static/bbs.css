@@ -65,3 +65,10 @@ html,body{height:100%;overflow:hidden}#terminalView{height:calc(100vh - 179px);o
 .connection-bar #tncFields>*,.tnc-port-row>*{align-self:end}
 #beaconText{background:#f7fbf8;color:#13231a;border-color:#bcd1c1}#beaconText:focus{border-color:var(--green);box-shadow:0 0 0 2px #4ee09a20}
 .config-tabs{height:auto;padding:0;border-bottom:0}
+
+.field-grid{align-items:end}
+.field-grid>label{min-width:0}
+.edit-row>label:not(.row-check){display:flex;flex-direction:column;justify-content:flex-end;min-width:0}
+
+#sendForm{grid-template-columns:25px minmax(0,1fr) auto;min-width:0}
+#sendForm #command{min-width:0}
