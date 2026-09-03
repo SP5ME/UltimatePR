@@ -1,0 +1,5 @@
+.connection-bar{align-items:end}
+.config-unified .field-grid>label{align-items:end}
+.config-unified .field-grid>label.check{align-items:end}
+.edit-row>label:not(.row-check),
+.tnc-port-row>label:not(.row-check){display:flex;flex-direction:column;justify-content:flex-end;min-width:0}
