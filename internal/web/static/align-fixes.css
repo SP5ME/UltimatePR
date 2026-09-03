@@ -1,5 +1,45 @@
-.connection-bar{align-items:end}
-.config-unified .field-grid>label{align-items:end}
-.config-unified .field-grid>label.check{align-items:end}
-.edit-row>label:not(.row-check),
-.tnc-port-row>label:not(.row-check){display:flex;flex-direction:column;justify-content:flex-end;min-width:0}
+.connection-bar .segmented{
+  height:var(--control-height);
+}
+
+.connection-bar .segmented button{
+  height:34px;
+  min-height:34px;
+}
+
+.connection-bar input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.connection-bar select{
+  margin:0;
+}
+
+.session-tab{
+  align-items:center;
+}
+
+.session-select{
+  min-height:32px;
+}
+
+.session-remove{
+  min-height:28px;
+}
+
+.session-monitor{
+  min-height:34px;
+}
+
+.edit-row input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.edit-row select{
+  margin:6px 0 0;
+}
+
+.edit-row .row-check input{
+  margin:0;
+}
+
+@media(min-width:801px) and (max-width:1400px){
+  .connection-bar #tncFields{
+    grid-column:1;
+    grid-row:2;
+  }
+}
