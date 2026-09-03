@@ -58,5 +58,10 @@ html,body{height:100%;overflow:hidden}#terminalView{height:calc(100vh - 179px);o
 #serviceRegistryView .edit-row,#remoteEndpointsView .edit-row{grid-template-columns:repeat(5,minmax(0,1fr));align-items:center}
 #routeExplainResult{min-height:0;max-height:360px;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap}
 @media(max-width:650px){#serviceRegistryView .edit-row,#remoteEndpointsView .edit-row{grid-template-columns:1fr;gap:5px;padding:11px 0}.remote-endpoint-row,.peer-row{grid-template-columns:1fr}.remote-endpoint-row input,.remote-endpoint-row select,.peer-row input,.peer-row select{min-width:0}.settings-card .card-head{flex-wrap:wrap}.settings-card .card-head button{max-width:100%}#routeExplainResult{font-size:12px;padding:12px}}
+
+[data-theme="light"] #sendForm{background:var(--bg-panel)}
+[data-theme="light"] .chat-screen .message-bubble,[data-theme="light"] .chat-screen .message-row.tx .message-bubble{color:var(--text-primary);text-shadow:none}
+[data-theme="light"] .session-tab{background:var(--bg-surface);border-color:var(--border-strong)}
+.connection-bar #tncFields>*,.tnc-port-row>*{align-self:end}
 #beaconText{background:#f7fbf8;color:#13231a;border-color:#bcd1c1}#beaconText:focus{border-color:var(--green);box-shadow:0 0 0 2px #4ee09a20}
 .config-tabs{height:auto;padding:0;border-bottom:0}
